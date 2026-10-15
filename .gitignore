@@ -1,4 +1,18 @@
 # Byte-compiled / optimized / DLL files
+# Local environment, Node and tools
+.env.*
+!.env.example
+node_modules/
+*.tsbuildinfo
+.vite/
+playwright-report/
+test-results/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+postgres-data/
+
 __pycache__/
 *.py[cod]
 *$py.class

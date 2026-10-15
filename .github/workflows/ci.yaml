@@ -1,0 +1,71 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12', '3.13']
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci_local_only
+          POSTGRES_DB: condominios_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d condominios_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://ci:ci_local_only@127.0.0.1:5432/condominios_test
+      TEST_DATABASE_URL: postgresql+psycopg://ci:ci_local_only@127.0.0.1:5432/condominios_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.lock
+      - run: python -m pip install -c requirements-dev.lock -e '.[dev]'
+      - run: python -m ruff check .
+      - run: python -m ruff format --check .
+      - name: Validate migrations against a clean PostgreSQL
+        run: |
+          python -m alembic upgrade head
+          python -m alembic check
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+      - run: python -m pytest -q
+      - name: Validate Compose configuration
+        working-directory: .
+        run: docker compose --env-file .env.example config --quiet
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

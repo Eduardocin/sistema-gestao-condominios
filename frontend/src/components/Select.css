@@ -1,0 +1,16 @@
+.base-select {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 16px;
+  background-color: var(--color-surface);
+  color: var(--color-text-main);
+  outline: none;
+  width: 100%;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.base-select:focus {
+  border-color: var(--color-primary);
+}

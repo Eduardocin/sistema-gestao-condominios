@@ -1,0 +1,18 @@
+.base-button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  color: white;
+  transition: opacity 0.2s;
+}
+
+.base-button:hover {
+  opacity: 0.9;
+}
+
+.variant-primary { background-color: var(--color-primary); }
+.variant-success { background-color: var(--color-success); }
+.variant-alert { background-color: var(--color-alert); }
+.variant-warning { background-color: var(--color-warning); }

@@ -9,6 +9,7 @@
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
   cursor: pointer;
+  text-decoration: none;
   transition:
     background-color var(--transition-fast),
     border-color var(--transition-fast);

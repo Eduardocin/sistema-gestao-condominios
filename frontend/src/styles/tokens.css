@@ -61,6 +61,8 @@
   --font-size-xl: 1.25rem;
   --font-size-2xl: 1.5rem;
   --font-size-3xl: 2rem;
+  --font-size-display: clamp(2.5rem, 5vw, 4rem);
+  --letter-spacing-display: -0.04em;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
@@ -76,6 +78,15 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
   --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  /* Composição das páginas públicas */
+  --content-width-public: 74rem;
+  --content-width-reading: 38rem;
+  --content-width-form: 30rem;
+  --size-icon: 1.5rem;
+  --size-icon-panel: 3rem;
 
   /* Raios */
   --radius-sm: 4px;

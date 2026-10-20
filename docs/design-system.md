@@ -45,7 +45,16 @@ Para cada status há quatro tons: base (destaque), `-strong` (fundo sólido com 
 
 ## Componentes
 
-`Button`, `Input`, `Select`, `Table`, `Card`, `Modal`, `Badge`, `Calendar`, `TimeGrid`, `Upload`, `Toast`, mais `Page`, `Heading`, `Text` e `VisuallyHidden`.
+`Button`, `ButtonLink`, `Input`, `Select`, `Table`, `Card`, `Modal`, `Badge`, `Calendar`, `TimeGrid`, `Upload`, `Toast`, mais `Page`, `Heading`, `Text` e `VisuallyHidden`.
+
+### Páginas públicas
+
+- `ButtonLink` usa as mesmas variantes e tamanhos de `Button`, mas renderiza um link de navegação. Use `to` para o destino; não aninhe botão dentro de link.
+- `PublicHeader`, `PublicFooter` e `SiteBrand` compõem a navegação pública.
+- `FeatureCard`, `CommunityVisual` e `PublicCallToAction` compõem a apresentação do produto. A ilustração é decorativa e não contém dados reais nem indicadores simulados.
+- `Heading size="display"` usa o token responsivo `--font-size-display`. Os tokens `--space-8/9` e `--content-width-*` atendem à composição pública.
+
+Rotas: `/` apresenta a proposta; `/login` e `/cadastro` são prévias com campos desabilitados, sem envio ou armazenamento de dados. `/status` preserva o diagnóstico da API. O conteúdo público não faz chamadas de negócio ao backend.
 
 ## Acessibilidade já embutida
 

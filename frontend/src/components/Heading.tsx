@@ -3,7 +3,7 @@ import { cx } from '../utils/cx'
 import styles from './Heading.module.css'
 
 export type HeadingLevel = 1 | 2 | 3 | 4
-export type HeadingSize = 'xl' | 'lg' | 'md' | 'sm'
+export type HeadingSize = 'display' | 'xl' | 'lg' | 'md' | 'sm'
 
 const defaultSize: Record<HeadingLevel, HeadingSize> = { 1: 'xl', 2: 'lg', 3: 'md', 4: 'sm' }
 

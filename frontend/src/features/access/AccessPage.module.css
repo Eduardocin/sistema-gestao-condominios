@@ -1,0 +1,6 @@
+.page { max-width: var(--content-width-form); display: grid; gap: var(--space-5); padding-top: var(--space-8); padding-bottom: var(--space-8); }
+.intro > span { margin-bottom: var(--space-5); }
+.fields { border: 0; padding: 0; margin: var(--space-5) 0 0; min-width: 0; }
+.legend { padding: 0; margin-bottom: var(--space-4); }
+.fields > button { width: 100%; }
+.switchLink { margin: var(--space-5) 0 0; }

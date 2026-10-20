@@ -1,44 +1,37 @@
-.eyebrow {
-  margin: 0;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.page {
+  max-width: var(--content-width-public);
+  padding: 0 var(--space-6) var(--space-8);
 }
-
-.intro {
-  max-width: 36rem;
-  font-size: var(--font-size-lg);
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) 0;
 }
-
-.connection {
-  margin-top: var(--space-6);
+.heroCopy { display: grid; justify-items: start; gap: var(--space-5); }
+.heroCopy h1, .heroCopy p { margin: 0; }
+.heroCopy > p { max-width: var(--content-width-reading); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.section { padding: var(--space-8) 0; scroll-margin-top: var(--space-6); }
+.section:last-child { padding-bottom: 0; }
+.sectionIntro { max-width: var(--content-width-reading); margin-bottom: var(--space-6); }
+.sectionIntro > span { margin-bottom: var(--space-4); }
+.featureGrid, .audienceGrid, .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+.audience { display: grid; align-content: start; justify-items: start; gap: var(--space-4); padding-right: var(--space-5); }
+.audience h3, .audience p { margin: 0; }
+.steps { padding-left: var(--space-5); margin: 0; gap: var(--space-7); }
+.steps li { padding-left: var(--space-2); }
+@media (max-width: 60rem) {
+  .hero { gap: var(--space-6); }
+  .featureGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-.status {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-4);
+@media (max-width: 45rem) {
+  .page { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .hero { grid-template-columns: minmax(0, 1fr); padding: var(--space-7) 0; gap: var(--space-7); }
+  .section { padding: var(--space-7) 0; }
+  .audienceGrid, .steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
 }
-
-.dot {
-  flex: none;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  background: var(--color-text-secondary);
-}
-
-.checking .dot {
-  background: var(--color-text-secondary);
-}
-.online .dot {
-  background: var(--color-success-strong);
-}
-.offline .dot {
-  background: var(--color-alert-strong);
-}
-
-.note {
-  margin-top: var(--space-5);
+@media (max-width: 30rem) {
+  .featureGrid { grid-template-columns: minmax(0, 1fr); }
 }

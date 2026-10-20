@@ -3,12 +3,18 @@ import type { ReactNode } from 'react'
 import {
   Badge,
   Button,
+  ButtonLink,
   Calendar,
   Card,
+  CommunityVisual,
+  FeatureCard,
   Heading,
   Input,
   Modal,
   Page,
+  PublicCallToAction,
+  PublicFooter,
+  PublicHeader,
   Select,
   Table,
   Text,
@@ -41,6 +47,7 @@ const colorTokens = [
 ]
 
 const fontSizes = [
+  { name: '--font-size-display', sample: 'Apresentação pública' },
   { name: '--font-size-3xl', sample: 'Título da página' },
   { name: '--font-size-2xl', sample: 'Título de seção' },
   { name: '--font-size-xl', sample: 'Subtítulo' },
@@ -50,7 +57,7 @@ const fontSizes = [
   { name: '--font-size-xs', sample: 'Legenda' },
 ]
 
-const spaces = ['--space-1', '--space-2', '--space-3', '--space-4', '--space-5', '--space-6', '--space-7']
+const spaces = ['--space-1', '--space-2', '--space-3', '--space-4', '--space-5', '--space-6', '--space-7', '--space-8', '--space-9']
 const radii = ['--radius-sm', '--radius-md', '--radius-lg', '--radius-pill']
 
 const initialSlots: TimeSlotData[] = [
@@ -119,7 +126,7 @@ export function DesignSystemPage() {
   }
 
   return (
-    <Page className={styles.page}>
+    <Page id="conteudo" className={styles.page}>
       <Heading level={1}>Design System</Heading>
       <Text tone="secondary">
         Tokens e componentes base do Gestão de Condomínios. As telas devem usar somente estas peças,
@@ -253,6 +260,18 @@ export function DesignSystemPage() {
           isVisible={toast !== null}
           onClose={() => setToast(null)}
         />
+      </Section>
+
+      <Section title="Páginas públicas" description="Componentes da landing page e das prévias de acesso. Links mantêm a semântica de navegação.">
+        <div className={styles.publicExamples}>
+          <div className={styles.row}><ButtonLink to="/login">Entrar</ButtonLink><ButtonLink to="/cadastro" variant="secondary" size="sm">Conhecer o cadastro</ButtonLink></div>
+          <Heading level={3} size="display">Mais vida em condomínio.</Heading>
+          <PublicHeader />
+          <FeatureCard icon="package" title="Encomendas organizadas">Do recebimento à confirmação de retirada.</FeatureCard>
+          <div className={styles.narrow}><CommunityVisual /></div>
+          <PublicCallToAction />
+          <PublicFooter />
+        </div>
       </Section>
 
       <Section title="Upload de arquivo">

@@ -20,10 +20,10 @@ export function Table({
   className,
 }: TableProps) {
   return (
-    // Região rolável precisa ser focável para quem usa só o teclado
+    // Região rolável precisa ser focável e ter nome para quem usa só o teclado
     <div
       className={cx(styles.wrapper, className)}
-      role="region"
+      role={caption ? 'region' : undefined}
       aria-label={caption}
       tabIndex={caption ? 0 : undefined}
     >

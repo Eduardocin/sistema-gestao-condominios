@@ -1,24 +1,36 @@
-/*
- * Componente Base: Button
- * Botão reutilizável que aplica as cores do Design System.
- * Aceita as variantes: 'primary', 'success', 'alert' e 'warning'.
- * Repassa automaticamente eventos HTML nativos, como onClick e disabled.
- */
-import React from 'react';
-import './Button.css';
+import type { ComponentProps } from 'react'
+import { cx } from '../utils/cx'
+import styles from './Button.module.css'
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'success' | 'alert' | 'warning';
+export type ButtonVariant = 'primary' | 'secondary' | 'success' | 'alert' | 'warning'
+export type ButtonSize = 'sm' | 'md'
+
+export interface ButtonProps extends ComponentProps<'button'> {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  /** Mostra um indicador de carregamento e bloqueia novos cliques. */
+  loading?: boolean
 }
 
-export const Button: React.FC<ButtonProps> = ({ 
-  variant = 'primary', 
-  children, 
-  ...props 
-}) => {
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  loading = false,
+  type = 'button',
+  disabled,
+  className,
+  children,
+  ...props
+}: ButtonProps) {
   return (
-    <button className={`base-button variant-${variant}`} {...props}>
+    <button
+      type={type}
+      className={cx(styles.button, styles[variant], styles[size], loading && styles.loading, className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...props}
+    >
       {children}
     </button>
-  );
-};
+  )
+}

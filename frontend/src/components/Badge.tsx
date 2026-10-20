@@ -1,15 +1,17 @@
-import React from 'react';
-import './Badge.css';
+import type { ComponentProps } from 'react'
+import { cx } from '../utils/cx'
+import styles from './Badge.module.css'
 
-interface BadgeProps {
-  variant: 'success' | 'alert' | 'warning';
-  children: React.ReactNode;
+export type BadgeVariant = 'success' | 'alert' | 'warning' | 'primary' | 'neutral'
+
+export interface BadgeProps extends ComponentProps<'span'> {
+  variant?: BadgeVariant
 }
 
-export const Badge: React.FC<BadgeProps> = ({ variant, children }) => {
+export function Badge({ variant = 'neutral', className, children, ...props }: BadgeProps) {
   return (
-    <span className={`base-badge badge-${variant}`}>
+    <span className={cx(styles.badge, styles[variant], className)} {...props}>
       {children}
     </span>
-  );
-};
+  )
+}

@@ -1,0 +1,44 @@
+.eyebrow {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.intro {
+  max-width: 36rem;
+  font-size: var(--font-size-lg);
+}
+
+.connection {
+  margin-top: var(--space-6);
+}
+
+.status {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+}
+
+.checking .dot {
+  background: var(--color-text-secondary);
+}
+.online .dot {
+  background: var(--color-success-strong);
+}
+.offline .dot {
+  background: var(--color-alert-strong);
+}
+
+.note {
+  margin-top: var(--space-5);
+}

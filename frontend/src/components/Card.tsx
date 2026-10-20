@@ -1,10 +1,11 @@
-import React from 'react';
-import './Card.css';
+import type { ComponentProps } from 'react'
+import { cx } from '../utils/cx'
+import styles from './Card.module.css'
 
-interface CardProps {
-  children: React.ReactNode;
+export function Card({ className, children, ...props }: ComponentProps<'div'>) {
+  return (
+    <div className={cx(styles.card, className)} {...props}>
+      {children}
+    </div>
+  )
 }
-
-export const Card: React.FC<CardProps> = ({ children }) => {
-  return <div className="base-card">{children}</div>;
-};

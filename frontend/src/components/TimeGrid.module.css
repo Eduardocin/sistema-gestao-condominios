@@ -1,0 +1,58 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: var(--space-2);
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.time {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.caption {
+  font-size: var(--font-size-xs);
+}
+
+.free {
+  background: var(--color-surface);
+  color: var(--color-text-main);
+}
+.free:hover {
+  background: var(--color-primary-soft);
+}
+
+.own {
+  background: var(--color-success-strong);
+  border-color: var(--color-success-strong);
+  color: var(--color-text-on-strong);
+}
+.own:hover {
+  background: var(--color-success-strong-hover);
+}
+
+/* Ocupado: além da cor, usa listras e texto, para não depender só de cor */
+.other {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-alert-soft),
+    var(--color-alert-soft) 6px,
+    var(--color-surface) 6px,
+    var(--color-surface) 12px
+  );
+  border-color: var(--color-alert-strong);
+  color: var(--color-alert-text);
+  cursor: not-allowed;
+}

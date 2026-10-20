@@ -1,0 +1,11 @@
+.page {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+@media (min-width: 48rem) {
+  .page {
+    padding: var(--space-7) var(--space-5);
+  }
+}

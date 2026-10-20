@@ -1,19 +1,39 @@
-import React from 'react';
-import './Input.css';
+import type { ComponentProps } from 'react'
+import { useFieldIds } from '../hooks/useFieldIds'
+import { cx } from '../utils/cx'
+import { FormField } from './FormField'
+import styles from './FormField.module.css'
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
+export interface InputProps extends ComponentProps<'input'> {
+  /** Obrigatório: todo campo precisa de um rótulo visível. */
+  label: string
+  /** Texto de apoio abaixo do campo. */
+  hint?: string
+  /** Mensagem de erro; também marca o campo como inválido. */
+  error?: string
 }
 
-export const Input: React.FC<InputProps> = ({ label, id, ...props }) => {
+export function Input({ label, hint, error, id: idProp, className, required, ...props }: InputProps) {
+  const { id, hintId, errorId, describedBy, invalid } = useFieldIds(idProp, hint, error)
+
   return (
-    <div className="input-wrapper">
-      {label && (
-        <label htmlFor={id} className="input-label">
-          {label}
-        </label>
-      )}
-      <input id={id} className="base-input" {...props} />
-    </div>
-  );
-};
+    <FormField
+      id={id}
+      label={label}
+      required={required}
+      hint={hint}
+      hintId={hintId}
+      error={error}
+      errorId={errorId}
+    >
+      <input
+        id={id}
+        className={cx(styles.control, className)}
+        required={required}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        {...props}
+      />
+    </FormField>
+  )
+}

@@ -1,0 +1,21 @@
+.text {
+  margin: 0 0 var(--space-3);
+  line-height: var(--line-height-base);
+}
+
+.md {
+  font-size: var(--font-size-md);
+}
+.sm {
+  font-size: var(--font-size-sm);
+}
+.xs {
+  font-size: var(--font-size-xs);
+}
+
+.main {
+  color: var(--color-text-main);
+}
+.secondary {
+  color: var(--color-text-secondary);
+}

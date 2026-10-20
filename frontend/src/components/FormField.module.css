@@ -1,0 +1,67 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-main);
+}
+
+.required {
+  color: var(--color-alert-strong);
+}
+
+.hint,
+.error {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.hint {
+  color: var(--color-text-secondary);
+}
+
+.error {
+  color: var(--color-alert-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Aparência compartilhada por Input e Select */
+.control {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-main);
+  font: inherit;
+  transition: border-color var(--transition-fast);
+}
+
+.control::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.control:hover:not(:disabled) {
+  border-color: var(--color-text-main);
+}
+
+.control:focus-visible {
+  border-color: var(--color-primary);
+  outline-offset: 0;
+}
+
+.control[aria-invalid='true'] {
+  border-color: var(--color-alert-strong);
+}
+
+.control:disabled {
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}

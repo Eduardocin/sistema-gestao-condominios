@@ -1,31 +1,47 @@
-import React, { useEffect } from 'react';
-import './Toast.css';
+import { useEffect, useRef } from 'react'
+import { cx } from '../utils/cx'
+import styles from './Toast.module.css'
 
-interface ToastProps {
-  message: string;
-  variant?: 'success' | 'alert' | 'warning' | 'primary';
-  isVisible: boolean;
-  onClose: () => void;
+export type ToastVariant = 'success' | 'alert' | 'warning' | 'primary'
+
+export interface ToastProps {
+  message: string
+  variant?: ToastVariant
+  isVisible: boolean
+  onClose: () => void
+  /** Tempo até sumir, em milissegundos. Use 0 para só fechar pelo botão. */
+  duration?: number
 }
 
-export const Toast: React.FC<ToastProps> = ({ message, variant = 'success', isVisible, onClose }) => {
+export function Toast({ message, variant = 'success', isVisible, onClose, duration = 6000 }: ToastProps) {
+  // Guarda o onClose mais recente sem reiniciar o temporizador a cada render do pai
+  const onCloseRef = useRef(onClose)
   useEffect(() => {
-    if (isVisible) {
-      const timer = setTimeout(() => {
-        onClose();
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isVisible, onClose]);
+    onCloseRef.current = onClose
+  })
 
-  if (!isVisible) return null;
+  useEffect(() => {
+    if (!isVisible || duration <= 0) return
+    const timer = setTimeout(() => onCloseRef.current(), duration)
+    return () => clearTimeout(timer)
+  }, [isVisible, duration])
 
+  // O contêiner fica sempre na página: leitores de tela só anunciam
+  // mudanças em regiões ao vivo que já existiam antes do conteúdo aparecer.
   return (
-    <div className="toast-container">
-      <div className={`base-toast toast-${variant}`}>
-        <span className="toast-message">{message}</span>
-        <button className="toast-close-btn" onClick={onClose}>&times;</button>
-      </div>
+    <div
+      className={styles.container}
+      aria-live={variant === 'alert' ? 'assertive' : 'polite'}
+      aria-atomic="true"
+    >
+      {isVisible && (
+        <div className={cx(styles.toast, styles[variant])}>
+          <span className={styles.message}>{message}</span>
+          <button type="button" className={styles.close} onClick={onClose} aria-label="Fechar aviso">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      )}
     </div>
-  );
-};
+  )
+}

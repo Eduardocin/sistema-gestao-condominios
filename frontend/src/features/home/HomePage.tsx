@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Button, Card, Heading, Page, Text } from '../../components'
+import { cx } from '../../utils/cx'
 import { checkHealth } from './health'
+import styles from './HomePage.module.css'
 
 type Connection = 'checking' | 'online' | 'offline'
 
@@ -28,18 +31,22 @@ export function HomePage() {
   }
 
   return (
-    <main className="shell">
-      <p className="eyebrow">Projeto IESI</p>
-      <h1>Gestão de Condomínios</h1>
-      <p className="intro">Um ponto de partida para conectar a administração e a vida em condomínio.</p>
-      <section className="connection" aria-label="Conexão com o servidor">
-        <h2>Ambiente de desenvolvimento</h2>
-        <p role="status" className={`status ${connection}`}>
-          <span className="dot" aria-hidden="true" />{labels[connection]}
+    <Page>
+      <Text size="sm" tone="secondary" className={styles.eyebrow}>Projeto IESI</Text>
+      <Heading level={1}>Gestão de Condomínios</Heading>
+      <Text tone="secondary" className={styles.intro}>
+        Um ponto de partida para conectar a administração e a vida em condomínio.
+      </Text>
+      <Card className={styles.connection} role="region" aria-label="Conexão com o servidor">
+        <Heading level={2} size="sm">Ambiente de desenvolvimento</Heading>
+        <p role="status" className={cx(styles.status, styles[connection])}>
+          <span className={styles.dot} aria-hidden="true" />{labels[connection]}
         </p>
-        <button onClick={retry} disabled={connection === 'checking'}>Verificar novamente</button>
-      </section>
-      <p className="note">Os módulos de gestão serão disponibilizados nas próximas etapas do projeto.</p>
-    </main>
+        <Button onClick={retry} loading={connection === 'checking'}>Verificar novamente</Button>
+      </Card>
+      <Text size="sm" tone="secondary" className={styles.note}>
+        Os módulos de gestão serão disponibilizados nas próximas etapas do projeto.
+      </Text>
+    </Page>
   )
 }

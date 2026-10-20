@@ -1,0 +1,32 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  white-space: nowrap;
+}
+
+/* Fundo suave + texto escuro: contraste acima de 4,5:1 em todas as variantes */
+.success {
+  background: var(--color-success-soft);
+  color: var(--color-success-text);
+}
+.alert {
+  background: var(--color-alert-soft);
+  color: var(--color-alert-text);
+}
+.warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+}
+.primary {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.neutral {
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral-text);
+}

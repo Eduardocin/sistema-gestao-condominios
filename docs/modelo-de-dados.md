@@ -10,7 +10,7 @@ Os diagramas estão em Mermaid: o GitHub os desenha direto nesta página, e o te
 
 - Tabelas e colunas em português, `snake_case`, tabelas no plural (como já está no repositório).
 - `id uuid` gerado pela aplicação em toda tabela. `criado_em timestamptz default now()` onde a data importa. **Datas de registro não são editáveis**: a aplicação não expõe esses campos para escrita.
-- **`condominio_id` obrigatório em toda tabela de negócio**, com FK para `condominios` e índice (R2 da matriz). As únicas exceções são as tabelas da plataforma: `usuarios`, `comunicados` e os registros de `registros_auditoria` e `envios_email` sem condomínio.
+- **`condominio_id` obrigatório em toda tabela de negócio**, com FK para `condominios` e índice (R2 da matriz). As únicas exceções são o que pertence à conta ou à plataforma, e não a um condomínio: `usuarios`, `tokens_recuperacao_senha`, `tentativas_chave_acesso` e `comunicados`. Em `registros_auditoria`, `envios_email` e `arquivos` o `condominio_id` existe, mas pode ser nulo quando o registro é da plataforma ou da conta.
 - Tabela que aponta para unidade (ou para outro registro do condomínio) usa **FK composta** `(x_id, condominio_id)`, como `vinculos_condominio` já faz. Assim o banco recusa uma unidade de outro condomínio. Para isso, cada tabela referenciada tem `UNIQUE (id, condominio_id)`.
 - Status e enums são `varchar` com `CHECK` (padrão da 0001), não tipos `ENUM` do PostgreSQL, porque são mais fáceis de alterar numa migração.
 - Nada é apagado de verdade: registros são **desativados** (`ativo = false`, `desativado_em`) ou mudam de status. FKs usam `ON DELETE RESTRICT`.
@@ -150,7 +150,7 @@ erDiagram
 ```mermaid
 erDiagram
     usuarios ||--o{ vinculos_condominio : "tem"
-    vinculos_condominio ||--o{ moradores_unidade : "morador em"
+    usuarios ||--o{ moradores_unidade : "morador em"
     unidades ||--o{ moradores_unidade : "tem"
     moradores_unidade ||--|{ permissoes_aba : "7 abas"
     unidades ||--o{ convites_morador : "convida"
@@ -179,6 +179,7 @@ erDiagram
     }
     permissoes_aba {
         uuid morador_unidade_id PK
+        uuid condominio_id FK
         varchar aba PK "unidades, visitantes, veiculos, reservas, encomendas, ocorrencias, usuarios"
         bool com_acesso
         uuid alterado_por_usuario_id FK
@@ -349,6 +350,7 @@ erDiagram
     }
     ocorrencia_anexos {
         uuid ocorrencia_id PK
+        uuid condominio_id FK
         uuid arquivo_id PK
         uuid interacao_id FK "null = anexo da abertura"
     }
@@ -405,6 +407,7 @@ erDiagram
     }
     chamado_anexos {
         uuid chamado_id PK
+        uuid condominio_id FK
         uuid arquivo_id PK
     }
     registros_auditoria {
@@ -469,10 +472,10 @@ Estas são as restrições que a TASK-81 transforma em constraints. As marcadas 
 | 17 | Aviso com período válido | `CHECK (fim_em > inicio_em)` | US-801 |
 | 18 | Estrutura sem nomes repetidos | `UNIQUE (condominio_id, nome)` em blocos, `UNIQUE (bloco_id, nome)` em andares, `UNIQUE (andar_id, identificacao)` em unidades | US-202, US-205 |
 | 19 | Morador não se vincula duas vezes à mesma unidade | `UNIQUE (unidade_id, usuario_id) WHERE status = 'ativo'` | US-301 |
-| 20 | Toda aba existe para cada morador | `CHECK (aba IN (...7 abas...))` e PK `(morador_unidade_id, aba)` | US-304 |
+| 20 | Só as 7 abas válidas, uma linha por aba e morador | `CHECK (aba IN (...7 abas...))` e PK `(morador_unidade_id, aba)`. Criar as 7 linhas ao vincular é papel do service | US-304 |
 | 21 ★ | Auditoria só aceita inserção | trigger `BEFORE UPDATE OR DELETE` que lança erro em `registros_auditoria` | US-1004, US-903 |
-| 22 | Isolamento entre condomínios | FK composta `(x_id, condominio_id)` em toda referência a unidade, área, visitante, ocorrência, chamado, funcionário e responsável | US-1001 |
-| 23 | E-mail e tokens de uso único | `UNIQUE (token_hash)` e `usado_em`/`aceito_em` preenchidos só uma vez | US-102, US-303 |
+| 22 | Isolamento entre condomínios | FK composta `(x_id, condominio_id)` em toda referência a bloco, andar, unidade, morador da unidade, área, visitante, ocorrência, interação, chamado, funcionário e responsável | US-1001 |
+| 23 | Token de recuperação e convite não se repetem | `UNIQUE (token_hash)`. O uso único (`usado_em`/`aceito_em` gravado uma vez) é garantido no service com `UPDATE ... WHERE usado_em IS NULL` | US-102, US-303 |
 
 Regras que **não** dá para garantir no banco e ficam no service (com teste): limite de tentativas de chave (US-301, usa `tentativas_chave_acesso`), horário dentro do funcionamento da área e fora de bloqueio (US-603), última pessoa com a aba Usuários (matriz, seção 8), encomenda só para unidade ativa, e o filtro por `condominio_id` em toda consulta (R3).
 
@@ -516,6 +519,7 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 - **Conflito entre a TASK-81 e as stories:** a task de migrations fala em "constraint única de reserva: (área, data) por condomínio", o que deixaria uma única reserva por área por dia no prédio inteiro. A US-603 e a US-1006 dizem **uma por unidade, área e dia**, com grade de horários. Este DER segue as stories (regras 1 e 2). Ajustar o texto da TASK-81.
 - **Login da conta compartilhada de Funcionários** (US-210 fala em "usuário e senha"): é um e-mail/telefone como as outras contas, ou um nome de usuário próprio? Este DER assume e-mail.
 - **Permissões iniciais do morador:** a regra proposta na matriz (primeiro morador com tudo, os seguintes sem a aba Usuários) ainda depende do Paulo.
+- **Documento comprobatório da conta da Administração** (US-201, opcional): este DER guarda os documentos por condomínio, em `condominio_documentos`, porque é isso que o ADM analisa na fila (US-203). Confirmar com o Paulo se o documento da US-201 é o mesmo.
 - **Comunicados lidos:** a US-804 não pede controle de leitura, então não há tabela para isso.
 
 ## 8. Revisão por módulo

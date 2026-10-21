@@ -703,15 +703,16 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 - `frontend/package-lock.json`: instalar com `npm ci`; atualizar intencionalmente com `npm install`.
 - `backend/requirements-dev.lock`: versões exatas usadas como constraints; instalar com `-c requirements-dev.lock`. Atualizar em ambiente virtual limpo e validar Python 3.12/3.13 no CI. Não contém paths locais ou credenciais.
 - PostgreSQL fixa a versão principal 17 e recebe patches da tag oficial; upgrades de versão principal precisam de planejamento do volume.
+- Dividir trabalho por módulo e coordenar mudanças de contratos e migrações. Resolver explicitamente múltiplos heads Alembic.
+- Não versionar `.env`, dados, tokens ou credenciais reais.
+
 ### Fluxo de branches e pull requests
 
-- A `main` é protegida: nada entra por push direto, só por pull request com **1 aprovação** e **CI verde**.
-- Crie uma branch a partir da `main` atualizada com o padrão `<tipo>/<US-id>-<descricao-curta>`, em minúsculas e com hífens. Exemplos: `feat/US-1001-login-jwt`, `fix/US-2003-conflito-reserva`, `docs/US-1006-der`. Sem story ligada (setup, infra), omita o ID: `chore/ci-mypy`.
+- Nada entra na `main` por push direto, só por pull request com **1 aprovação** e **CI verde** (regra de proteção configurada no GitHub).
+- Crie uma branch a partir da `main` atualizada com o padrão `<tipo>/<US-id>-<descricao-curta>`, com a descrição em minúsculas e hífens. Exemplos: `feat/US-1001-login-jwt`, `fix/US-2003-conflito-reserva`, `docs/US-1006-der`. Sem story ligada (setup, infra), omita o ID: `chore/ci-mypy`.
 - Tipos: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`. Os mesmos prefixos valem para os commits (Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`).
 - PRs pequenos, preenchendo o template (o que mudou, story ligada, como testar). Antes de pedir revisão, atualize a branch com a `main` e rode os comandos da [etapa 7](#etapa-7--rodar-as-verificações-de-qualidade).
 - Apague a branch depois do merge.
-- Dividir trabalho por módulo e coordenar mudanças de contratos e migrações. Resolver explicitamente múltiplos heads Alembic.
-- Não versionar `.env`, dados, tokens ou credenciais reais.
 
 O workflow `.github/workflows/ci.yaml` valida backend (Python 3.12 e 3.13, com PostgreSQL limpo) e frontend em pushes e PRs.
 

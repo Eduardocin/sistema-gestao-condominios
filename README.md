@@ -1,5 +1,7 @@
 # Gestão de Condomínios
 
+[![Quality](https://github.com/Eduardocin/sistema-gestao-condominios/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/Eduardocin/sistema-gestao-condominios/actions/workflows/ci.yaml)
+
 Projeto acadêmico da disciplina Integração e Evolução de Sistemas de Informação (IESI). A plataforma reunirá cadastros de condomínios, unidades e usuários, encomendas, visitantes, reservas, ocorrências, avisos e auditoria.
 
 Esta entrega cria a fundação: API com health check, modelos estruturais e migração, frontend com indicador de conexão, ambiente local e verificações de qualidade. Autenticação e fluxos de negócio ficam para as próximas sprints.
@@ -11,7 +13,7 @@ Esta entrega cria a fundação: API com health check, modelos estruturais e migr
 - Frontend: React 19, TypeScript, Vite 8, React Router 7 e Axios.
 - Backend: Python 3.12/3.13, FastAPI, Pydantic v2, SQLAlchemy 2.x síncrono, Alembic, Uvicorn e psycopg 3.
 - Banco: PostgreSQL 17 via Docker Compose, com volume persistente e health check.
-- Qualidade: Pytest, Ruff, ESLint 10, TypeScript e GitHub Actions.
+- Qualidade: Pytest, Ruff, Mypy, ESLint 10, TypeScript e GitHub Actions.
 
 Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services → repositories → SQLAlchemy → PostgreSQL. Docker executa apenas o banco; frontend e backend rodam localmente com hot reload.
 
@@ -382,6 +384,7 @@ Backend (dentro de `backend`), Windows:
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy
 ```
 
 Backend, Linux / macOS:
@@ -390,6 +393,7 @@ Backend, Linux / macOS:
 .venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
+.venv/bin/python -m mypy
 ```
 
 Frontend (dentro de `frontend`):
@@ -403,6 +407,7 @@ npm run build
 
 - Pytest: todos passam; **4 testes `postgres` aparecem como `skipped`** sem `TEST_DATABASE_URL`. Isso é esperado — para executá-los, veja [Testes com PostgreSQL](#testes-com-postgresql).
 - Ruff: `All checks passed!` e `... files already formatted`.
+- Mypy: `Success: no issues found`.
 - ESLint sem saída de erros; build termina com `✓ built in ...`.
 
 ### Checklist final
@@ -416,7 +421,7 @@ npm run build
 | 4 | `alembic current` | `20261015_0001 (head)` |
 | 5 | `GET /api/v1/health` | `{"status":"ok"}` |
 | 6 | Página em `:5173` | “API acessível” |
-| 7 | Pytest, Ruff, ESLint, build | Tudo verde (4 skips sem banco de testes) |
+| 7 | Pytest, Ruff, Mypy, ESLint, build | Tudo verde (4 skips sem banco de testes) |
 
 Pronto: o ambiente está configurado.
 
@@ -698,11 +703,16 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 - `frontend/package-lock.json`: instalar com `npm ci`; atualizar intencionalmente com `npm install`.
 - `backend/requirements-dev.lock`: versões exatas usadas como constraints; instalar com `-c requirements-dev.lock`. Atualizar em ambiente virtual limpo e validar Python 3.12/3.13 no CI. Não contém paths locais ou credenciais.
 - PostgreSQL fixa a versão principal 17 e recebe patches da tag oficial; upgrades de versão principal precisam de planejamento do volume.
-- Sugestão de branches: `feat/reservas`, `fix/health`, `docs/arquitetura`.
-- Sugestão de commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`).
-- PRs pequenos com objetivo e evidência dos testes, revisão de outro integrante e CI verde antes do merge.
 - Dividir trabalho por módulo e coordenar mudanças de contratos e migrações. Resolver explicitamente múltiplos heads Alembic.
 - Não versionar `.env`, dados, tokens ou credenciais reais.
+
+### Fluxo de branches e pull requests
+
+- Nada entra na `main` por push direto, só por pull request com **1 aprovação** e **CI verde** (regra de proteção configurada no GitHub).
+- Crie uma branch a partir da `main` atualizada com o padrão `<tipo>/<US-id>-<descricao-curta>`, com a descrição em minúsculas e hífens. Exemplos: `feat/US-1001-login-jwt`, `fix/US-2003-conflito-reserva`, `docs/US-1006-der`. Sem story ligada (setup, infra), omita o ID: `chore/ci-mypy`.
+- Tipos: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`. Os mesmos prefixos valem para os commits (Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`).
+- PRs pequenos, preenchendo o template (o que mudou, story ligada, como testar). Antes de pedir revisão, atualize a branch com a `main` e rode os comandos da [etapa 7](#etapa-7--rodar-as-verificações-de-qualidade).
+- Apague a branch depois do merge.
 
 O workflow `.github/workflows/ci.yaml` valida backend (Python 3.12 e 3.13, com PostgreSQL limpo) e frontend em pushes e PRs.
 

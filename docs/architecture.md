@@ -24,6 +24,8 @@ Routers não consultam SQL. Repositories não decidem permissões nem fazem comm
 
 ## Modelo estrutural
 
+O modelo completo do MVP, com diagramas e constraints, está em [`modelo-de-dados.md`](modelo-de-dados.md). Esta seção descreve só o que a migração `20261015_0001` já criou.
+
 - `usuarios`: identidade global, UUID gerado pela aplicação, e-mail único em minúsculas, nome, situação e indicação de administrador da plataforma. Ainda não há credenciais nem login.
 - `condominios`: UUID, nome, situação e data de criação.
 - `unidades`: condomínio obrigatório e identificação única dentro dele, por exemplo `Bloco A / 101`.

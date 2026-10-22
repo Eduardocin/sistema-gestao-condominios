@@ -458,7 +458,7 @@ Estas são as restrições que a TASK-81 transforma em constraints. As marcadas 
 | --- | --- | --- | --- |
 | 1 ★ | Uma reserva **ativa** por unidade, área e dia | `UNIQUE (unidade_id, area_id, data) WHERE status = 'ativa'` (índice parcial) | US-1006, US-603 |
 | 2 ★ | Dois pedidos simultâneos para o mesmo horário gravam só um | `UNIQUE (area_id, data, hora_inicio) WHERE status = 'ativa'` | US-603 |
-| 3 | Reserva em hora cheia | `CHECK (date_part('minute', hora_inicio) = 0)` | US-603 |
+| 3 | Reserva em hora cheia | `CHECK (date_part('minute', hora_inicio) = 0 AND date_part('second', hora_inicio) = 0)` | US-603 |
 | 4 ★ | Chave de acesso única | `UNIQUE (codigo)` em `chaves_acesso` | US-1006, US-207 |
 | 5 | Só uma chave vigente por unidade | `UNIQUE (unidade_id) WHERE revogada_em IS NULL` | US-207 |
 | 6 ★ | CNPJ único | `UNIQUE (cnpj)` em `condominios`; `UNIQUE (documento)` em `usuarios` | US-201, US-206 |
@@ -557,6 +557,9 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 7. **Encomendas com confirmação posterior pelo recebedor.** Mantidos os três estados descritos na seção 4, com referências para destinatário/recebedor e eventos separados. A matriz de permissões deve permitir somente ao recebedor autenticado confirmar.
 
 ## 7. Pontos em aberto
+
+- **Destinatários dos comunicados:** a matriz restringe a leitura da Administração aos comunicados enviados ao seu condomínio, mas a entidade `comunicados` ainda não representa esses destinos. Definir a associação aos destinatários antes das migrations e APIs; não interpretar a ausência dessa relação como acesso global.
+- **Solicitação e aprovação de vínculo:** `moradores_unidade` apresenta somente `ativo`/`desvinculado`, enquanto a matriz prevê solicitar, aprovar e rejeitar. Definir estados adicionais ou entidade de solicitação antes da implementação, sem conceder acesso a solicitações pendentes.
 
 - **Conflito entre a TASK-81 e as stories:** a task de migrations fala em "constraint única de reserva: (área, data) por condomínio", o que deixaria uma única reserva por área por dia no prédio inteiro. A US-603 e a US-1006 dizem **uma por unidade, área e dia**, com grade de horários. Este DER segue as stories (regras 1 e 2). Ajustar o texto da TASK-81.
 - **Login da conta compartilhada de Funcionários** (US-210 fala em "usuário e senha"): é um e-mail/telefone como as outras contas, ou um nome de usuário próprio? Este DER assume e-mail.

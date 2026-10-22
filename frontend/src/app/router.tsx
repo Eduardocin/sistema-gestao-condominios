@@ -4,6 +4,7 @@ import { StatusPage } from '../features/home/StatusPage'
 import { AccessPage } from '../features/access/AccessPage'
 import { DesignSystemPage } from '../features/design-system/DesignSystemPage'
 import { NotFoundPage } from './NotFoundPage'
+import { PortariaPage } from '../features/portaria/PortariaPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -11,5 +12,6 @@ export const router = createBrowserRouter([
   { path: '/cadastro', element: <AccessPage mode="cadastro" /> },
   { path: '/status', element: <StatusPage /> },
   { path: '/design-system', element: <DesignSystemPage /> },
+  { path: '/prototipos/portaria', element: <PortariaPage /> },
   { path: '*', element: <NotFoundPage /> },
 ])

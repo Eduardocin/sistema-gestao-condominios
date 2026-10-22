@@ -6,15 +6,19 @@ import {
   ButtonLink,
   Calendar,
   Card,
+  CheckField,
   CommunityVisual,
   FeatureCard,
   Heading,
   Input,
   Modal,
+  MetricCard,
+  Notice,
   Page,
   PublicCallToAction,
   PublicFooter,
   PublicHeader,
+  RecordPhoto,
   Select,
   Table,
   Text,
@@ -214,6 +218,7 @@ export function DesignSystemPage() {
           <Badge variant="warning">Pendente</Badge>
           <Badge variant="primary">Em análise</Badge>
           <Badge variant="neutral">Arquivada</Badge>
+          <Badge variant="warning" wrap>Entregue, aguardando confirmação</Badge>
         </div>
       </Section>
 
@@ -278,6 +283,22 @@ export function DesignSystemPage() {
         <div className={styles.narrow}>
           <Upload label="Anexar nota fiscal" accept="image/png, image/jpeg" />
         </div>
+      </Section>
+
+      <Section title="Telas operacionais" description="Estrutura, indicadores, avisos e confirmação de ações usados na portaria.">
+        <ButtonLink to="/prototipos/portaria" variant="secondary">Abrir prévia da portaria</ButtonLink>
+        <div className={styles.grid}>
+          <MetricCard label="Aguardando retirada" value={3} description="Exemplo de indicador" />
+          <MetricCard label="Confirmações pendentes" value={1} description="Exemplo de atenção" tone="warning" />
+          <MetricCard label="Retiradas confirmadas" value={2} description="Exemplo de conclusão" tone="success" />
+          <RecordPhoto alt="Imagem ilustrativa de encomenda" />
+        </div>
+        <Notice>Informação de apoio à operação.</Notice>
+        <Notice tone="warning" title="Aguardando confirmação">A confirmação continua pendente até a ação do morador.</Notice>
+        <Notice tone="alert">Não foi possível ler a foto. Os campos foram mantidos.</Notice>
+        <Notice tone="success">Recebimento registrado.</Notice>
+        <CheckField>Conferi os dados antes de registrar.</CheckField>
+        <CheckField disabled>Confirmação indisponível</CheckField>
       </Section>
 
       <Section title="Calendário e grade de horários" description="Use as setas, Home, End, PageUp e PageDown no calendário. Clique num horário livre para reservar.">

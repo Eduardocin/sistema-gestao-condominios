@@ -1,0 +1,42 @@
+.shell { display: grid; grid-template-columns: var(--size-sidebar) minmax(0, 1fr); min-height: 100dvh; }
+.sidebar { padding: var(--space-6) var(--space-5); background: var(--color-surface); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; gap: var(--space-7); }
+.workspace { display: grid; gap: var(--space-2); justify-items: start; }
+.navigation { display: grid; gap: var(--space-2); }
+.navItem { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); text-decoration: none; border-radius: var(--radius-md); }
+.navItem:hover { background: var(--color-background); }
+.navItem.active { color: var(--color-primary); background: var(--color-primary-soft); }
+.navSymbol { width: var(--size-icon); text-align: center; font-size: var(--font-size-xl); }
+.sidebarFooter { margin-top: auto; display: grid; gap: var(--space-5); }
+.homeLink { color: var(--color-primary); font-size: var(--font-size-sm); }
+.workspaceMain { min-width: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); background: var(--color-surface); border-bottom: 1px solid var(--color-border); padding: var(--space-5) var(--space-6); }
+.demoBar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-6); background: var(--color-warning-soft); color: var(--color-warning-text); }
+.main { max-width: var(--content-width-public); margin: 0 auto; padding: var(--space-6); outline: none; }
+.metric { border: 1px solid var(--color-border); border-top: var(--space-1) solid var(--color-primary); border-radius: var(--radius-lg); background: var(--color-surface); padding: var(--space-5); display: grid; gap: var(--space-2); }
+.metric.warning { border-top-color: var(--color-warning); }
+.metric.success { border-top-color: var(--color-success); }
+.metricValue { font-size: var(--font-size-3xl); font-weight: var(--font-weight-semibold); line-height: var(--line-height-tight); }
+.notice { padding: var(--space-4); border-radius: var(--radius-md); display: grid; gap: var(--space-2); overflow-wrap: anywhere; }
+.notice.primary { background: var(--color-primary-soft); color: var(--color-text-main); }
+.notice.warning { background: var(--color-warning-soft); color: var(--color-warning-text); }
+.notice.alert { background: var(--color-alert-soft); color: var(--color-alert-text); }
+.notice.success { background: var(--color-success-soft); color: var(--color-success-text); }
+.check { display: flex; align-items: flex-start; gap: var(--space-3); font-size: var(--font-size-sm); cursor: pointer; }
+.check input { flex: 0 0 auto; width: var(--space-5); height: var(--space-5); accent-color: var(--color-primary); }
+.photo, .photoPlaceholder { width: 100%; max-height: var(--size-photo-height); aspect-ratio: 16 / 9; border-radius: var(--radius-md); object-fit: contain; background: var(--color-background); border: 1px solid var(--color-border); }
+.photoPlaceholder { display: grid; place-content: center; justify-items: center; gap: var(--space-2); padding: var(--space-4); }
+.photoPlaceholder svg { width: var(--space-9); height: var(--space-9); color: var(--color-primary); }
+.skipLink { position: fixed; left: var(--space-4); top: var(--space-4); transform: translateY(-200%); background: var(--color-surface); color: var(--color-primary); padding: var(--space-3); z-index: var(--z-toast); }
+.skipLink:focus { transform: translateY(0); }
+.navItem:focus-visible, .homeLink:focus-visible, .check input:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: var(--space-1); }
+@media (max-width: 64rem) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar { padding: var(--space-4); gap: var(--space-4); border-right: 0; border-bottom: 1px solid var(--color-border); }
+  .workspace, .sidebarFooter { display: none; }
+  .navigation { display: flex; flex-wrap: wrap; }
+  .navItem { padding: var(--space-2); }
+}
+@media (max-width: 40rem) {
+  .main, .topbar, .demoBar { padding: var(--space-4); }
+  .topbar, .demoBar { flex-wrap: wrap; }
+}

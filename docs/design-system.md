@@ -56,6 +56,12 @@ Para cada status há quatro tons: base (destaque), `-strong` (fundo sólido com 
 
 Rotas: `/` apresenta a proposta; `/login` e `/cadastro` são prévias com campos desabilitados, sem envio ou armazenamento de dados. `/status` preserva o diagnóstico da API. O conteúdo público não faz chamadas de negócio ao backend.
 
+## Telas operacionais
+
+`OperationsLayout` compõe a navegação lateral, o cabeçalho e a área principal. `MetricCard` apresenta contagens com rótulos; `Notice` oferece avisos com variantes de informação, atenção, erro e sucesso; `CheckField` confirma ações; `RecordPhoto` mostra uma imagem ou uma ilustração explicitamente identificada. Exemplos estão em `/design-system`, e a composição completa em `/prototipos/portaria`. `Badge wrap` quebra status longos quando necessário.
+
+O protótipo contém apenas exemplos em memória, sem chamadas de negócio à API. Ver [telas da portaria](portaria/telas.md).
+
 ## Acessibilidade já embutida
 
 - Foco visível por teclado em todos os controles.

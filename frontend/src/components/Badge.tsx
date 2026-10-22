@@ -6,11 +6,12 @@ export type BadgeVariant = 'success' | 'alert' | 'warning' | 'primary' | 'neutra
 
 export interface BadgeProps extends ComponentProps<'span'> {
   variant?: BadgeVariant
+  wrap?: boolean
 }
 
-export function Badge({ variant = 'neutral', className, children, ...props }: BadgeProps) {
+export function Badge({ variant = 'neutral', wrap = false, className, children, ...props }: BadgeProps) {
   return (
-    <span className={cx(styles.badge, styles[variant], className)} {...props}>
+    <span className={cx(styles.badge, styles[variant], wrap && styles.wrap, className)} {...props}>
       {children}
     </span>
   )

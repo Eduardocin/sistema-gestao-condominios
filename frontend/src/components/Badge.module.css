@@ -10,6 +10,12 @@
 }
 
 /* Fundo suave + texto escuro: contraste acima de 4,5:1 em todas as variantes */
+.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  justify-self: start;
+}
+
 .success {
   background: var(--color-success-soft);
   color: var(--color-success-text);

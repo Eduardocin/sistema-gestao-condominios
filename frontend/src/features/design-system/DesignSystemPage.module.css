@@ -2,6 +2,11 @@
   max-width: 64rem;
 }
 
+.publicExamples {
+  display: grid;
+  gap: var(--space-5);
+}
+
 .section {
   margin-top: var(--space-7);
 }
@@ -89,6 +94,7 @@
 
 .typeRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);

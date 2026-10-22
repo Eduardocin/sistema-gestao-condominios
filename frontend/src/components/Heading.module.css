@@ -8,6 +8,12 @@
 .xl {
   font-size: var(--font-size-3xl);
 }
+
+.display {
+  font-size: var(--font-size-display);
+  letter-spacing: var(--letter-spacing-display);
+  text-wrap: balance;
+}
 .lg {
   font-size: var(--font-size-2xl);
 }

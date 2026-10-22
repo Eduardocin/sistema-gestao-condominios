@@ -236,14 +236,17 @@ erDiagram
         uuid id PK
         uuid condominio_id FK
         uuid unidade_id FK
+        uuid destinatario_morador_unidade_id FK
         varchar descricao
         uuid foto_nota_arquivo_id FK "obrigatória"
         uuid recebido_por_funcionario_id FK
-        varchar status "aguardando_retirada, retirada"
+        varchar status "aguardando_retirada, entregue_aguardando_confirmacao, retirada_confirmada"
         timestamptz registrada_em
-        timestamptz retirada_em
-        varchar retirado_por_nome
-        uuid retirada_registrada_por_funcionario_id FK
+        timestamptz entregue_em
+        uuid recebedor_morador_unidade_id FK
+        uuid entregue_por_funcionario_id FK
+        timestamptz confirmada_em
+        uuid confirmado_por_usuario_id FK
     }
     visitantes {
         uuid id PK
@@ -460,7 +463,7 @@ Estas são as restrições que a TASK-81 transforma em constraints. As marcadas 
 | 5 | Só uma chave vigente por unidade | `UNIQUE (unidade_id) WHERE revogada_em IS NULL` | US-207 |
 | 6 ★ | CNPJ único | `UNIQUE (cnpj)` em `condominios`; `UNIQUE (documento)` em `usuarios` | US-201, US-206 |
 | 7 | Status do condomínio válido | `CHECK (status IN ('pendente','ativo','rejeitado','desativado'))` e `CHECK (status <> 'rejeitado' OR motivo_rejeicao IS NOT NULL)` | US-203 |
-| 8 | Encomenda coerente | `CHECK` de status (`aguardando_retirada`, `retirada`) e `CHECK ((status = 'retirada') = (retirada_em IS NOT NULL AND retirado_por_nome IS NOT NULL))` | US-401, US-403 |
+| 8 | Encomenda coerente | Três estados e ramos explícitos de completude; entrega e confirmação têm datas e responsáveis separados (SQL abaixo) | US-401, US-403; alinhamento TASK-12 |
 | 9 | Ocorrência coerente | `CHECK (status IN ('em_aberto','resolvida'))` | US-701, US-703 |
 | 10 | Saída só depois da entrada | `CHECK (saida_em IS NULL OR saida_em >= entrada_em)` em `registros_visita` | US-503 |
 | 11 | Uma visita em aberto por visitante | `UNIQUE (visitante_id) WHERE saida_em IS NULL` | US-503 |
@@ -478,6 +481,43 @@ Estas são as restrições que a TASK-81 transforma em constraints. As marcadas 
 | 23 | Token de recuperação e convite não se repetem | `UNIQUE (token_hash)`. O uso único (`usado_em`/`aceito_em` gravado uma vez) é garantido no service com `UPDATE ... WHERE usado_em IS NULL` | US-102, US-303 |
 
 Regras que **não** dá para garantir no banco e ficam no service (com teste): limite de tentativas de chave (US-301, usa `tentativas_chave_acesso`), horário dentro do funcionamento da área e fora de bloqueio (US-603), última pessoa com a aba Usuários (matriz, seção 8), encomenda só para unidade ativa, e o filtro por `condominio_id` em toda consulta (R3).
+
+### Encomendas: entrega e confirmação
+
+Alinhamento da portaria definido em 22/10/2026: a portaria registra a entrega física e o morador que recebeu confirma depois, pela própria conta. Os estados são `aguardando_retirada → entregue_aguardando_confirmacao → retirada_confirmada`. A pendência não se encerra automaticamente e a conta de Funcionários não confirma pelo morador.
+
+`destinatario_morador_unidade_id` e `recebedor_morador_unidade_id` referenciam `moradores_unidade`, com FK composta pelo condomínio. O service valida que os dois vínculos pertencem à unidade da encomenda e estão ativos no momento da respectiva operação. Outro morador ativo da mesma unidade pode receber. Para confirmar, o usuário do contexto deve ser o usuário do vínculo recebedor; registrar essa identidade em `confirmado_por_usuario_id`. A autorização central aplica a aba Encomendas e o vínculo ativo.
+
+`status`, `unidade_id`, `destinatario_morador_unidade_id`, `foto_nota_arquivo_id`, `recebido_por_funcionario_id` e `registrada_em` são `NOT NULL`. Além das FKs, a TASK-81 deve aplicar as constraints abaixo:
+
+```sql
+CHECK (
+  (status = 'aguardando_retirada'
+    AND entregue_em IS NULL
+    AND recebedor_morador_unidade_id IS NULL
+    AND entregue_por_funcionario_id IS NULL
+    AND confirmada_em IS NULL
+    AND confirmado_por_usuario_id IS NULL)
+  OR
+  (status = 'entregue_aguardando_confirmacao'
+    AND entregue_em IS NOT NULL
+    AND recebedor_morador_unidade_id IS NOT NULL
+    AND entregue_por_funcionario_id IS NOT NULL
+    AND confirmada_em IS NULL
+    AND confirmado_por_usuario_id IS NULL)
+  OR
+  (status = 'retirada_confirmada'
+    AND entregue_em IS NOT NULL
+    AND recebedor_morador_unidade_id IS NOT NULL
+    AND entregue_por_funcionario_id IS NOT NULL
+    AND confirmada_em IS NOT NULL
+    AND confirmado_por_usuario_id IS NOT NULL)
+),
+CHECK (entregue_em IS NULL OR entregue_em >= registrada_em),
+CHECK (confirmada_em IS NULL OR confirmada_em >= entregue_em)
+```
+
+A igualdade anterior entre o status e o AND de data/nome aceitava dados parciais quando o status era aguardando. Os ramos acima exigem todos os dados da etapa, ou nenhum deles, conforme o estado. As referências e os horários de recebimento/entrega não são apagados pela confirmação; o servidor gera as datas e a auditoria registra a conta autenticada e o funcionário selecionado.
 
 ### Índices para as consultas mais usadas
 
@@ -507,12 +547,14 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 ## 6. Decisões tomadas aqui (confirmar na revisão)
 
 1. **Reserva é por slot de 1 hora** (`data` + `hora_inicio`), e não por intervalo livre. Segue a grade de 1 hora da US-603 e deixa as regras 1 e 2 simples de garantir.
-2. **Visitante e visita são tabelas separadas.** O cadastro do morador vale por um período (US-501) e o porteiro pode registrar mais de uma entrada nesse período.
+2. **Visitante e visita são tabelas separadas.** Mantida a autorização reutilizável durante o período cadastrado (US-501), conforme alinhamento da TASK-12 em 22/10/2026. O porteiro pode registrar mais de uma entrada nesse período, sempre com uma visita diferente e com saída da anterior já registrada. O cadastro pertence à unidade indicada. Validar a autorização a cada entrada: cadastro não cancelado, período vigente, vínculo/permissão do morador autorizador e contexto do condomínio. As datas `entrada_prevista` e `saida_prevista` abrangem os dias informados no fuso do condomínio, inclusive o último dia; fora desse período, consultar o morador por interfone ou telefone antes de liberar nova entrada. Não há consumo de uso único.
 3. **Funcionários e responsáveis da Administração não são usuários** (matriz, seção 2). A conta compartilhada de cada perfil é um `usuario` comum com um `vinculo_condominio`.
 4. **Auditoria com `bigint` em vez de `uuid`**, para a ordem de inserção ser natural e a tabela crescer sem custo.
 5. **`proprietarios_unidade` separado de `unidades`**, porque tem muitos campos, foto e dados pessoais que só a Administração vê.
 6. **Aviso pode ter `unidade_id`**: é como a Administração avisa uma unidade de reserva cancelada (US-605, US-602) sem criar uma tabela de notificações.
 7. **Chave de acesso guardada em texto**, porque a Administração precisa consultá-la (US-207). A chave nunca é devolvida ao morador.
+
+7. **Encomendas com confirmação posterior pelo recebedor.** Mantidos os três estados descritos na seção 4, com referências para destinatário/recebedor e eventos separados. A matriz de permissões deve permitir somente ao recebedor autenticado confirmar.
 
 ## 7. Pontos em aberto
 
@@ -521,6 +563,7 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 - **Permissões iniciais do morador:** a regra proposta na matriz (primeiro morador com tudo, os seguintes sem a aba Usuários) ainda depende do Paulo.
 - **Documento comprobatório da conta da Administração** (US-201, opcional): este DER guarda os documentos por condomínio, em `condominio_documentos`, porque é isso que o ADM analisa na fila (US-203). Confirmar com o Paulo se o documento da US-201 é o mesmo.
 - **Comunicados lidos:** a US-804 não pede controle de leitura, então não há tabela para isso.
+- **Contatos da portaria sem entrada:** definir com Eduardo/Vitor a representação de negativas e ausência de resposta (entidade própria ou evento de auditoria consultável), preservando canal, morador consultado, funcionário e horário sem criar uma visita. O registro já aparece na prévia da TASK-12; esta revisão do DER ainda não cria uma tabela para ele.
 
 ## 8. Revisão por módulo
 

@@ -116,7 +116,7 @@ Mensagens de 403 e 404 são genéricas e não citam o recurso, o condomínio ou 
 | Permissões por aba dos moradores | V E (U) `[Usuários]` | — | — | — |
 | Funcionários (lista de nomes, sem login) | — | V (C), só os nomes ativos | V C E D (C) | — |
 | Conta compartilhada de Funcionários e responsáveis da Administração | — | — | V C E (C) | — |
-| Encomendas | V (U) `[Encomendas]` | V C E (C). E = registrar retirada | V (C), relatório | — |
+| Encomendas | V (U) `[Encomendas]`; confirmar recebimento somente pelo recebedor autenticado, com vínculo ativo e aba habilitada | V C E (C). E = registrar entrega física; não confirma pelo morador | V (C), relatório | — |
 | Visitantes | V C E D (U) `[Visitantes]` | V (C), C visitante avulso, E registrar entrada e saída | V (C), relatório | — |
 | Veículos | V C E D (U) `[Veículos]` | V (C) | V (C), relatório | — |
 | Áreas comuns e bloqueio de datas | V (C), só áreas ativas `[Reserva de Áreas]` | — | V C E D (C) | — |
@@ -165,7 +165,7 @@ Registro de apenas inserção, com: usuário (conta), responsável informado, pe
 | Condomínio | Aprovar, rejeitar (com motivo), desativar, reativar, reenviar cadastro, editar dados e estrutura |
 | Acesso | Gerar, regenerar e revogar chave de acesso; aprovar, rejeitar e desfazer vínculo; mudar permissão por aba; trocar acesso da conta compartilhada |
 | Pessoas | Cadastrar e desativar funcionário; alterar lista de responsáveis; editar proprietário da unidade |
-| Operação | Cancelar reserva (Administração); bloquear data; alterar status de ocorrência; registrar retirada de encomenda; publicar ou editar aviso |
+| Operação | Cancelar reserva (Administração); bloquear data; alterar status de ocorrência; registrar entrega de encomenda e confirmar recebimento pelo morador; publicar ou editar aviso |
 | Plataforma | Enviar comunicado; atender e fechar chamado |
 | Segurança | Login falho; **acesso negado (403)**; tentativa de acessar recurso de outro condomínio (404 cross-tenant) |
 

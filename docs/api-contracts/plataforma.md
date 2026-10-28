@@ -262,7 +262,7 @@ Obrigatórios: `nome` (1 a 120), `funcao` (`porteiro` ou `seguranca`, CHECK do D
 
 Nome de 1 a 100 caracteres, único entre os ativos do condomínio ignorando maiúsculas (proposta). Essa lista alimenta o campo `responsavel_id` de **todas** as ações da Administração.
 
-Há um ciclo a evitar: a lista começa vazia e as ações exigem um responsável da lista. Por isso **gerir a própria lista é a única ação da Administração que não recebe `responsavel_id`**; a alteração é auditada (`responsaveis.alterar`) só com a conta autenticada. O front deve orientar a cadastrar ao menos um responsável logo depois da aprovação do condomínio; enquanto a lista estiver vazia, as ações que exigem `responsavel_id` retornam 422 (`validation_error`).
+Há um ciclo a evitar: a lista começa vazia e as ações exigem um responsável da lista. Por isso **gerir a própria lista é a única ação da Administração que não recebe `responsavel_id`**; a alteração é auditada (`responsaveis.alterar`) só com a conta autenticada. O front deve orientar a cadastrar ao menos um responsável antes da primeira ação que exija `responsavel_id`, inclusive para corrigir a estrutura durante o cadastro do condomínio; enquanto a lista estiver vazia, essas ações retornam 422 (`validation_error`).
 
 ### 5.3 Conta compartilhada de Funcionários (US-210)
 
@@ -304,16 +304,17 @@ def enfileirar_email(
 Como funciona, em quatro passos:
 
 1. O módulo chama `enfileirar_email` **dentro da transação da operação principal**. A linha entra em `envios_email` com `status = 'pendente'`. Se a operação falhar e der rollback, o e-mail some junto; se der certo, o e-mail está garantido na fila (padrão "outbox").
-2. Depois do `commit`, a rota agenda o envio com `BackgroundTasks` do FastAPI; o envio roda **depois de a resposta sair**, então o e-mail nunca atrasa nem bloqueia a requisição. Não há Redis nem Celery (decisão do ADR 0001).
+2. Depois do `commit`, a rota agenda o envio com `BackgroundTasks` do FastAPI; o envio roda **depois de a resposta sair**, sem esperar o SMTP para responder. A tarefa usa uma sessão própria do banco, não a sessão encerrada da requisição. Não há Redis nem Celery (decisão do ADR 0001).
 3. A tarefa monta o corpo **a partir do banco** (pelo `recurso_tipo` e `recurso_id`), envia por SMTP e marca `enviado` e `enviado_em`. Em erro, incrementa `tentativas`, grava `ultimo_erro` (sem dados sensíveis) e tenta de novo até 3 vezes, com intervalos curtos (proposta: 30 s e 2 min); esgotadas, `status = 'falhou'`. **A falha do e-mail nunca desfaz nem bloqueia a operação principal** (critério de aceite).
 4. Quem acompanha e reenvia é o ADM (6.3).
 
 O destinatário vem do banco, nunca de um campo livre do cliente. O corpo do e-mail não inclui segredos além do necessário ao evento (o link de recuperação de senha é o único).
 
-**Dois pontos de atenção:**
+**Pontos de atenção:**
 
 - **Recuperação de senha não se reenvia.** O link contém um token que só existe em texto no instante do envio (o banco guarda `token_hash`). Um reenvio manual exigiria gerar outro token; por isso `reenvio` de `recuperacao_senha` retorna 409 (`reason: "reenvio_nao_permitido"`) e a pessoa pede de novo. Como o corpo é montado na hora do envio e não no `enfileirar_email`, o token **não é gravado** em `envios_email`; ele é gerado pelo service de recuperação e entregue à tarefa em memória.
-- **Reentrega depois de reiniciar a API.** `BackgroundTasks` vive no processo: se a API reiniciar com e-mails `pendente`, eles ficam parados. Proposta: um passo de inicialização que reprocessa `pendente` com mais de 5 minutos (usa o índice `envios_email (status) WHERE status <> 'enviado'` do DER). Se for complexo para o MVP, o reenvio manual do ADM cobre.
+- **Envios interrompidos ao reiniciar a API.** Para o MVP, a API roda em **uma instância com um worker**. Antes de aceitar novas requisições, a inicialização muda **todos** os envios ainda `pendente` para `falhou`, com `ultimo_erro = "envio_interrompido_por_reinicio"`, preservando `tentativas`. Inclui envios recentes: não há corte de 5 minutos, pois a tarefa do processo anterior já não existe. O ADM pode reenviar esses registros pela rota da seção 6.3, exceto `recuperacao_senha`: nesse caso o token em memória foi perdido, e a pessoa faz uma nova solicitação pelo fluxo normal. O token em texto nunca vai para o banco ou para o log. Se a atualização inicial falhar, a API não começa a atender; o erro fica no log para correção. Esta estratégia de inicialização precisa ser revista antes de usar múltiplos workers ou réplicas, para não marcar como interrompido um envio de outro processo ativo.
+- **Limite do envio por SMTP.** Se o SMTP aceitar a mensagem e a API cair antes de gravar `enviado`, um reenvio manual pode duplicá-la. O MVP não promete entrega exatamente uma vez.
 
 ### 6.3 Acompanhamento e reenvio
 
@@ -322,7 +323,7 @@ O destinatário vem do banco, nunca de um campo livre do cliente. O corpo do e-m
 | `GET /plataforma/envios-email` | ADM | `status`, `evento`, `condominio_id`, `de`, `ate`, paginação | 200, lista |
 | `POST /plataforma/envios-email/{id}/reenvio` | ADM | `{}` | 202, envio com `status = 'pendente'` |
 
-Item: `id`, `evento`, `destinatario` (mascarado: `a***@exemplo.com`), `status`, `tentativas`, `ultimo_erro`, `criado_em`, `enviado_em`. Só `falhou` pode ser reenviado (senão 409). O reenvio zera as tentativas e agenda de novo.
+Item: `id`, `evento`, `destinatario` (mascarado: `a***@exemplo.com`), `status`, `tentativas`, `ultimo_erro`, `criado_em`, `enviado_em`. Só `falhou` pode ser reenviado (senão 409), incluindo os interrompidos que a inicialização marcou dessa forma. `recuperacao_senha` sempre retorna 409 (`reason: "reenvio_nao_permitido"`), mesmo em `falhou`. O reenvio muda o status para `pendente`, zera `tentativas` e limpa `ultimo_erro` na mesma transação; só depois do commit agenda a tarefa. Essa mudança é condicional ao status ainda ser `falhou`, para dois pedidos de reenvio não agendarem a mesma mensagem: um recebe 202 e o outro 409.
 
 A matriz não tem linha para esses envios, e o DER guarda só o destino, não o recurso. Ambos estão nas pendências.
 
@@ -336,17 +337,18 @@ A **leitura** da árvore (`GET /condominio/estrutura`) e o cadastro inicial pelo
 
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `POST /estrutura/blocos` | Administração | `{"nome": "Bloco C"}` | 201, bloco |
-| `PUT /estrutura/blocos/{id}` | Administração | `{"nome": "..."}` | 200, bloco |
-| `POST /estrutura/blocos/{id}/andares` | Administração | `{"nome": "3º andar", "ordem": 3}` | 201, andar |
-| `PUT /estrutura/andares/{id}` | Administração | `{"nome": "...", "ordem": 3}` | 200, andar |
-| `POST /estrutura/andares/{id}/unidades` | Administração | `{"identificacao": "301"}` | 201, unidade |
-| `PUT /estrutura/unidades/{id}` | Administração | `{"identificacao": "..."}` | 200, unidade |
-| `POST /estrutura/{tipo}/{id}/desativacao` | Administração | `{}` (com `tipo` = `blocos`, `andares` ou `unidades`) | 200, item com `ativo = false` |
-| `POST /estrutura/{tipo}/{id}/reativacao` | Administração | `{}` | 200, item com `ativo = true` |
+| `POST /estrutura/blocos` | Administração | `{"nome": "Bloco C", "responsavel_id": "UUID"}` | 201, bloco |
+| `PUT /estrutura/blocos/{id}` | Administração | `{"nome": "...", "responsavel_id": "UUID"}` | 200, bloco |
+| `POST /estrutura/blocos/{id}/andares` | Administração | `{"nome": "3º andar", "ordem": 3, "responsavel_id": "UUID"}` | 201, andar |
+| `PUT /estrutura/andares/{id}` | Administração | `{"nome": "...", "ordem": 3, "responsavel_id": "UUID"}` | 200, andar |
+| `POST /estrutura/andares/{id}/unidades` | Administração | `{"identificacao": "301", "responsavel_id": "UUID"}` | 201, unidade |
+| `PUT /estrutura/unidades/{id}` | Administração | `{"identificacao": "...", "responsavel_id": "UUID"}` | 200, unidade |
+| `POST /estrutura/{tipo}/{id}/desativacao` | Administração | `{"responsavel_id": "UUID"}` (com `tipo` = `blocos`, `andares` ou `unidades`) | 200, item com `ativo = false` |
+| `POST /estrutura/{tipo}/{id}/reativacao` | Administração | `{"responsavel_id": "UUID"}` | 200, item com `ativo = true` |
 
 Regras:
 
+- **Responsável obrigatório nas oito operações de escrita acima.** `responsavel_id` identifica um responsável ativo da Administração no condomínio do contexto. Ausente ou inválido no formato: 422; inexistente, inativo ou de outro condomínio: 404 genérico. O service valida antes de alterar a estrutura e passa `ResponsavelRef(tipo="administracao", id=responsavel_id)` para `registrar_acao`, na mesma transação. A auditoria preserva o nome e a identidade da conta autenticada. O responsável deve estar cadastrado pela seção 5.2 também quando a estrutura for corrigida em condomínio pendente ou rejeitado; a gestão dessa lista precisa estar liberada no mesmo fluxo de cadastro.
 - Nomes únicos: bloco no condomínio, andar no bloco, unidade no andar (regra 18 do DER). Repetir retorna 409 (`reason: "nome_duplicado"`). Nome de 1 a 50 caracteres. "101" pode existir em blocos diferentes.
 - **Desativar unidade:** retorna 409 (`reason: "unidade_com_vinculo_ativo"`) se houver morador vinculado ativo (matriz: "não remove unidade com vínculo"). Sem vínculo ativo, a unidade é desativada, **nunca apagada**, e seus registros antigos (encomendas, reservas, ocorrências) continuam. A chave de acesso vigente da unidade é **revogada** na mesma transação, para ninguém se vincular a uma unidade desativada.
 - **Desativar andar ou bloco:** só se todas as suas unidades já estiverem desativadas (409, `reason: "estrutura_com_unidades_ativas"`).
@@ -365,8 +367,8 @@ Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a list
 - **Chamados:** Administração de outro condomínio recebe 404; mensagem em chamado encerrado retorna 409; a primeira resposta do ADM move para `em_atendimento` uma única vez.
 - **Funcionários:** desligado some da lista do Funcionário e permanece em registros antigos; Funcionário não acessa `POST /funcionarios`.
 - **Conta compartilhada:** trocar a senha derruba a sessão ativa (a requisição seguinte com o token antigo retorna 401); a senha não aparece em nenhuma resposta nem no log.
-- **E-mail:** com o SMTP falhando, a operação principal termina com sucesso e o envio fica `falhou`; rollback da operação não deixa e-mail na fila; `recuperacao_senha` não é reenviável; o corpo nunca contém dados de outro condomínio.
-- **Estrutura:** nome duplicado retorna 409; desativar unidade com morador ativo retorna 409; chave revogada ao desativar; Funcionário e Morador recebem 403 nas escritas.
+- **E-mail:** com o SMTP falhando, a operação principal termina com sucesso e o envio fica `falhou`; rollback da operação não deixa e-mail na fila; simular reinício com envios `pendente` recentes e antigos, todos devem ficar `falhou` com `envio_interrompido_por_reinicio`, sem perder o contador de tentativas; um envio já `enviado` permanece intacto; a inicialização roda antes de aceitar requisições e falha se não conseguir atualizar os interrompidos; o ADM consegue reenviar um interrompido comum; dois reenvios simultâneos produzem um 202, um 409 e uma única tarefa agendada; `recuperacao_senha` interrompida não é reenviável e exige nova solicitação; token em texto não aparece no banco nem no log; o corpo nunca contém dados de outro condomínio.
+- **Estrutura:** parametrizar as oito operações: sem `responsavel_id` ou com formato inválido retorna 422; responsável inexistente, inativo ou de outro condomínio retorna 404, sem alteração nem auditoria de sucesso; com responsável válido a operação e um evento `estrutura.editar` são gravados juntos; falha da auditoria reverte a alteração; em condomínio pendente ou rejeitado, é possível cadastrar o responsável antes de corrigir a estrutura; nome duplicado retorna 409; desativar unidade com morador ativo retorna 409; chave revogada ao desativar; Funcionário e Morador recebem 403 nas escritas.
 
 ## 9. Pendências e responsáveis
 
@@ -377,10 +379,10 @@ Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a list
 | Colunas de `envios_email` | Falta guardar **o que** foi enviado: **proposta** de `recurso_tipo` e `recurso_id`, para montar o corpo no reenvio e achar o envio pelo recurso. | Davi e Tude |
 | Matriz: envios de e-mail | Nova linha "Envios de e-mail": ADM `V E (P)`. A matriz não tem esse módulo. | Gabriel |
 | Histórico de funcionários | Exceção à regra "auditoria só do ADM" (seção 5.1) | Gabriel |
-| Rotas de cadastro em condomínio não ativo | A dependência de autorização deve liberar as rotas de estrutura e cadastro para `pendente` e `rejeitado` (R7) | Gabriel |
+| Rotas de cadastro em condomínio não ativo | A dependência de autorização deve liberar as rotas de estrutura, cadastro e gestão dos responsáveis (para fornecer `responsavel_id`) em `pendente` e `rejeitado` (R7) | Gabriel |
 | `/portaria/funcionarios` | Manter ou unificar com `/funcionarios` | Eduardo e Tude |
 | Login da conta compartilhada | E-mail (assumido) ou nome de usuário | Gabriel e Paulo |
-| Reenvio na inicialização | Reprocessar `pendente` ao subir a API, ou só reenvio manual | Tude e Gabriel |
+| Recuperação de envios interrompidos | Implementar a inicialização da seção 6.2: marcar pendentes como falhos antes de atender, com reenvio manual dos eventos comuns. Recuperação de senha exige nova solicitação. MVP com uma instância e um worker. | Tude e Gabriel |
 | Servidor SMTP | Provedor para produção/demo e variáveis no `.env.example` | Davi |
 | Integração com os donos de módulo | Cada dono confirma as ações do catálogo da seção 4.2 e chama `registrar_acao`; combinar numa reunião curta | Todos |
 | TASK-11 em andamento | O card está `Em andamento` com Tude. Este documento é uma proposta de base: Tude compara com o que já escreveu e decide o que adotar. | Tude |

@@ -1,8 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL, make_url
 
@@ -29,6 +30,29 @@ class Settings(BaseSettings):
     postgres_db: str = "condominios"
     postgres_host: str = "127.0.0.1"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
+    storage_endpoint: str = "http://127.0.0.1:9000"
+    storage_public_endpoint: str = "http://127.0.0.1:9000"
+    storage_access_key: SecretStr = SecretStr("condominios_storage_dev")
+    storage_secret_key: SecretStr = SecretStr("storage_local_dev_only")
+    storage_bucket: str = "condominios-arquivos"
+    storage_region: str = "us-east-1"
+    storage_url_seconds: int = Field(default=60, ge=1, le=300)
+
+    @field_validator("storage_endpoint", "storage_public_endpoint")
+    @classmethod
+    def validate_storage_endpoint(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("Endpoint S3 deve ser HTTP(S), sem credenciais, caminho ou query.")
+        return value.rstrip("/")
 
     # Ambiente de execução. Só "production" liga as travas extras de segurança.
     app_env: Literal["development", "test", "production"] = "development"

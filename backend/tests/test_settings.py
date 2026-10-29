@@ -21,6 +21,25 @@ def test_explicit_database_url_overrides_components():
     assert settings.sqlalchemy_url.port == 5545
 
 
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "ftp://storage:9000",
+        "http://user:pass@storage:9000",
+        "http://storage:9000/path",
+        "http://storage:9000?key=secret",
+    ],
+)
+def test_storage_endpoint_cannot_contain_paths_or_credentials(endpoint):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, storage_endpoint=endpoint)
+
+
+def test_storage_signed_url_duration_is_bounded():
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, storage_url_seconds=301)
+
+
 def test_defaults_de_autenticacao():
     settings = Settings(_env_file=None)
     assert settings.access_token_expire_minutes == 15

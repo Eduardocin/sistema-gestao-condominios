@@ -1,8 +1,8 @@
 # Núcleo — proposta de contrato REST (TASK-78)
 
-Status: rascunho para revisão do Gabriel e do front (Guilherme e Matheus) e aprovação no portão dos leads. Endpoints abaixo **não estão implementados**. O backend atual só tem `GET /api/v1/health`.
+Status: rascunho para revisão do Gabriel e do front (Guilherme e Matheus) e aprovação no portão dos leads. Os endpoints de negócio do núcleo abaixo **não estão implementados**. A autenticação da seção 2 é referência ao PR #11 (TASK-80), ainda dependente da sua integração na main.
 
-O núcleo é o que existe antes de qualquer módulo de negócio funcionar: contas, condomínio, estrutura do prédio, aprovação pelo ADM, chaves de acesso e vínculo do morador. Também fixa, como referência para o front, as duas rotas de login da TASK-20.
+O núcleo é o que existe antes de qualquer módulo de negócio funcionar: contas, condomínio, estrutura do prédio, aprovação pelo ADM, chaves de acesso e vínculo do morador. Também fixa, como referência para o front, as duas rotas de login da TASK-80.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso, rotas sem `cid`): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seções 3.1, 3.2 e 5. Permissões e token: [matriz](../permissoes-e-multitenant.md), seções 3, 4, 5 e 7. Edição da estrutura do prédio: [plataforma.md](plataforma.md), seção 7.
 
@@ -16,70 +16,68 @@ Histórias cobertas: US-101, US-104, US-201 a US-204, US-206 a US-208, US-301, U
 - Mensagem de erro de credencial é sempre genérica ("E-mail ou senha incorretos."), sem dizer qual dos dois falhou.
 - `usuarios.email` é guardado em **minúsculas** (ADR 0002); CPF, CNPJ e telefone só com dígitos. A máscara é coisa da tela (DER, convenções).
 
-## 2. Autenticação — referência para a TASK-20
+## 2. Autenticação — referência para a TASK-80
 
-Definição oficial no código da TASK-20 (Gabriel); aqui só o formato que o front precisa. Claims do token e o fluxo estão na matriz (seção 4): `sub`, `cid`, `sv`, `perfil` (só para a interface), `exp`, `iat`.
+O comportamento implementado do login tem como fonte [auth.md](auth.md), entregue no
+[PR #11](https://github.com/Eduardocin/sistema-gestao-condominios/pull/11).
+Esta seção resume a integração com o front; não cria um segundo contrato de autenticação.
+Enquanto o PR #11 não entrar na main, essas rotas continuam sendo uma dependência desta proposta.
 
-### 2.1 `POST /auth/login` (público)
+### 2.1 Login e seleção de condomínio
+
+`POST /auth/login` recebe:
 
 ```json
 {"identificador": "ana@exemplo.com", "senha": "••••••••"}
 ```
 
-`identificador` é e-mail ou telefone (US-101), normalizado pelo servidor (e-mail em minúsculas, telefone só com dígitos). Resposta 200:
+Na implementação da TASK-80, `identificador` aceita **e-mail**, normalizado pelo
+servidor. Login por telefone permanece requisito da US-101 a integrar quando o
+banco oferecer a coluna correspondente; não é comportamento já disponível.
 
-```json
-{
-  "access_token": "eyJ...",
-  "token_type": "bearer",
-  "expires_in": 900,
-  "usuario": {"id": "UUID", "nome": "Ana Martins", "email": "ana@exemplo.com", "tipo_cadastro": "morador"},
-  "condominio": {"id": "UUID", "nome": "Residencial Aurora", "perfil": "morador", "status": "ativo"},
-  "condominios": [{"id": "UUID", "nome": "Residencial Aurora", "perfil": "morador", "status": "ativo"}],
-  "requer_selecao": false
-}
-```
+A resposta de sessão inclui `access_token`, `refresh_token`, `token_type`,
+`expires_in`, `usuario` (`id`, `nome`, `email`), `condominio`, `condominios`,
+`requer_selecao` e `administrador_plataforma`. O exemplo completo e os códigos
+HTTP estão em `auth.md`.
 
-| Situação | `condominio` | `condominios` | `requer_selecao` | `cid` no token |
-| --- | --- | --- | --- | --- |
-| Um único vínculo ativo | O condomínio | Lista com um item | `false` | Presente |
-| Vários vínculos ativos | `null` | Todos | `true` | **Ausente** (token só serve para `selecionar-condominio` e rotas sem `cid`) |
-| Nenhum vínculo (conta nova) | `null` | `[]` | `false` | Ausente |
-| ADM da plataforma | `null` | `[]` | `false` | Ausente; `perfil = "plataforma"` no token, só para a interface |
+- Um único vínculo ativo **e liberado** seleciona o condomínio e emite `cid`.
+- Vários vínculos ativos deixam `condominio = null`, `requer_selecao = true` e
+  token sem `cid`; o front chama `POST /auth/selecionar-condominio`.
+- Nenhum vínculo ou ADM da plataforma: token sem `cid`, sem seleção obrigatória.
+- Um vínculo em condomínio indisponível para o perfil não é selecionado;
+  `requer_selecao = false` e o status aparece na lista de condomínios.
 
-Erros: 401 `not_authenticated` com a mensagem genérica de credencial. Conta inativa também recebe 401 com a mesma mensagem. Cada falha gera `seguranca.login_falho` ([plataforma.md](plataforma.md) seção 4).
+`POST /auth/selecionar-condominio` recebe `{"condominio_id": "UUID"}`, exige Bearer
+e devolve uma nova sessão. Sem vínculo ativo: 404 genérico. Condomínio não
+liberado para o perfil: 403. A implementação atual usa o booleano `ativo` e
+permite à Administração voltar ao fluxo de cadastro; os quatro status do
+núcleo e a autorização por ação continuam dependentes da evolução do banco
+e da TASK-19. Essa exceção não autoriza operações do dia a dia.
 
-### 2.2 `POST /auth/selecionar-condominio`
+Credenciais erradas, usuário inativo ou sem senha retornam o mesmo 401.
+O limite de tentativas já existe: padrão de 5 falhas por e-mail, com bloqueio
+de 15 minutos, 429 e `Retry-After`. O contador fica na memória de uma instância.
+Falhas de login usam log; o evento persistente de auditoria aguarda a US-1004.
 
-```json
-{"condominio_id": "UUID"}
-```
+### 2.2 Renovação e dados da sessão
 
-Confere que existe **vínculo ativo** do usuário com o condomínio e emite um novo token com `cid`. Sem vínculo, ou vínculo inativo: 404 (R4; não revela que o condomínio existe). Para a conta de **Administração**, o condomínio pode estar `pendente` ou `rejeitado`, porque é assim que ela volta ao próprio cadastro; para os demais perfis, o condomínio precisa estar `ativo`. Resposta: mesmo formato do login, com `condominio` preenchido.
+`POST /auth/refresh` recebe `{"refresh_token": "..."}` e devolve um novo access
+token, seu tipo e validade. Os padrões são 15 minutos para access e 7 dias para
+refresh. O refresh não é rotacionado; mudança de `sessao_versao` invalida as sessões.
+Assinatura HS256 configurada por `JWT_SECRET_KEY`; nomes e limites em `auth.md`.
 
-### 2.3 `GET /auth/me`
+`GET /auth/me` exige Bearer, mas aceita token sem `cid`. Devolve `usuario`,
+`condominio`, `unidades` e `administrador_plataforma`. Por enquanto, unidades
+trazem `id` e `identificacao`, com o vínculo disponível no banco atual.
 
-Sem `cid` exigido. Devolve o que a interface precisa para montar menus e o seletor de unidades:
+**Campos futuros não são garantidos pela TASK-80:** `usuario.tipo_cadastro`
+depende da modelagem de contas do núcleo; permissões por aba dependem da
+TASK-21; múltiplas unidades dependem da tabela morador–unidade. Os exemplos
+das demais seções deste contrato continuam propostas para esses fluxos.
 
-```json
-{
-  "usuario": {"id": "UUID", "nome": "Ana Martins", "email": "ana@exemplo.com", "tipo_cadastro": "morador"},
-  "condominio": {"id": "UUID", "nome": "Residencial Aurora", "perfil": "morador", "status": "ativo"},
-  "unidades": [
-    {
-      "id": "UUID", "identificacao": "Bloco A / 101",
-      "permissoes": {"unidades": true, "visitantes": true, "veiculos": true, "reservas": true,
-                     "encomendas": true, "ocorrencias": true, "usuarios": true}
-    }
-  ]
-}
-```
-
-`unidades` só existe para o Morador e vem **do banco a cada chamada** (R6). É a base do seletor de unidade de todas as telas e não depende da aba `unidades` (que protege os dados do proprietário, seção 7.2). O `perfil` e as permissões servem só para esconder menus; o servidor decide acesso em cada rota.
-
-### 2.4 Pontos a fechar na TASK-20
-
-Duração do token (15 minutos) sem refresh obriga o usuário a entrar de novo com frequência; limite de tentativas de login; e como nasce o primeiro ADM. Estão nas pendências.
+A dependência `get_usuario_autenticado` valida a identidade e a sessão. As
+rotas de negócio ainda precisam da autorização central para condomínio,
+vínculos, unidade, perfil e ação; não basta receber um token válido.
 
 ## 3. Contas
 
@@ -448,8 +446,8 @@ Referência para o front. A regra completa está na seção 8 da matriz. As abas
 | Permissões iniciais | Confirmar o padrão (primeiro morador com tudo, demais sem `usuarios`) | Paulo |
 | Onboarding por convite do ADM | A especificação (4.4) cita um modelo B2B com status `convidado`, mas o DER e a TASK-78 têm só 4 status. **Proposta:** só autocadastro com aprovação no MVP. | Paulo |
 | Primeiro ADM | O ADM não se autocadastra e o `administrador_plataforma` não tem rota. **Proposta:** script de linha de comando (`python -m app.cli criar-adm`), que também cria os dados de exemplo do ambiente de desenvolvimento. | Gabriel e Davi |
-| Refresh token | Token de 15 minutos sem refresh obriga login frequente. Decidir entre refresh token, validade maior ou renovação em `GET /auth/me`. | Gabriel |
-| Limite de tentativas de login | Não está nas stories nem na matriz; sugerido para a mesma estratégia da chave (5 erros, 15 minutos, 429) | Gabriel |
+| Refresh token | Implementado na TASK-80/PR #11: access de 15 minutos e refresh de 7 dias, sem rotação. Revisar rotação ou revogação individual somente se o escopo exigir. | Gabriel |
+| Limite de tentativas de login | Implementado na TASK-80/PR #11: padrão de 5 falhas, 15 minutos de bloqueio e 429; contador em memória de uma instância. | Gabriel |
 | Rotas sem `cid` e fluxo de cadastro | A dependência de autorização precisa das variantes de [convencoes.md](convencoes.md) seção 2 e de liberar `pendente` e `rejeitado` | Gabriel |
 | Leitura de documentos pelo ADM | A TASK-26 precisa liberar o ADM nos arquivos de `condominio_documentos` | Eduardo e Gabriel |
 | Foto e documento no cadastro | Upload exige autenticação; foto da conta entra por `PUT /contas/me`, documento comprobatório no cadastro do prédio | Eduardo e Paulo |

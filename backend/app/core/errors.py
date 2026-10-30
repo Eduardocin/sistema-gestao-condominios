@@ -8,12 +8,29 @@ from starlette.exceptions import HTTPException
 logger = logging.getLogger(__name__)
 
 
+class ApiError(HTTPException):
+    """Erro HTTP com um `code` estável.
+
+    O front decide o que fazer pelo `code` (ex.: `not_authenticated`) e só exibe a
+    `message`, que pode mudar de texto sem quebrar ninguém.
+    """
+
+    def __init__(
+        self, status_code: int, code: str, message: str, headers: dict[str, str] | None = None
+    ) -> None:
+        super().__init__(status_code=status_code, detail=message, headers=headers)
+        self.code = code
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"code": "http_error", "message": str(exc.detail)}},
+            # Erros lançados pelo FastAPI/Starlette não têm `code` próprio: caem em "http_error".
+            content={
+                "error": {"code": getattr(exc, "code", "http_error"), "message": str(exc.detail)}
+            },
             headers=exc.headers,
         )
 

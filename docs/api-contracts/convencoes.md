@@ -74,4 +74,8 @@ Fotos, anexos e documentos chegam como `*_arquivo_id`. O upload, a validação d
 
 ## 8. Do contrato ao OpenAPI
 
+Implementação interna da TASK-26 e políticas atuais: [storage.md](../storage.md).
+O serviço não expõe HTTP antes da autorização central e da persistência definitiva.
+Para suporte, PDF até 5 MiB é uma proposta adicional a revisar com Tude.
+
 O FastAPI gera o `/openapi.json` a partir dos schemas Pydantic. Este documento é o contrato "humano" que os schemas devem reproduzir campo a campo. Ao implementar uma rota, o PR atualiza o contrato se algo mudou e inclui testes de contrato (status, campos e códigos de erro) além dos testes negativos da seção 11 da matriz.

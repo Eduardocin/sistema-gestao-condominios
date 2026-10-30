@@ -15,7 +15,7 @@ Esta entrega cria a fundação: API com health check, modelos estruturais e migr
 - Banco: PostgreSQL 17 via Docker Compose, com volume persistente e health check.
 - Qualidade: Pytest, Ruff, Mypy, ESLint 10, TypeScript e GitHub Actions.
 
-Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services → repositories → SQLAlchemy → PostgreSQL. Docker executa apenas o banco; frontend e backend rodam localmente com hot reload.
+Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services → repositories → SQLAlchemy → PostgreSQL. Docker Compose executa o ambiente completo com MinIO para arquivos; o modo de API/frontend locais continua disponível.
 
 ```text
 ├── frontend/
@@ -55,7 +55,7 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 
 Consulte [arquitetura](docs/architecture.md), [ADRs](docs/decisions/) e [contrato HTTP](docs/api-contracts/health.md).
 
-Ao final do guia, três processos estarão em execução:
+No modo local descrito no guia detalhado, três processos estarão em execução:
 
 | Componente | Endereço | Onde roda |
 | --- | --- | --- |
@@ -65,7 +65,29 @@ Ao final do guia, três processos estarão em execução:
 
 ---
 
+## Execução com Docker — recomendada para o grupo
+
+Na primeira execução, copie `.env.example` para `.env` (`Copy-Item` no PowerShell
+ou `cp` no Linux/macOS). Se já possui `.env`, acrescente as variáveis de storage
+do exemplo sem sobrescrever seu arquivo. Com Docker e Compose v2.24+ iniciados:
+
+```sh
+docker compose up --build
+```
+
+O comando prepara banco, MinIO, bucket privado, migrations ativas, API e frontend.
+O primeiro build do MinIO compila uma revisão fixa do código oficial e pode
+demorar alguns minutos. Não é necessário instalar Python ou Node no host.
+
+Confira frontend em <http://127.0.0.1:5173>, health em
+<http://127.0.0.1:8000/api/v1/health> e console MinIO em <http://127.0.0.1:9001>.
+Credenciais locais estão no seu `.env`. Banco e arquivos têm volumes persistentes.
+Portas, limites, testes e integração estão em [Armazenamento](docs/storage.md).
+Rotas de arquivos ainda aguardam autorização central e a tabela da TASK-81.
+
 ## Guia de primeira execução
+
+O restante deste guia descreve a alternativa com API e frontend no host.
 
 Tempo estimado: 20 a 40 minutos, a maior parte em downloads. Os comandos estão separados por sistema:
 

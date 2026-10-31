@@ -276,6 +276,29 @@ def autenticar_access_token(
     return usuario, claims.condominio_id
 
 
+def verificar_acesso_ao_condominio(
+    session: Session, *, usuario: Usuario, condominio_id: uuid.UUID
+) -> tuple[VinculoCondominio, Acesso]:
+    """Passo 2 da matriz (seção 5): o vínculo ativo e o condomínio ativo, lidos do banco (R6).
+
+    Diferente do login, aqui a Administração de condomínio fora do ar também é negada: o fluxo
+    de cadastro (R7) vai ganhar uma dependência própria, em outra task. Todas as falhas são 403
+    com mensagem genérica, que não confirma nada sobre o condomínio.
+    """
+    linha = None
+    # O ADM da plataforma nunca atua em condomínio (R8), mesmo que um vínculo escape para ele.
+    if not usuario.administrador_plataforma:
+        linha = repository.obter_vinculo_ativo(session, usuario.id, condominio_id)
+    if linha is None:
+        raise ApiError(403, "forbidden", "Você não tem acesso a este condomínio.")
+
+    vinculo, condominio = linha
+    acesso = _montar_acesso(vinculo, condominio)
+    if acesso.status != "ativo":
+        raise ApiError(403, "forbidden", "Este condomínio não está disponível no momento.")
+    return vinculo, acesso
+
+
 @dataclass(frozen=True)
 class DadosMe:
     usuario: Usuario

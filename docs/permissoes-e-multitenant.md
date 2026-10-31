@@ -71,7 +71,7 @@ Fluxo de login:
 
 ## 5. Ordem de checagem
 
-Implementada uma única vez na dependência de autorização (US-1002). A primeira falha encerra a requisição.
+Implementada uma única vez na dependência de autorização (US-1002). A primeira falha encerra a requisição. Os passos 1 e 2 já existem em `get_current_context` (TASK-18, `app/modules/auth/dependencies.py`); os passos 3 a 6 entram com as TASK-19 e TASK-21 e com cada módulo. Guia de uso: [`architecture.md`](architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento).
 
 | # | Etapa | O que verifica | Falha |
 | --- | --- | --- | --- |

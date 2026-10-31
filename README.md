@@ -53,7 +53,7 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 └── compose.yaml
 ```
 
-Consulte [arquitetura](docs/architecture.md), [ADRs](docs/decisions/) e [contrato HTTP](docs/api-contracts/health.md).
+Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/) e [contrato HTTP](docs/api-contracts/health.md).
 
 No modo local descrito no guia detalhado, três processos estarão em execução:
 

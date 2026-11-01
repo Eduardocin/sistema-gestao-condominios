@@ -14,7 +14,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.db.base import Base
+
 
 class Condominio(Base):
     __tablename__ = "condominios"

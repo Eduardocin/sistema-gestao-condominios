@@ -76,8 +76,12 @@ TASK-21; múltiplas unidades dependem da tabela morador–unidade. Os exemplos
 das demais seções deste contrato continuam propostas para esses fluxos.
 
 A dependência `get_usuario_autenticado` valida a identidade e a sessão. As
-rotas de negócio ainda precisam da autorização central para condomínio,
-vínculos, unidade, perfil e ação; não basta receber um token válido.
+rotas de negócio de um condomínio usam `get_current_context` (TASK-18), que além
+da identidade confere no banco o vínculo ativo e o condomínio ativo (401 ou 403) e
+entrega o contexto usado para filtrar os dados (404 para o que é de outro
+condomínio); veja [Como criar um endpoint novo respeitando o isolamento](../architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento).
+Unidade, perfil e ação ainda dependem da autorização central (TASK-19);
+não basta receber um token válido.
 
 ## 3. Contas
 

@@ -22,7 +22,22 @@ class ApiError(HTTPException):
         self.code = code
 
 
+class RecursoNaoEncontrado(Exception):
+    """O recurso não existe OU é de outro condomínio (R4): para o cliente, é a mesma coisa.
+
+    Sem argumentos de propósito: não há onde colocar um ID ou um nome que vaze na resposta.
+    Os repositories levantam esta exceção; quem a traduz para HTTP é o handler abaixo.
+    """
+
+
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(RecursoNaoEncontrado)
+    async def recurso_nao_encontrado(request: Request, exc: RecursoNaoEncontrado) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"code": "not_found", "message": "Recurso não encontrado."}},
+        )
+
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
         return JSONResponse(

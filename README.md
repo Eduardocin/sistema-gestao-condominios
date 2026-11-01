@@ -53,7 +53,7 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 └── compose.yaml
 ```
 
-Consulte [arquitetura](docs/architecture.md), [ADRs](docs/decisions/) e [contrato HTTP](docs/api-contracts/health.md).
+Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/) e [contrato HTTP](docs/api-contracts/health.md).
 
 No modo local descrito no guia detalhado, três processos estarão em execução:
 
@@ -723,7 +723,7 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 ## Dependências e colaboração
 
 - `frontend/package-lock.json`: instalar com `npm ci`; atualizar intencionalmente com `npm install`.
-- `backend/requirements-dev.lock`: versões exatas usadas como constraints; instalar com `-c requirements-dev.lock`. Atualizar em ambiente virtual limpo e validar Python 3.12/3.13 no CI. Não contém paths locais ou credenciais.
+- `backend/requirements-dev.lock`: versões exatas usadas como constraints; instalar com `-c requirements-dev.lock`. Atualizar em ambiente virtual limpo e validar Python 3.13 no CI. Não contém paths locais ou credenciais.
 - PostgreSQL fixa a versão principal 17 e recebe patches da tag oficial; upgrades de versão principal precisam de planejamento do volume.
 - Dividir trabalho por módulo e coordenar mudanças de contratos e migrações. Resolver explicitamente múltiplos heads Alembic.
 - Não versionar `.env`, dados, tokens ou credenciais reais.
@@ -736,7 +736,7 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 - PRs pequenos, preenchendo o template (o que mudou, story ligada, como testar). Antes de pedir revisão, atualize a branch com a `main` e rode os comandos da [etapa 7](#etapa-7--rodar-as-verificações-de-qualidade).
 - Apague a branch depois do merge.
 
-O workflow `.github/workflows/ci.yaml` valida backend (Python 3.12 e 3.13, com PostgreSQL limpo) e frontend em pushes e PRs.
+O workflow `.github/workflows/ci.yaml` valida backend (Python 3.13, com PostgreSQL limpo) e frontend em pushes e PRs.
 
 ## Próxima sprint
 

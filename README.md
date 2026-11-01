@@ -722,6 +722,8 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 
 ## Dependências e colaboração
 
+- [Plano de testes e rastreabilidade das stories](docs/plano-de-testes/README.md): casos Must, execução das suítes, roteiros manuais e registro de resultados (TASK-4).
+
 - `frontend/package-lock.json`: instalar com `npm ci`; atualizar intencionalmente com `npm install`.
 - `backend/requirements-dev.lock`: versões exatas usadas como constraints; instalar com `-c requirements-dev.lock`. Atualizar em ambiente virtual limpo e validar Python 3.13 no CI. Não contém paths locais ou credenciais.
 - PostgreSQL fixa a versão principal 17 e recebe patches da tag oficial; upgrades de versão principal precisam de planejamento do volume.

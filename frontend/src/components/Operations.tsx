@@ -8,21 +8,22 @@ import { cx } from '../utils/cx'
 import styles from './Operations.module.css'
 
 interface NavigationItem { key: string; label: string; to: string; symbol: string }
-export function OperationsLayout({ children, navigation, activeKey, tools }: { children: ReactNode; navigation: NavigationItem[]; activeKey: string; tools?: ReactNode }) {
+interface WorkspaceContext { name: string; profile: string; tools?: ReactNode }
+export function OperationsLayout({ children, navigation, activeKey, tools, workspace }: { children: ReactNode; navigation: NavigationItem[]; activeKey: string; tools?: ReactNode; workspace?: WorkspaceContext }) {
   return (
     <div className={styles.shell}>
       <a href="#conteudo" className={styles.skipLink}>Pular para o conteúdo</a>
       <aside className={styles.sidebar}>
         <SiteBrand />
-        <div className={styles.workspace}><Text size="xs" tone="secondary">CONDOMÍNIO DE EXEMPLO</Text><Text><strong>Jardim das Palmeiras</strong></Text><Badge variant="primary">Portaria</Badge></div>
-        <nav className={styles.navigation} aria-label="Navegação do protótipo">
+        <div className={styles.workspace}><Text size="xs" tone="secondary">{workspace ? 'ÁREA DE ACESSO' : 'CONDOMÍNIO DE EXEMPLO'}</Text><Text><strong>{workspace?.name ?? 'Jardim das Palmeiras'}</strong></Text><Badge variant="primary">{workspace?.profile ?? 'Portaria'}</Badge></div>
+        <nav className={styles.navigation} aria-label={workspace ? 'Navegação da sua área' : 'Navegação do protótipo'}>
           {navigation.map((item) => <Link key={item.key} to={item.to} className={cx(styles.navItem, activeKey === item.key && styles.active)} aria-current={activeKey === item.key ? 'page' : undefined}><span className={styles.navSymbol} aria-hidden="true">{item.symbol}</span>{item.label}</Link>)}
         </nav>
         <div className={styles.sidebarFooter}><Text size="sm" tone="secondary">Tudo em seu lugar.<br />Uma rotina mais tranquila.</Text><Link to="/" className={styles.homeLink}>← Página inicial</Link></div>
       </aside>
       <div className={styles.workspaceMain}>
-        <header className={styles.topbar}><Text size="sm" tone="secondary">Gestão do condomínio <span aria-hidden="true">/</span> <strong>Portaria</strong></Text><Badge variant="neutral">Prévia navegável</Badge></header>
-        <div className={styles.demoBar}><Text size="sm"><strong>Ambiente de demonstração.</strong> Dados fictícios; alterações e fotos ficam apenas nesta aba e são perdidas ao recarregar.</Text>{tools}</div>
+        <header className={styles.topbar}><Text size="sm" tone="secondary">{workspace?.name ?? 'Gestão do condomínio'} <span aria-hidden="true">/</span> <strong>{workspace?.profile ?? 'Portaria'}</strong></Text>{workspace ? workspace.tools : <Badge variant="neutral">Prévia navegável</Badge>}</header>
+        {!workspace && <div className={styles.demoBar}><Text size="sm"><strong>Ambiente de demonstração.</strong> Dados fictícios; alterações e fotos ficam apenas nesta aba e são perdidas ao recarregar.</Text>{tools}</div>}
         <main id="conteudo" tabIndex={-1} className={styles.main}>{children}</main>
       </div>
     </div>

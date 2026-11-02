@@ -43,6 +43,22 @@ Claims: `sub` (usuário), `cid` (condomínio, ausente antes de escolher um), `sv
 | E-mail inexistente, senha errada, conta inativa ou sem senha (mesma resposta e mesma mensagem: "E-mail ou senha incorretos.") | 401 | `not_authenticated` |
 | Corpo inválido | 422 | `validation_error` |
 | 5 falhas seguidas no mesmo e-mail (`LOGIN_MAX_FAILURES`) | 429 | `too_many_attempts`, com `Retry-After` em segundos |
+| Conta com perfil local de Funcionário/Administração sem `nome_responsavel` | 422 | `validation_error` |
+
+Para perfis de Funcionário e Administração, que usam credenciais compartilhadas, o cliente deve
+enviar `nome_responsavel` no corpo do login. Exemplo:
+
+```json
+{
+  "identificador": "portaria@exemplo.com",
+  "senha": "Senha#Forte123",
+  "nome_responsavel": "João da Portaria"
+}
+```
+
+O nome é autodeclarado (não há PIN individual no MVP) e fica registrado no evento de auditoria.
+As próximas ações críticas desses perfis também devem informar novamente o responsável na chamada
+de `audit.log(...)`.
 
 ## `POST /api/v1/auth/selecionar-condominio` (Bearer)
 
@@ -70,4 +86,5 @@ Claims: `sub` (usuário), `cid` (condomínio, ausente antes de escolher um), `sv
 - O contador de tentativas fica na memória do processo (vale para um único servidor).
 - O status do condomínio é provisório: `ativo` ou `desativado`, a partir de `condominios.ativo`.
 - Não há rotação nem revogação individual de refresh token; para derrubar sessões, aumentar `sessao_versao`.
-- Falha de login ainda só vai para o log; vira evento de auditoria quando a US-1004 existir.
+- Login e falha de credenciais geram eventos de auditoria; falhas sem usuário conhecido registram
+  o identificador informado como ator.

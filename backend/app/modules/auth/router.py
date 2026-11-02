@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -59,9 +59,16 @@ def login(
     session: SessionDep,
     settings: SettingsDep,
     limiter: Annotated[LoginRateLimiter, Depends(get_login_rate_limiter)],
+    request: Request,
 ) -> LoginResponse:
     sessao = service.login(
-        session, email=dados.identificador, senha=dados.senha, limiter=limiter, settings=settings
+        session,
+        email=dados.identificador,
+        senha=dados.senha,
+        limiter=limiter,
+        settings=settings,
+        ip=request.client.host if request.client else None,
+        nome_responsavel=dados.nome_responsavel,
     )
     return _resposta_de_sessao(sessao)
 

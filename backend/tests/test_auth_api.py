@@ -5,11 +5,12 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
 from app.main import create_app
+from app.modules.auditoria.models import EventoAuditoria, TipoEventoAuditoria
 from app.modules.auth.rate_limit import get_login_rate_limiter
 from app.modules.auth.security import hash_senha
 from app.modules.condominios.models import Condominio, VinculoCondominio
@@ -82,8 +83,15 @@ def vincular(session, usuario, condominio, perfil="morador", unidade=None, ativo
     return vinculo
 
 
-def entrar(client, usuario, senha=SENHA):
-    return client.post("/api/v1/auth/login", json={"identificador": usuario.email, "senha": senha})
+def entrar(client, usuario, senha=SENHA, nome_responsavel="Responsável de teste"):
+    return client.post(
+        "/api/v1/auth/login",
+        json={
+            "identificador": usuario.email,
+            "senha": senha,
+            "nome_responsavel": nome_responsavel,
+        },
+    )
 
 
 def bearer(token: str) -> dict[str, str]:
@@ -108,6 +116,116 @@ def test_login_com_um_condominio_ja_devolve_token_com_cid(client, session):
     assert corpo["condominio"]["perfil"] == "morador"
     assert corpo["usuario"]["email"] == usuario.email
     assert "senha_hash" not in resposta.text
+
+
+def test_login_grava_exatamente_um_evento_de_auditoria(client, session):
+    usuario = criar_usuario(session)
+
+    resposta = entrar(client, usuario)
+
+    eventos = list(
+        session.scalars(select(EventoAuditoria).where(EventoAuditoria.usuario_id == usuario.id))
+    )
+    assert resposta.status_code == 200
+    assert len(eventos) == 1
+    assert eventos[0].tipo_evento == TipoEventoAuditoria.LOGIN.value
+    assert eventos[0].ator == usuario.nome
+    assert eventos[0].ip is not None
+
+
+def test_login_em_conta_compartilhada_grava_responsavel(client, session):
+    usuario, condominio = criar_usuario(session), criar_condominio(session)
+    vincular(session, usuario, condominio, perfil="funcionario")
+
+    resposta = entrar(client, usuario, nome_responsavel="João da Portaria")
+
+    evento = session.scalar(select(EventoAuditoria).where(EventoAuditoria.usuario_id == usuario.id))
+    assert resposta.status_code == 200
+    assert evento is not None
+    assert evento.perfil == "funcionario"
+    assert evento.conta_compartilhada is True
+    assert evento.nome_responsavel == "João da Portaria"
+
+
+def test_login_em_conta_compartilhada_exige_responsavel(client, session):
+    usuario, condominio = criar_usuario(session), criar_condominio(session)
+    vincular(session, usuario, condominio, perfil="administracao")
+
+    resposta = entrar(client, usuario, nome_responsavel=None)
+
+    assert resposta.status_code == 422
+    assert resposta.json()["error"]["code"] == "validation_error"
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(EventoAuditoria)
+            .where(EventoAuditoria.usuario_id == usuario.id)
+        )
+        == 0
+    )
+
+
+def test_falha_de_login_grava_exatamente_um_evento_de_auditoria(client, session):
+    email = f"desconhecido-{uuid.uuid4().hex}@exemplo.test"
+
+    resposta = client.post(
+        "/api/v1/auth/login", json={"identificador": email, "senha": "senha-incorreta"}
+    )
+
+    total = session.scalar(
+        select(func.count())
+        .select_from(EventoAuditoria)
+        .where(
+            EventoAuditoria.tipo_evento == TipoEventoAuditoria.FALHA_LOGIN.value,
+            EventoAuditoria.ator == email,
+        )
+    )
+    evento = session.scalar(
+        select(EventoAuditoria).where(
+            EventoAuditoria.tipo_evento == TipoEventoAuditoria.FALHA_LOGIN.value,
+            EventoAuditoria.ator == email,
+        )
+    )
+    assert resposta.status_code == 401
+    assert total == 1
+    assert evento is not None
+    assert evento.ator == email
+    assert evento.ip is not None
+
+
+@pytest.mark.parametrize(
+    "motivo", ["senha_errada", "email_inexistente", "conta_inativa", "sem_senha"]
+)
+def test_cada_causa_de_falha_de_login_grava_um_evento(client, session, motivo):
+    usuario = criar_usuario(
+        session,
+        ativo=motivo != "conta_inativa",
+        senha_hash=None if motivo == "sem_senha" else HASH,
+    )
+    email = (
+        f"ausente-{uuid.uuid4().hex}@exemplo.test"
+        if motivo == "email_inexistente"
+        else usuario.email
+    )
+    senha = "senha-errada-123" if motivo == "senha_errada" else SENHA
+
+    resposta = client.post("/api/v1/auth/login", json={"identificador": email, "senha": senha})
+
+    filtro = (
+        EventoAuditoria.ator == email
+        if motivo == "email_inexistente"
+        else EventoAuditoria.usuario_id == usuario.id
+    )
+    eventos = session.scalars(
+        select(EventoAuditoria).where(
+            EventoAuditoria.tipo_evento == TipoEventoAuditoria.FALHA_LOGIN.value,
+            filtro,
+        )
+    ).all()
+
+    assert resposta.status_code == 401
+    assert len(eventos) == 1
+    assert eventos[0].ip is not None
 
 
 def test_login_aceita_email_com_maiusculas_e_espacos(client, session):
@@ -180,6 +298,21 @@ def test_login_bloqueia_apos_varias_falhas(client, session):
     assert resposta.status_code == 429
     assert resposta.json()["error"]["code"] == "too_many_attempts"
     assert int(resposta.headers["retry-after"]) > 0
+    eventos = session.scalars(
+        select(EventoAuditoria).where(
+            EventoAuditoria.tipo_evento == TipoEventoAuditoria.FALHA_LOGIN.value,
+            EventoAuditoria.usuario_id == usuario.id,
+        )
+    ).all()
+    assert len(eventos) == 5
+    evento_bloqueio = session.scalar(
+        select(EventoAuditoria).where(
+            EventoAuditoria.tipo_evento == TipoEventoAuditoria.FALHA_LOGIN.value,
+            EventoAuditoria.ator == usuario.email,
+            EventoAuditoria.usuario_id.is_(None),
+        )
+    )
+    assert evento_bloqueio is not None
 
 
 def test_login_bem_sucedido_zera_o_contador(client, session):

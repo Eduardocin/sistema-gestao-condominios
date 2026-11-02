@@ -13,12 +13,18 @@ class LoginRequest(BaseModel):
     identificador: str = Field(min_length=3, max_length=254)
     # Limite superior evita que alguém mande um texto gigante só para gastar CPU no argon2.
     senha: str = Field(min_length=1, max_length=128)
+    nome_responsavel: str | None = Field(default=None, max_length=150)
 
     @field_validator("identificador")
     @classmethod
     def _normalizar(cls, valor: str) -> str:
         # E-mail é guardado em minúsculas (ADR 0002), então normalizamos antes de comparar.
         return valor.strip().lower()
+
+    @field_validator("nome_responsavel")
+    @classmethod
+    def _normalizar_nome_responsavel(cls, valor: str | None) -> str | None:
+        return valor.strip() or None if valor is not None else None
 
 
 class RefreshRequest(BaseModel):

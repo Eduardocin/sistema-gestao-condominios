@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import ApiError
+from app.modules.auditoria import service as audit
+from app.modules.auditoria.models import PERFIS_CONTAS_COMPARTILHADAS, TipoEventoAuditoria
 from app.modules.auth import repository
 from app.modules.auth.rate_limit import LoginRateLimiter
 from app.modules.auth.security import (
@@ -146,12 +148,22 @@ def login(
     senha: str,
     limiter: LoginRateLimiter,
     settings: Settings,
+    ip: str | None = None,
+    nome_responsavel: str | None = None,
 ) -> SessaoEmitida:
     """Valida e-mail e senha e devolve a sessão (tokens + condomínios disponíveis)."""
     # 1) Já está bloqueado? Respondemos antes de gastar CPU com argon2.
     segundos = limiter.bloqueio_restante(email)
     if segundos > 0:
         logger.warning("seguranca.login_bloqueado")
+        audit.log(
+            session,
+            tipo_evento=TipoEventoAuditoria.FALHA_LOGIN,
+            recurso="sessao",
+            ator=email,
+            ip=ip,
+        )
+        session.commit()
         raise ApiError(
             429,
             "too_many_attempts",
@@ -168,12 +180,20 @@ def login(
     else:
         senha_ok = verificar_senha(senha, usuario.senha_hash)
 
-    if usuario is None or not senha_ok or not usuario.ativo:
+    if usuario is None or not senha_ok or not usuario.ativo or usuario.status_conta != "ativo":
         # A falha é contada por e-mail digitado, exista a conta ou não (senão o 429
         # denunciaria quais e-mails têm conta).
         limiter.registrar_falha(email)
-        # Quando a auditoria (US-1004) existir, este log vira o evento `seguranca.login_falho`.
         logger.warning("seguranca.login_falho")
+        audit.log(
+            session,
+            tipo_evento=TipoEventoAuditoria.FALHA_LOGIN,
+            recurso="sessao",
+            usuario_id=usuario.id if usuario else None,
+            ator=usuario.nome if usuario else email,
+            ip=ip,
+        )
+        session.commit()
         raise _credencial_invalida()
 
     limiter.limpar(email)
@@ -186,8 +206,29 @@ def login(
 
     # 4) Descobre em qual condomínio o token já nasce.
     acessos = _acessos_do_usuario(session, usuario)
+    conta_compartilhada = any(acesso.perfil in PERFIS_CONTAS_COMPARTILHADAS for acesso in acessos)
+    if conta_compartilhada and not (nome_responsavel and nome_responsavel.strip()):
+        raise ApiError(
+            422,
+            "validation_error",
+            "Informe o nome da pessoa responsável para entrar com uma conta compartilhada.",
+        )
     selecionado = acessos[0] if len(acessos) == 1 and acessos[0].liberado else None
-    return _emitir_sessao(usuario, acessos, selecionado, settings)
+    sessao = _emitir_sessao(usuario, acessos, selecionado, settings)
+    audit.log(
+        session,
+        tipo_evento=TipoEventoAuditoria.LOGIN,
+        recurso="sessao",
+        usuario_id=usuario.id,
+        ator=usuario.nome,
+        perfil=selecionado.perfil if selecionado else None,
+        condominio_id=selecionado.condominio_id if selecionado else None,
+        ip=ip,
+        conta_compartilhada=conta_compartilhada,
+        nome_responsavel=nome_responsavel,
+    )
+    session.commit()
+    return sessao
 
 
 def selecionar_condominio(
@@ -230,7 +271,12 @@ def renovar_access_token(
         raise _nao_autenticado() from erro
 
     usuario = repository.obter_usuario_por_id(session, claims.usuario_id)
-    if usuario is None or not usuario.ativo or usuario.sessao_versao != claims.sessao_versao:
+    if (
+        usuario is None
+        or not usuario.ativo
+        or usuario.status_conta != "ativo"
+        or usuario.sessao_versao != claims.sessao_versao
+    ):
         raise _nao_autenticado()
 
     if usuario.administrador_plataforma:
@@ -271,7 +317,12 @@ def autenticar_access_token(
 
     usuario = repository.obter_usuario_por_id(session, claims.usuario_id)
     # `sv` diferente = sessão derrubada (troca de senha, por exemplo).
-    if usuario is None or not usuario.ativo or usuario.sessao_versao != claims.sessao_versao:
+    if (
+        usuario is None
+        or not usuario.ativo
+        or usuario.status_conta != "ativo"
+        or usuario.sessao_versao != claims.sessao_versao
+    ):
         raise _nao_autenticado()
     return usuario, claims.condominio_id
 

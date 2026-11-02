@@ -57,7 +57,8 @@ erDiagram
         varchar nome
         varchar email UK "minúsculas"
         varchar telefone UK "só dígitos, opcional"
-        varchar documento UK "CPF ou CNPJ, opcional"
+        varchar cpf UK "11 dígitos, obrigatório em novos cadastros"
+        varchar status_conta "pendente, ativo, rejeitado, suspenso"
         varchar senha_hash "argon2 ou bcrypt"
         int sessao_versao "claim sv do token"
         uuid foto_arquivo_id FK
@@ -152,6 +153,8 @@ erDiagram
     usuarios ||--o{ vinculos_condominio : "tem"
     usuarios ||--o{ moradores_unidade : "morador em"
     unidades ||--o{ moradores_unidade : "tem"
+    usuarios ||--o{ solicitacoes_vinculo_unidade : "solicita"
+    unidades ||--o{ solicitacoes_vinculo_unidade : "recebe"
     moradores_unidade ||--|{ permissoes_aba : "7 abas"
     unidades ||--o{ convites_morador : "convida"
     usuarios ||--o{ tentativas_chave_acesso : "tenta"
@@ -176,6 +179,18 @@ erDiagram
         timestamptz vinculado_em
         timestamptz desvinculado_em
         uuid desvinculado_por_usuario_id FK
+    }
+    solicitacoes_vinculo_unidade {
+        uuid id PK
+        uuid usuario_id FK
+        uuid condominio_id FK
+        uuid unidade_id FK
+        varchar status "pendente, aprovado, rejeitado"
+        bool responsavel_principal
+        varchar motivo_rejeicao
+        timestamptz solicitado_em
+        timestamptz decidido_em
+        uuid decidido_por_usuario_id FK
     }
     permissoes_aba {
         uuid morador_unidade_id PK
@@ -538,7 +553,9 @@ A 0001 já foi aplicada por todo mundo, então **não será editada**: as mudan�
 | Tabela | Mudança | Por quê |
 | --- | --- | --- |
 | `usuarios` | + `telefone`, `documento`, `senha_hash`, `sessao_versao`, `foto_arquivo_id`, `email_confirmado_em`, `consentimento_dados_em` | Login (US-101), conta da Administração com CPF/CNPJ (US-201), derrubar sessões (US-210), LGPD (US-1007) |
-| `condominios` | `ativo bool` vira `status`; + `cnpj`, endereço, `logo_arquivo_id`, `motivo_rejeicao`, `criado_por_usuario_id`, `enviado_em`, `aprovado_em` | Fluxo de aprovação (US-202 a US-208) |
+| `condominios` | + `status`, `motivo_rejeicao`, `solicitante_id`, `token_status_solicitacao_hash`; `ativo` permanece por compatibilidade | Wizard e fila de aprovação (TASK-28/29) |
+| `chaves_acesso_condominio` | Hash único, condomínio, validade, consumo e revogação | Liberação de cadastro por chave (TASK-29) |
+| `solicitacoes_vinculo_unidade` | Morador, condomínio, unidade, status da decisão e responsável principal; chave parcial impede pedidos abertos duplicados e mais de um principal aprovado por unidade | Aprovação do vínculo Morador–Unidade (TASK-30) |
 | `unidades` | + `andar_id` (FK composta), `ativo`; o `UNIQUE (condominio_id, identificacao)` vira `UNIQUE (andar_id, identificacao)` | Estrutura bloco/andar (US-202) e o "101" que se repete em blocos diferentes |
 | `vinculos_condominio` | a coluna `unidade_id` deixa de ser usada e sai numa migração seguinte | Um morador pode ter várias unidades (US-301), cada uma com suas permissões (US-304). A unidade passa para `moradores_unidade` |
 
@@ -552,7 +569,7 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 4. **Auditoria com `bigint` em vez de `uuid`**, para a ordem de inserção ser natural e a tabela crescer sem custo.
 5. **`proprietarios_unidade` separado de `unidades`**, porque tem muitos campos, foto e dados pessoais que só a Administração vê.
 6. **Aviso pode ter `unidade_id`**: é como a Administração avisa uma unidade de reserva cancelada (US-605, US-602) sem criar uma tabela de notificações.
-7. **Chave de acesso guardada em texto**, porque a Administração precisa consultá-la (US-207). A chave nunca é devolvida ao morador.
+7. **Chaves de acesso guardadas somente como hash**, mostradas em texto claro uma única vez na emissão. A regeneração revoga a anterior; cada chave expira e só pode ser consumida uma vez.
 
 7. **Encomendas com confirmação posterior pelo recebedor.** Mantidos os três estados descritos na seção 4, com referências para destinatário/recebedor e eventos separados. A matriz de permissões deve permitir somente ao recebedor autenticado confirmar.
 

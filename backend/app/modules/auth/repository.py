@@ -55,3 +55,17 @@ def obter_unidade(
     return session.scalar(
         select(Unidade).where(Unidade.id == unidade_id, Unidade.condominio_id == condominio_id)
     )
+
+
+def listar_unidades_do_vinculo(
+    session: Session, *, vinculo_id: uuid.UUID, usuario_id: uuid.UUID, condominio_id: uuid.UUID
+) -> set[uuid.UUID]:
+    unidade_id = session.scalar(
+        select(VinculoCondominio.unidade_id).where(
+            VinculoCondominio.id == vinculo_id,
+            VinculoCondominio.usuario_id == usuario_id,
+            VinculoCondominio.condominio_id == condominio_id,
+            VinculoCondominio.ativo.is_(True),
+        )
+    )
+    return {unidade_id} if unidade_id is not None else set()

@@ -1,6 +1,6 @@
 # Plano de testes e rastreabilidade — TASK-4
 
-Status: **proposta pronta para revisão dos leads e de Davi**. Fonte: [TASK-4](https://app.notion.com/3f866650b896811ea0c1e75ca77ed874), consultada em 01/11/2026. Este documento define os testes; não declara que todas as stories foram implementadas ou aprovadas.
+Status: **plano de testes entregue; TASK-4 concluída no Notion por decisão expressa do responsável pelo projeto em 01/11/2026**. Fonte: [TASK-4](https://app.notion.com/3f866650b896811ea0c1e75ca77ed874). Este documento define os testes; não declara que todas as stories foram implementadas, executadas ou aprovadas.
 
 ## Cobertura
 
@@ -138,4 +138,4 @@ Copiar a tabela abaixo para a issue/PR da implementação ou anexar ao card no N
 | Evidência | Teste/função, log, captura ou link do CI sem credenciais/URLs assinadas |
 | Pendência | Dependência ou decisão necessária, com referência ao card/issue |
 
-Concluir a TASK-4 requer revisão deste plano e alinhamento da divisão com Davi/leads. Aprovar o plano não significa concluir as stories. Teste que falhou ou não foi executado não recebe marca de aprovado.
+A TASK-4 foi encerrada por decisão do responsável pelo projeto. A divisão da execução pode ser alinhada com Davi/leads a cada implementação. A entrega do plano não significa concluir as stories. Teste que falhou ou não foi executado não recebe marca de aprovado.

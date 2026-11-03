@@ -1,7 +1,7 @@
 # Armazenamento — TASK-26
 
-Serviço interno implementado. Persistência definitiva e HTTP aguardam a TASK-81
-(Davi) e a autorização central (Gabriel). Não existem endpoints de arquivos nesta
+Serviço interno implementado. A tabela `arquivos` existe desde a migração `20261103_0003`
+(TASK-81); as rotas HTTP aguardam a autorização central (Gabriel). Não existem endpoints de arquivos nesta
 entrega; contexto e política abaixo são contratos internos, não autenticação.
 
 ## Ambiente local — TASK-2
@@ -14,8 +14,7 @@ docker compose up --build
 
 Se já existe `.env`, acrescente as variáveis de storage do exemplo sem substituir
 seu arquivo. É necessário Docker e Compose v2.24+. O comando prepara PostgreSQL,
-MinIO, bucket privado, migrations **ativas**, API e frontend. O diretório
-`backend/alembic/drafts/` não faz parte de `alembic upgrade head`.
+MinIO, bucket privado, migrations, API e frontend.
 
 | Serviço | Endereço padrão |
 | --- | --- |
@@ -59,7 +58,7 @@ storage = StorageService(
 )
 ctx = StorageContext(contexto_autorizado.condominio_id, contexto_autorizado.usuario_id)
 arquivo = storage.upload(ctx, "encomendas", "foto.png", "image/png", upload.file)
-# Persistir os metadados na transação do módulo após a TASK-81.
+# Persistir os metadados (app.modules.storage.models.Arquivo) na transação do módulo.
 url = storage.download_url(ctx, arquivo)
 storage.remove(ctx, arquivo)
 ```
@@ -112,9 +111,10 @@ continua sendo uma credencial até expirar, mesmo se a permissão for revogada.
 
 ## Banco e testes
 
-`backend/alembic/drafts/arquivos_storage.py` é uma proposta para Davi integrar
-sem duplicar a criação da tabela: FK para usuários/condomínios, tamanho positivo,
-chave única e `UNIQUE (id, condominio_id)` para a portaria. Não há ORM ativo.
+A tabela `arquivos` entrou na migração `20261103_0003`, a partir do rascunho desta task:
+FK para usuários/condomínios, tamanho positivo, chave única e `UNIQUE (id, condominio_id)`,
+alvo das FKs compostas que impedem usar um arquivo de outro condomínio. O model é
+`app.modules.storage.models.Arquivo`.
 
 Rodar as checagens usuais do backend: Ruff lint/format, Mypy e pytest. Integração
 exige `TEST_DATABASE_URL` em PostgreSQL dedicado e `TEST_STORAGE_ENDPOINT`,

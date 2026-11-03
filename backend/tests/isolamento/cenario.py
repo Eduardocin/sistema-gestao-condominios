@@ -52,7 +52,7 @@ def criar_usuario(
 
 
 def criar_condominio(session: Session, nome: str = "Residencial Teste", ativo: bool = True):
-    condominio = Condominio(nome=nome, ativo=ativo)
+    condominio = Condominio(nome=nome, status="ativo" if ativo else "desativado")
     session.add(condominio)
     session.flush()
     return condominio

@@ -1,6 +1,6 @@
 # Modelo de dados (DER lógico)
 
-Status: **v1 para revisão no portão dos leads** (TASK-3, US-1006). Base para a TASK-81 (migrations, constraints e índices).
+Status: **implementado** nas migrações `20261103_0003` a `20261103_0005` (TASK-81). As escolhas feitas na implementação estão na [seção 9](#9-implementação-task-81).
 
 Fontes: as 52 user stories do Notion, a [matriz de permissões](permissoes-e-multitenant.md) (em especial a seção 12), o [ADR 0002](decisions/0002-isolamento-condominios.md) e a migração `20261015_0001`. Onde este documento muda o que a 0001 criou, isso está na [seção 5](#5-o-que-muda-em-relação-à-migração-0001).
 
@@ -28,10 +28,10 @@ Os diagramas estão em Mermaid: o GitHub os desenha direto nesta página, e o te
 | Pessoas sem login | `funcionarios`, `responsaveis_administracao` | Tude |
 | Portaria | `encomendas`, `visitantes`, `registros_visita`, `veiculos` | Eduardo / Vitor |
 | Convivência | `areas_comuns`, `bloqueios_area`, `reservas`, `ocorrencias`, `ocorrencia_interacoes`, `ocorrencia_anexos`, `avisos` | Vitor / Tude |
-| Plataforma | `comunicados`, `chamados`, `chamado_mensagens`, `chamado_anexos`, `registros_auditoria`, `envios_email` | Tude |
+| Plataforma | `comunicados`, `comunicado_destinatarios`, `chamados`, `chamado_mensagens`, `chamado_anexos`, `registros_auditoria`, `envios_email` | Tude |
 | Transversal | `arquivos` | Eduardo |
 
-São 35 tabelas: as 4 da 0001 continuam (com mudanças, seção 5) e 31 são novas.
+São 36 tabelas: as 4 da 0001 continuam (com mudanças, seção 5) e 32 são novas.
 
 ## 3. Diagramas
 
@@ -58,6 +58,7 @@ erDiagram
         varchar email UK "minúsculas"
         varchar telefone UK "só dígitos, opcional"
         varchar documento UK "CPF ou CNPJ, opcional"
+        varchar tipo_cadastro "morador, administracao; nulo nas contas compartilhadas"
         varchar senha_hash "argon2 ou bcrypt"
         int sessao_versao "claim sv do token"
         uuid foto_arquivo_id FK
@@ -120,7 +121,7 @@ erDiagram
     unidades {
         uuid id PK
         uuid condominio_id FK
-        uuid andar_id FK
+        uuid andar_id FK "nulo só nas unidades anteriores à 0003"
         varchar identificacao "UK por andar"
         bool ativo
     }
@@ -315,6 +316,8 @@ erDiagram
         date data_fim
         varchar motivo
         uuid responsavel_id FK
+        timestamptz removido_em
+        uuid removido_por_usuario_id FK
     }
     reservas {
         uuid id PK
@@ -379,6 +382,7 @@ erDiagram
     chamados ||--o{ chamado_mensagens : "histórico"
     chamados ||--o{ chamado_anexos : "anexa"
     usuarios ||--o{ comunicados : "envia"
+    comunicados ||--|{ comunicado_destinatarios : "para"
     condominios |o--o{ registros_auditoria : "escopo"
     condominios |o--o{ arquivos : "escopo"
 
@@ -388,6 +392,10 @@ erDiagram
         text texto
         uuid enviado_por_usuario_id FK "ADM"
         timestamptz criado_em
+    }
+    comunicado_destinatarios {
+        uuid comunicado_id PK
+        uuid condominio_id PK "ativos no momento do envio"
     }
     chamados {
         uuid id PK
@@ -432,6 +440,8 @@ erDiagram
         uuid condominio_id FK "opcional"
         varchar destinatario
         varchar evento "recuperacao_senha, condominio_aprovado, encomenda_registrada, reserva_cancelada"
+        varchar recurso_tipo "o que foi enviado"
+        uuid recurso_id
         varchar status "pendente, enviado, falhou"
         smallint tentativas
         text ultimo_erro
@@ -558,10 +568,10 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 
 ## 7. Pontos em aberto
 
-- **Destinatários dos comunicados:** a matriz restringe a leitura da Administração aos comunicados enviados ao seu condomínio, mas a entidade `comunicados` ainda não representa esses destinos. Definir a associação aos destinatários antes das migrations e APIs; não interpretar a ausência dessa relação como acesso global.
+- ~~**Destinatários dos comunicados**~~: resolvido na TASK-81 com `comunicado_destinatarios` (seção 9).
 - **Solicitação e aprovação de vínculo:** `moradores_unidade` apresenta somente `ativo`/`desvinculado`, enquanto a matriz prevê solicitar, aprovar e rejeitar. Definir estados adicionais ou entidade de solicitação antes da implementação, sem conceder acesso a solicitações pendentes.
 
-- **Conflito entre a TASK-81 e as stories:** a task de migrations fala em "constraint única de reserva: (área, data) por condomínio", o que deixaria uma única reserva por área por dia no prédio inteiro. A US-603 e a US-1006 dizem **uma por unidade, área e dia**, com grade de horários. Este DER segue as stories (regras 1 e 2). Ajustar o texto da TASK-81.
+- ~~**Conflito entre a TASK-81 e as stories**~~ (resolvido: as migrações seguem as stories): a task de migrations fala em "constraint única de reserva: (área, data) por condomínio", o que deixaria uma única reserva por área por dia no prédio inteiro. A US-603 e a US-1006 dizem **uma por unidade, área e dia**, com grade de horários. Este DER segue as stories (regras 1 e 2). Ajustar o texto da TASK-81.
 - **Login da conta compartilhada de Funcionários** (US-210 fala em "usuário e senha"): é um e-mail/telefone como as outras contas, ou um nome de usuário próprio? Este DER assume e-mail.
 - **Permissões iniciais do morador:** a regra proposta na matriz (primeiro morador com tudo, os seguintes sem a aba Usuários) ainda depende do Paulo.
 - **Documento comprobatório da conta da Administração** (US-201, opcional): este DER guarda os documentos por condomínio, em `condominio_documentos`, porque é isso que o ADM analisa na fila (US-203). Confirmar com o Paulo se o documento da US-201 é o mesmo.
@@ -577,3 +587,35 @@ Pronto quando cada dono confirmar as suas tabelas e os leads aprovarem no portã
 - [ ] Vitor: áreas, reservas e ocorrências
 - [ ] Tude: funcionários, responsáveis, avisos, chamados, comunicados, auditoria e e-mail
 - [ ] Eduardo: encomendas, visitantes, veículos e `arquivos`
+
+## 9. Implementação (TASK-81)
+
+Três migrações, na ordem em que os módulos dependem uns dos outros:
+
+| Migração | Conteúdo |
+| --- | --- |
+| `20261103_0003_nucleo` | Colunas novas de `usuarios` e `condominios`, estrutura (blocos, andares, unidades), chaves, `moradores_unidade`, permissões por aba, convites, tokens de senha, tentativas de chave, `arquivos`, funcionários, responsáveis, análises e documentos do cadastro, auditoria com trigger |
+| `20261103_0004_portaria_convivencia` | Encomendas, visitantes e visitas, veículos, áreas, bloqueios, reservas, ocorrências (com interações e anexos) e avisos |
+| `20261103_0005_plataforma` | Comunicados e destinatários, chamados (com mensagens e anexos) e fila de e-mails |
+
+São 36 tabelas no total. As regras marcadas com ★ na seção 4, o isolamento por FK composta e as principais da portaria têm teste em `backend/tests/test_banco_constraints.py`.
+
+**Dados que já existiam.** `condominios.ativo` vira `status`: verdadeiro passa a `ativo` e falso a `desativado`; o `downgrade` faz o caminho inverso. Unidades criadas antes da 0003 ficam sem andar (`andar_id` nulo) e continuam únicas por condomínio, por um índice parcial. O `cnpj` também é opcional no banco pelo mesmo motivo; o service do cadastro (US-202) o exige.
+
+**Propostas dos contratos adotadas aqui** (eram pendências endereçadas ao Davi):
+
+- `comunicado_destinatarios (comunicado_id, condominio_id)`, preenchida no envio com os condomínios ativos (plataforma.md, seção 2).
+- `envios_email.recurso_tipo` e `recurso_id`, para o reenvio montar o corpo (plataforma.md, pendências).
+- `bloqueios_area.removido_em` e `removido_por_usuario_id`, para desfazer bloqueio lançado por engano (convivencia.md, pendências).
+- `usuarios.tipo_cadastro` (`morador` ou `administracao`), para só a conta de Administração cadastrar prédios (nucleo.md, seção 10). **Ainda depende do aceite do Paulo.**
+- Os nomes `uq_reservas_unidade_area_dia_ativa` e `uq_reservas_area_horario_ativa`, dos quais o service de reservas depende (convivencia.md, seção 4.2).
+- Nome de área único no condomínio sem diferenciar maiúsculas, e `abre_as`/`fecha_as` em hora cheia (convivencia.md, seção 2).
+
+**Regras extras de coerência**, todas no espírito da RN-45 ("cada estado exige todos os seus dados ou nenhum"): data de desvínculo, de desligamento, de remoção de veículo, de resolução de ocorrência, de encerramento de chamado e de envio de e-mail acompanham o status; resposta da Administração em ocorrência exige responsável; cancelamento de reserva pela Administração exige motivo; aviso geral exige responsável (o automático da unidade, não).
+
+**O que ficou para depois:**
+
+- `vinculos_condominio.unidade_id` continua no banco porque o login (TASK-80) ainda lê a unidade dali. Sai numa migração própria quando o login passar a usar `moradores_unidade` (TASK-30).
+- Sem coluna de fuso: `America/Sao_Paulo` fixo no MVP (convencoes.md, seção 1).
+- Sem `D` em comunicados e sem tabela para contatos da portaria sem entrada (seção 7).
+

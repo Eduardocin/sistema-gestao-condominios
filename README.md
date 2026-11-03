@@ -83,7 +83,7 @@ Confira frontend em <http://127.0.0.1:5173>, health em
 <http://127.0.0.1:8000/api/v1/health> e console MinIO em <http://127.0.0.1:9001>.
 Credenciais locais estão no seu `.env`. Banco e arquivos têm volumes persistentes.
 Portas, limites, testes e integração estão em [Armazenamento](docs/storage.md).
-Rotas de arquivos ainda aguardam autorização central e a tabela da TASK-81.
+Rotas de arquivos ainda aguardam a autorização central.
 
 ## Guia de primeira execução
 
@@ -686,7 +686,16 @@ python -m alembic upgrade head
 python -m alembic check
 ```
 
-Importe novos models em `app/db/models.py` antes de gerar a revisão. Revise o script e inclua-o no mesmo PR da alteração. Não use `Base.metadata.create_all()` na aplicação. O CI verifica upgrade, downgrade e novo upgrade em banco descartável.
+Passo a passo para uma migração nova:
+
+1. Altere ou crie o model no módulo (`app/modules/<modulo>/models.py`) e importe-o em `app/db/models.py`.
+2. Com o banco local na versão atual (`alembic upgrade head`), gere a revisão com `--autogenerate`. Use o padrão de nome `AAAAMMDD_NNNN_descricao` no arquivo e em `revision`, com `down_revision` apontando para a anterior.
+3. **Revise o script à mão.** O autogenerate não detecta `CHECK` em tabelas que já existem, triggers, conversão de dados nem renomeações (ele vê uma coluna removida e outra criada). Escreva essas partes, como na `20261103_0003`.
+4. Rode `upgrade head`, `check`, `downgrade -1` e `upgrade head` de novo. O `downgrade` precisa devolver o banco ao estado anterior, dados incluídos.
+5. Se a regra é "Garantida por: Banco" nas regras de negócio, acrescente um teste em `tests/test_banco_constraints.py` que tenta gravar o estado inválido e confere o nome da constraint.
+6. Inclua o script no mesmo PR da alteração. Nunca edite uma migração que já está na `main`; crie outra.
+
+Não use `Base.metadata.create_all()` na aplicação. Nomes de constraints e índices seguem a convenção de `app/db/base.py`; nomes explícitos têm no máximo 63 caracteres (limite do PostgreSQL). O CI verifica upgrade, `check`, downgrade e novo upgrade em banco descartável.
 
 ## Testes com PostgreSQL
 

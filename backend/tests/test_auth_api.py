@@ -63,7 +63,7 @@ def criar_usuario(session, *, ativo=True, adm=False, senha_hash=HASH, sessao_ver
 
 
 def criar_condominio(session, nome="Residencial Aurora", ativo=True) -> Condominio:
-    condominio = Condominio(nome=nome, ativo=ativo)
+    condominio = Condominio(nome=nome, status="ativo" if ativo else "desativado")
     session.add(condominio)
     session.flush()
     return condominio

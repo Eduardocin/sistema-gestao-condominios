@@ -32,6 +32,11 @@ operações sem perfil disponível, `conta_compartilhada=True` ativa a mesma exi
 autodeclarado no MVP, pois não há PIN individual.
 
 Tipos disponíveis: `LOGIN`, `FALHA_LOGIN`, `CRIACAO_CONTA`, `EDICAO_CONTA`, `APROVACAO`,
-`REJEICAO`, `MUDANCA_PERMISSAO`, `RESERVA` e `OCORRENCIA`. Falhas sem usuário conhecido podem ser
-registradas com `usuario_id=None`. Os fluxos de negócio devem chamar `audit.log(...)` quando forem
-implementados.
+`REJEICAO`, `MUDANCA_PERMISSAO`, `RESERVA`, `OCORRENCIA` e `NOTIFICACAO_CONDOMINIO`. Falhas sem
+usuário conhecido podem ser registradas com `usuario_id=None`.
+
+No backend atual, login, falha de login, criação/edição de contas, criação de condomínio, decisões
+de aprovação de condomínio e decisões de vínculo Morador–Unidade já registram auditoria. Reservas
+e ocorrências ainda dependem da implementação dos seus casos de uso; não crie fluxos artificiais
+apenas para emitir eventos. Consulte o [backlog de integrações](../../../docs/backlog/auditoria-integracao-fluxos-mvp.md)
+para o status e os critérios de conclusão.

@@ -2,48 +2,61 @@
 
 ## Story / task
 
-TASK-24 — acompanhamento de integração; ID definitivo a registrar no Kanban da equipe.
+TASK-24 — acompanhamento de integração; manter o ID definitivo alinhado ao Kanban da equipe.
 
-## Objetivo
+## Status
 
-Garantir que as ações críticas dos fluxos do MVP gerem exatamente um evento imutável de auditoria,
-incluindo a identificação declarada do responsável quando a ação vier de uma conta compartilhada
-de Funcionário ou Administração.
+A infraestrutura de auditoria e os fluxos de autenticação, contas, aprovação de condomínio e
+vínculo Morador–Unidade já estão integrados no backend. Reservas e ocorrências permanecem pendentes
+porque seus casos de uso ainda não estão implementados. Não criar fluxos de negócio substitutos
+apenas para gerar eventos de auditoria.
 
-## O que fazer
+## Integrações concluídas
 
-- [ ] Integrar `APROVACAO` e `REJEICAO` ao caso de uso de aprovação de condomínio, após a decisão ser
-      efetivada. Coordenar com Paulo César.
-- [ ] Integrar `MUDANCA_PERMISSAO` ao caso de uso de concessão, alteração ou remoção de permissões.
-      Coordenar com Tude e a frente responsável pela autorização.
-- [ ] Integrar `RESERVA` às ações críticas de reserva, incluindo criação e cancelamento, sem duplicar
-      eventos em retries ou falhas. Coordenar com Vitor Negromante.
-- [ ] Integrar `OCORRENCIA` à abertura, resposta e mudança de estado de ocorrências. Coordenar com
-      Vitor Negromante.
-- [ ] Em cada chamada, fornecer ator, perfil, condomínio, recurso, identificador do recurso, IP e
-      dados antes/depois aplicáveis, usando a mesma sessão e transação do caso de uso.
-- [ ] Para perfis `funcionario` e `administracao`, exigir e registrar `nome_responsavel` em cada
-      ação crítica. O nome é autodeclarado no MVP; não representa autenticação individual.
-- [ ] Adicionar teste de integração PostgreSQL por fluxo, verificando exatamente um evento para
-      cada ação concluída, os campos do evento e ausência de evento quando a operação falhar antes
-      de ser efetivada.
+- [x] Criar a tabela, modelo, serviço `audit.log(...)` e repositório apenas de inserção e leitura.
+- [x] Impedir `UPDATE`, `DELETE` e `TRUNCATE` dos eventos no PostgreSQL.
+- [x] Exigir o nome declarado de quem executou ações por contas compartilhadas de Administração e
+      Funcionário, com validação na aplicação e no banco.
+- [x] Registrar login e falhas de login.
+- [x] Registrar criação e edição de contas e criação de condomínio pelo wizard.
+- [x] Registrar aprovação e rejeição de condomínio, além dos eventos de notificação correspondentes.
+- [x] Registrar solicitação e decisão de vínculo Morador–Unidade, incluindo as mudanças de permissão
+      e notificações da decisão.
+- [x] Cobrir essas integrações com testes existentes; há testes de cardinalidade para ações como
+      rejeição de condomínio, login, operações de conta e eventos de vínculo.
+
+## Pendências para concluir a integração dos fluxos do MVP
+
+- [ ] Quando o módulo de reservas tiver casos de uso, integrar `RESERVA` às operações críticas
+      implementadas, como criação e cancelamento. Registrar uma vez por operação efetivada, sem
+      gerar evento em falha ou duplicar em retry. Coordenar com a frente responsável por reservas.
+- [ ] Quando o módulo de ocorrências tiver casos de uso, integrar `OCORRENCIA` à abertura, resposta
+      e mudanças de estado que alterem dados. Registrar uma vez por operação efetivada e não gerar
+      evento em falha ou retry. Coordenar com a frente responsável por ocorrências.
+- [ ] Integrar `MUDANCA_PERMISSAO` a outros casos de concessão, alteração ou remoção de permissões
+      quando forem implementados, além dos fluxos de vínculo já cobertos.
+- [ ] Para cada ação crítica nova, fornecer ator, perfil, condomínio, recurso, identificador do
+      recurso, IP e dados antes/depois aplicáveis, usando a mesma sessão e transação do caso de uso.
+- [ ] Para cada integração nova, adicionar testes PostgreSQL que comprovem exatamente um evento por
+      operação concluída e nenhum evento se a operação falhar ou for revertida.
 - [ ] Confirmar que não foram adicionados endpoints nem métodos de atualização ou exclusão dos
       eventos de auditoria.
 
-## Pronto quando
+## Critérios para encerrar as integrações pendentes
 
-- [ ] Cada caso de uso listado acima existe e chama `audit.log(...)` uma única vez após concluir
-      sua operação.
-- [ ] As integrações preservam isolamento por condomínio e usam a transação do caso de uso.
-- [ ] A falta de `nome_responsavel` impede a auditoria de ação de conta compartilhada e não deixa
-      a operação crítica ser concluída sem registro.
-- [ ] Os testes PostgreSQL comprovam o evento correto e a cardinalidade igual a um para cada ação
-      crítica integrada.
-- [ ] A suíte backend, Ruff, formatação, mypy e validação Alembic passam no CI.
+- [ ] Os casos de uso de reserva e ocorrência existem e chamam `audit.log(...)` uma única vez por
+      mutação efetivada.
+- [ ] Os eventos contêm os campos relevantes e respeitam o isolamento por condomínio.
+- [ ] A auditoria usa a transação do caso de uso; erro ao registrar o evento também impede que a
+      operação crítica seja persistida sem auditoria.
+- [ ] A ausência de `nome_responsavel` impede a conclusão de uma ação feita por conta compartilhada.
+- [ ] Testes PostgreSQL verificam cardinalidade, conteúdo do evento e rollback em caso de falha.
+- [ ] Suíte backend, Ruff, formatação, mypy e validação Alembic passam no CI.
 
 ## Dependências e limite de escopo
 
-Esta tarefa depende da implementação dos casos de uso de aprovação de condomínio, permissões,
-reservas e ocorrências pelas frentes responsáveis. Não criar endpoints ou fluxos de negócio
-substitutos dentro do módulo de auditoria. As implementações devem integrar a interface existente
-em [`service.py`](../../backend/app/modules/auditoria/service.py).
+As integrações de reservas e ocorrências dependem dos respectivos casos de uso serem implementados
+pelas frentes responsáveis. Esta pendência não bloqueia a infraestrutura nem os fluxos já integrados
+da TASK-24. Não criar endpoints ou fluxos de negócio substitutos dentro do módulo de auditoria. As
+implementações devem usar a interface existente em
+[`service.py`](../../backend/app/modules/auditoria/service.py).

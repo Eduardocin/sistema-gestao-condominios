@@ -1,7 +1,7 @@
 # Armazenamento — TASK-26
 
 Serviço interno implementado. A tabela `arquivos` existe desde a migração `20261103_0003`
-(TASK-81); as rotas HTTP aguardam a autorização central (Gabriel). Não existem endpoints de arquivos nesta
+(TASK-81); a autorização central já está disponível, mas ainda falta integrar e publicar as rotas HTTP. Não existem endpoints de arquivos nesta
 entrega; contexto e política abaixo são contratos internos, não autenticação.
 
 ## Ambiente local — TASK-2

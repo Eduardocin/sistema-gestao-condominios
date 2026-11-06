@@ -7,6 +7,10 @@ node_modules/
 .vite/
 playwright-report/
 test-results/
+# Planejamento interno e cópias locais de trabalho não fazem parte das entregas.
+docs/superpowers/
+.superpowers/
+.claude/worktrees/
 .DS_Store
 Thumbs.db
 .idea/

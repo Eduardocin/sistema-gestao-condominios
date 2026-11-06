@@ -12,7 +12,7 @@ import { WorkspacePage } from '../features/auth/WorkspacePage'
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
   { path: '/login', element: <LoginPage /> },
-  { path: '/cadastro', element: <AccessPage mode="cadastro" /> },
+  { path: '/cadastro', element: <AccessPage /> },
   { path: '/status', element: <StatusPage /> },
   { path: '/design-system', element: <DesignSystemPage /> },
   { path: '/prototipos/portaria', element: <PortariaPage /> },

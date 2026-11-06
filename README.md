@@ -2,9 +2,9 @@
 
 [![Quality](https://github.com/Eduardocin/sistema-gestao-condominios/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/Eduardocin/sistema-gestao-condominios/actions/workflows/ci.yaml)
 
-Projeto acadêmico da disciplina Integração e Evolução de Sistemas de Informação (IESI). A plataforma reunirá cadastros de condomínios, unidades e usuários, encomendas, visitantes, reservas, ocorrências, avisos e auditoria.
+Plataforma de gestão de condomínios com áreas de Administração, Morador, Portaria e administração da plataforma.
 
-Esta entrega cria a fundação: API com health check, modelos estruturais e migração, frontend com indicador de conexão, ambiente local e verificações de qualidade. Autenticação e fluxos de negócio ficam para as próximas sprints.
+Já estão disponíveis login com JWT, seleção de condomínio, restauração de sessão, navegação por perfil, isolamento entre condomínios, autorização central, armazenamento interno em MinIO e o esquema do banco com 36 tabelas. Os serviços HTTP de negócio, o cadastro e a gestão de funcionários ainda estão em desenvolvimento. As telas da portaria em `/prototipos/portaria` são uma demonstração com dados fictícios em memória.
 
 **Primeira vez no projeto?** Siga o [Guia de primeira execução](#guia-de-primeira-execução) do início ao fim. Cada etapa termina com uma verificação; só avance quando ela passar. Se algo falhar, consulte [Solução de problemas](#solução-de-problemas).
 
@@ -19,41 +19,48 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 
 ```text
 ├── frontend/
-│   ├── public/
+│   ├── README.md        # Execução e criação de telas
 │   └── src/
-│       ├── app/          # Rotas, 404 e estilos
+│       ├── app/          # Rotas e página 404
 │       ├── components/
-│       ├── features/     # Inicialmente home e health
+│       ├── features/     # auth, access (prévia de cadastro), home,
+│       │                # design-system e portaria (protótipo)
 │       ├── hooks/
-│       ├── services/     # Axios centralizado
-│       ├── types/
+│       ├── services/     # HTTP público; cliente autenticado em features/auth
+│       ├── styles/       # Tokens e estilos globais
 │       ├── utils/
 │       └── main.tsx
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/
-│   │   ├── core/         # Configuração e erros
+│   │   ├── core/         # Configuração, erros, contexto e permissões
 │   │   ├── db/           # Base, engine, sessões e registro de models
-│   │   ├── modules/      # auth, usuarios, condominios, unidades,
-│   │   │                # encomendas, visitantes, reservas,
-│   │   │                # ocorrencias, avisos e auditoria
+│   │   ├── modules/      # auth, usuarios, condominios, unidades, funcionarios,
+│   │   │                # encomendas, visitantes, reservas, ocorrencias,
+│   │   │                # avisos, auditoria, storage, suporte e notificacoes
 │   │   └── main.py
 │   ├── alembic/versions/
 │   ├── tests/
 │   ├── alembic.ini
 │   ├── pyproject.toml
 │   └── requirements-dev.lock
-├── infra/
+├── infra/minio/          # Construção do serviço de arquivos
 ├── docs/
 │   ├── api-contracts/
 │   ├── decisions/
-│   └── architecture.md
+│   ├── frontend/
+│   ├── plano-de-testes/
+│   ├── portaria/
+│   ├── produto/
+│   ├── architecture.md
+│   ├── modelo-de-dados.md
+│   └── storage.md
 ├── .github/workflows/ci.yaml
 ├── .env.example
 └── compose.yaml
 ```
 
-Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/) e [contrato HTTP](docs/api-contracts/health.md).
+Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/), [contratos HTTP](docs/api-contracts/), [autenticação do frontend](docs/frontend/autenticacao.md) e [armazenamento](docs/storage.md).
 
 No modo local descrito no guia detalhado, três processos estarão em execução:
 
@@ -699,7 +706,7 @@ Não use `Base.metadata.create_all()` na aplicação. Nomes de constraints e ín
 
 ## Testes com PostgreSQL
 
-Sem `TEST_DATABASE_URL`, quatro testes PostgreSQL são explicitamente pulados. Para executá-los, crie um banco de testes dedicado (nunca use o banco de desenvolvimento):
+Sem `TEST_DATABASE_URL`, os testes que exigem PostgreSQL são pulados. Para executá-los, crie um banco de testes dedicado (nunca use o banco de desenvolvimento):
 
 ```bash
 docker compose exec db sh -c 'createdb -U "$POSTGRES_USER" condominios_test'
@@ -725,7 +732,7 @@ export TEST_DATABASE_URL="$DATABASE_URL"
 unset DATABASE_URL TEST_DATABASE_URL
 ```
 
-Esperado: todos os testes passam, sem skips. Os testes revertem as transações ao final de cada caso. **Remova as variáveis ao terminar**, senão a API passará a usar o banco de testes. O CI fornece PostgreSQL limpo automaticamente.
+Esperado: os testes de PostgreSQL são executados e passam. O teste de integração MinIO exige configuração própria; veja [storage](docs/storage.md). Os testes de banco revertem as transações ao final de cada caso. **Remova as variáveis ao terminar**, senão a API passará a usar o banco de testes. O CI fornece PostgreSQL limpo automaticamente.
 
 Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `npm run typecheck` verifica só os tipos (o `build` já inclui essa etapa).
 
@@ -747,11 +754,11 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 - PRs pequenos, preenchendo o template (o que mudou, story ligada, como testar). Antes de pedir revisão, atualize a branch com a `main` e rode os comandos da [etapa 7](#etapa-7--rodar-as-verificações-de-qualidade).
 - Apague a branch depois do merge.
 
-O workflow `.github/workflows/ci.yaml` valida backend (Python 3.13, com PostgreSQL limpo) e frontend em pushes e PRs.
+O workflow `.github/workflows/ci.yaml` valida backend (Python 3.13, com PostgreSQL limpo), frontend (Node 24) e integração de arquivos com MinIO em pushes e PRs.
 
-## Próxima sprint
+## Próximas entregas
 
-Priorizar autenticação real, autorização por perfil/vínculo e testes negativos de acesso entre condomínios. Em seguida implementar cadastro e ativação de condomínios, unidades e usuários, confirmando a necessidade de múltiplos perfis/unidades no mesmo condomínio. Só então expor operações protegidas e avançar nos fluxos operacionais.
+Implementar cadastro e aprovação de condomínios, contas, funcionários e vínculo de moradores por unidade. Integrar as permissões por aba e os endpoints de arquivos; avançar nas APIs e telas operacionais de encomendas, visitantes e convivência sobre o banco e a autorização existentes.
 
 ## Referências técnicas
 

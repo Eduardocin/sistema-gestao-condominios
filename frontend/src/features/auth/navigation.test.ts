@@ -15,3 +15,11 @@ test('destinos usam o contexto validado, separam seleção e não abrem operaç�
   assert.equal(homePath({ ...base, condominio: { ...condominium, perfil: 'administracao' } }, []), '/app/administracao')
   assert.equal(homePath({ ...base, condominio: { ...condominium, status: 'desativado' } }, []), '/app/sem-condominio')
 })
+
+test('restaurar sessão não abre operações para condomínio pendente, rejeitado ou desativado', () => {
+  for (const status of ['pendente', 'rejeitado', 'desativado'] as const) {
+    for (const perfil of ['morador', 'funcionario', 'administracao'] as const) {
+      assert.equal(homePath({ ...base, condominio: { ...condominium, status, perfil } }, [condominium]), '/app/sem-condominio')
+    }
+  }
+})

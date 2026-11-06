@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
 import type { Condominium, Identity, LoginResponse, SessionSnapshot, SessionStorage } from './types.ts'
+import { condominiumStatuses } from './types.ts'
 
 export const sessionKey = 'gestao-condominios.session.v1'
 interface Credentials { access_token: string; refresh_token: string; condominios: Condominium[] }
@@ -23,7 +24,7 @@ export function accessMessage(error: unknown): string {
 function isCondominium(value: unknown): value is Condominium {
   if (typeof value !== 'object' || value === null) return false
   const c = value as Partial<Condominium>
-  return typeof c.id === 'string' && typeof c.nome === 'string' && ['morador', 'funcionario', 'administracao'].includes(c.perfil ?? '') && ['ativo', 'desativado'].includes(c.status ?? '')
+  return typeof c.id === 'string' && typeof c.nome === 'string' && ['morador', 'funcionario', 'administracao'].includes(c.perfil ?? '') && condominiumStatuses.some((status) => status === c.status)
 }
 
 function readCredentials(storage: SessionStorage | undefined): Credentials | null {

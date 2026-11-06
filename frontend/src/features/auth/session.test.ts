@@ -87,6 +87,50 @@ test('seleção e recarga preservam vínculos, mas usam /me como contexto defini
   } finally { await api.close() }
 })
 
+for (const status of ['pendente', 'rejeitado']) {
+  test(`restauração aceita condomínio ${status} selecionado ou em outro vínculo`, async () => {
+    const unavailable = { ...condominium, id: 'condo-pending', perfil: 'administracao', status }
+    let selected = unavailable
+    let meRequests = 0
+    const api = await fixture((req, _body, res) => {
+      assert.equal(req.url, '/auth/me')
+      assert.equal(req.headers.authorization, 'Bearer access-a')
+      meRequests++
+      json(res, { ...identity, condominio: selected })
+    })
+    try {
+      for (const activeSelected of [false, true]) {
+        selected = activeSelected ? condominium : unavailable
+        const storage = memoryStorage()
+        const saved = JSON.stringify({ access_token: 'access-a', refresh_token: 'refresh-a', condominios: [condominium, unavailable] })
+        storage.setItem(sessionKey, saved)
+        const client = createSessionClient(api.url, storage)
+        assert.equal(client.getSnapshot().identity, null)
+        await client.restore()
+        assert.equal(client.getSnapshot().status, 'authenticated')
+        assert.deepEqual(client.getSnapshot().identity?.condominio, selected)
+        assert.deepEqual(client.getSnapshot().condominiums, [condominium, unavailable])
+        assert.equal(storage.getItem(sessionKey), saved)
+      }
+      assert.equal(meRequests, 2)
+    } finally { await api.close() }
+  })
+}
+
+test('estado desconhecido de condomínio continua recusado na sessão armazenada', async () => {
+  let meRequests = 0
+  const api = await fixture((_req, _body, res) => { meRequests++; json(res, identity) })
+  try {
+    const storage = memoryStorage()
+    storage.setItem(sessionKey, JSON.stringify({ access_token: 'access-a', refresh_token: 'refresh-a', condominios: [{ ...condominium, status: 'estado-invalido' }] }))
+    const client = createSessionClient(api.url, storage)
+    await client.restore()
+    assert.equal(client.getSnapshot().status, 'anonymous')
+    assert.equal(storage.getItem(sessionKey), null)
+    assert.equal(meRequests, 0)
+  } finally { await api.close() }
+})
+
 test('401 concorrentes compartilham refresh, repetem uma vez e preservam refresh_token', async () => {
   const storage = memoryStorage()
   storage.setItem(sessionKey, JSON.stringify({ access_token: 'expired', refresh_token: 'refresh-a', condominios: [condominium] }))

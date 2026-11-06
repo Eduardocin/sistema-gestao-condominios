@@ -42,7 +42,7 @@ Cadastro permanece uma prévia desabilitada. Serviços operacionais aparecem com
 - Tokens são acessíveis a JavaScript: a aplicação deve preservar as proteções contra XSS. Cookies HttpOnly exigiriam mudanças no contrato e não integram este recorte.
 - Sair limpa esta aba; não há endpoint de revogação remota no contrato atual.
 - Se o navegador bloquear o storage, a sessão funciona em memória e se perde ao recarregar.
-- O contrato atual oferece condomínio ativo/desativado. Estados de cadastro pendente/rejeitado e correção cadastral continuam dependentes das próximas entregas do backend.
+- A sessão reconhece os quatro estados do condomínio: pendente, ativo, rejeitado e desativado, conforme o contrato ampliado no PR #17. Somente ativo abre as áreas operacionais; o fluxo de correção cadastral permanece fora deste recorte.
 - Cadastro, recuperação de senha, funcionários e permissões por aba ainda faltam: esta entrega não conclui a TASK-31, nem todos os itens da TASK-15 (por exemplo, formatador e validação de uso pela equipe).
 
 ## Evidências de validação
@@ -61,3 +61,5 @@ Também foi exercitado o frontend com FastAPI/Python 3.13 e PostgreSQL 17 tempor
 - Layout em desktop e viewport de celular de 390 × 844.
 
 Revisão independente do diff e do contrato: sem achados relevantes. Os dados, senhas e scripts de fixtures usados no teste não integram o repositório.
+
+Em 05/11/2026, foram adicionados testes de regressão da restauração com condomínio pendente/rejeitado, tanto selecionado quanto em outro vínculo da conta. Também verificam que estados desconhecidos continuam recusados e que os três perfis de condomínio não abrem operações quando o condomínio não está ativo. A suíte passa a ter 21 testes (13 de autenticação/navegação e os oito existentes da portaria).

@@ -1,6 +1,8 @@
 export interface User { id: string; nome: string; email: string }
 export type Profile = 'administracao' | 'funcionario' | 'morador'
-export interface Condominium { id: string; nome: string; perfil: Profile; status: 'ativo' | 'desativado' }
+export const condominiumStatuses = ['pendente', 'ativo', 'rejeitado', 'desativado'] as const
+export type CondominiumStatus = (typeof condominiumStatuses)[number]
+export interface Condominium { id: string; nome: string; perfil: Profile; status: CondominiumStatus }
 export interface Identity {
   usuario: User
   condominio: Condominium | null

@@ -19,7 +19,7 @@ Status: **plano de testes entregue; TASK-4 concluída no Notion por decisão exp
 | Regras da prévia da portaria | Node test runner, `npm test` | Transições e validações de encomendas/visitantes em memória | Não navega no navegador nem chama a API |
 | Interface | Roteiro manual no navegador | Formulários, mensagens, estados, teclado e tela estreita | Integração real só é aprovada com backend disponível |
 | Qualidade e build | Ruff, Mypy, ESLint, TypeScript e Vite | Padrão, tipos e compilação | Não substitui testes de comportamento |
-| Migrações | Alembic + PostgreSQL vazio | Upgrade, coerência com modelos, downgrade e novo upgrade | Rascunhos em `alembic/drafts/` não fazem parte da cadeia ativa |
+| Migrações | Alembic + PostgreSQL vazio | Upgrade, coerência com modelos, downgrade e novo upgrade; constraints do DER em `tests/test_banco_constraints.py` | Não comprova regras que ficam no service (seção 4 do DER) |
 
 Playwright/Cypress não são introduzidos nesta entrega; automatizar navegação pode ser decidido quando os fluxos autenticados existirem.
 

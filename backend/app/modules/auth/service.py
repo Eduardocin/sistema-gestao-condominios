@@ -68,9 +68,8 @@ class SessaoEmitida:
 
 
 def _status_do_condominio(condominio: Condominio) -> str:
-    # Provisório: hoje o banco só guarda `ativo` (sim/não). Quando o DER trouxer os quatro
-    # status (pendente, ativo, rejeitado, desativado), é só trocar este mapeamento.
-    return "ativo" if condominio.ativo else "desativado"
+    # Os quatro status do DER: pendente, ativo, rejeitado e desativado (regra 7).
+    return condominio.status
 
 
 def _montar_acesso(vinculo: VinculoCondominio, condominio: Condominio) -> Acesso:

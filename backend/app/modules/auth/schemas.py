@@ -46,7 +46,7 @@ class CondominioAcessoOut(BaseModel):
     id: uuid.UUID = Field(validation_alias="condominio_id")
     nome: str
     perfil: Literal["administracao", "funcionario", "morador"]
-    status: Literal["ativo", "desativado"]
+    status: Literal["pendente", "ativo", "rejeitado", "desativado"]
 
 
 class LoginResponse(BaseModel):

@@ -1,5 +1,7 @@
 # Infraestrutura local
 
-O `compose.yaml` na raiz executa apenas o PostgreSQL. Frontend e backend rodam localmente com hot reload.
+O [compose.yaml](../compose.yaml) na raiz executa PostgreSQL 17, MinIO, migrações Alembic, preparação do bucket, API FastAPI e frontend Vite. API e frontend usam seus Dockerfiles em `backend/` e `frontend/`.
 
-Não há Dockerfiles de aplicação nesta etapa: eles não são necessários para o fluxo solicitado. Configurações futuras de infraestrutura ficam nesta pasta. Não armazenar dados ou credenciais aqui.
+O [Dockerfile do MinIO](minio/Dockerfile) constrói o serviço de arquivos a partir do código oficial fixado. Banco e objetos persistem nos volumes definidos no Compose.
+
+Para subir o ambiente completo, configure `.env` a partir de `.env.example` e execute `docker compose up --build` na raiz. O modo com API/frontend locais também está descrito no [README principal](../README.md). Não armazenar dados ou credenciais nesta pasta.

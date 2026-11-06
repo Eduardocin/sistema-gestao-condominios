@@ -373,3 +373,107 @@ def test_auditoria_recusa_edicao_e_exclusao(session, comando):
     session.flush()
     with pytest.raises(DBAPIError, match="apenas INSERT"):
         session.execute(text(comando))
+
+
+# Cobertura da portaria migrada do rascunho para o esquema oficial.
+
+
+def dados_encomenda(p: Predio, status: str = "aguardando_retirada", mask: int = 0):
+    row: dict[str, object] = {
+        "id": uuid.uuid4(),
+        "condominio_id": p.condominio.id,
+        "unidade_id": p.unidade.id,
+        "destinatario_morador_unidade_id": p.morador.id,
+        "descricao": "Caixa de exemplo",
+        "foto_nota_arquivo_id": p.arquivo.id,
+        "recebido_por_funcionario_id": p.funcionario.id,
+        "status": status,
+        "registrada_em": AGORA,
+    }
+    eventos = (
+        ("entregue_em", AGORA + timedelta(minutes=10)),
+        ("recebedor_morador_unidade_id", p.morador.id),
+        ("entregue_por_funcionario_id", p.funcionario.id),
+        ("confirmada_em", AGORA + timedelta(minutes=20)),
+        ("confirmado_por_usuario_id", p.usuario.id),
+    )
+    row.update(
+        {name: value if mask & (1 << bit) else None for bit, (name, value) in enumerate(eventos)}
+    )
+    return row
+
+
+def test_encomenda_aceita_somente_tres_das_96_combinacoes_de_estado_e_eventos(session):
+    p = criar_predio(session)
+    permitidas = {
+        ("aguardando_retirada", 0),
+        ("entregue_aguardando_confirmacao", 7),
+        ("retirada_confirmada", 31),
+    }
+    aceitas = set()
+    for status in sorted({status for status, _ in permitidas}):
+        for mask in range(32):
+            with session.begin_nested() as savepoint:
+                comando = Encomenda.__table__.insert().values(dados_encomenda(p, status, mask))
+                if (status, mask) in permitidas:
+                    session.execute(comando)
+                    aceitas.add((status, mask))
+                else:
+                    with pytest.raises(IntegrityError) as erro:
+                        session.execute(comando)
+                    assert erro.value.orig.diag.constraint_name == "ck_encomendas_etapas_completas"
+                savepoint.rollback()
+    assert aceitas == permitidas
+
+
+@pytest.mark.parametrize("campo", ["entregue_em", "confirmada_em"])
+def test_datas_da_encomenda_respeitam_ordem_dos_eventos(session, campo):
+    row = dados_encomenda(criar_predio(session), "retirada_confirmada", 31)
+    row[campo] = AGORA - timedelta(seconds=1)
+    with pytest.raises(IntegrityError), session.begin_nested():
+        session.execute(Encomenda.__table__.insert().values(row))
+
+
+@pytest.mark.parametrize(
+    ("campo", "referencia"),
+    [
+        ("unidade_id", "unidade"),
+        ("destinatario_morador_unidade_id", "morador"),
+        ("recebedor_morador_unidade_id", "morador"),
+        ("recebido_por_funcionario_id", "funcionario"),
+        ("entregue_por_funcionario_id", "funcionario"),
+        ("foto_nota_arquivo_id", "arquivo"),
+    ],
+)
+def test_referencias_de_encomenda_nao_atravessam_condominios(session, campo, referencia):
+    row = dados_encomenda(criar_predio(session), "retirada_confirmada", 31)
+    outro = criar_predio(session, "Bosque")
+    row[campo] = getattr(outro, referencia).id
+    with pytest.raises(IntegrityError), session.begin_nested():
+        session.execute(Encomenda.__table__.insert().values(row))
+
+
+@pytest.mark.parametrize(
+    "campo",
+    [
+        "condominio_id",
+        "unidade_id",
+        "destinatario_morador_unidade_id",
+        "descricao",
+        "foto_nota_arquivo_id",
+        "recebido_por_funcionario_id",
+        "status",
+        "registrada_em",
+    ],
+)
+def test_campos_obrigatorios_de_encomenda_nao_aceitam_nulo(session, campo):
+    row = dados_encomenda(criar_predio(session))
+    row[campo] = None
+    with pytest.raises(IntegrityError), session.begin_nested():
+        session.execute(Encomenda.__table__.insert().values(row))
+
+
+def test_encomenda_nao_aceita_estado_desconhecido(session):
+    row = dados_encomenda(criar_predio(session), "desconhecido")
+    with pytest.raises(IntegrityError), session.begin_nested():
+        session.execute(Encomenda.__table__.insert().values(row))

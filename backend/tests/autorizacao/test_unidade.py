@@ -1,8 +1,10 @@
 """Passo 4 da ordem de checagem (R10): a unidade que veio na requisição é do usuário?"""
 
 import uuid
+from datetime import UTC, datetime
 
 from app.core.permissoes import Perfil
+from app.modules.unidades.models import MoradorUnidade
 from tests.autorizacao.cenario import criar_unidade, montar_predio
 
 
@@ -47,9 +49,29 @@ def test_funcionario_e_administracao_nao_acessam_unidade_de_outro_condominio(
 
 
 def test_morador_sem_unidade_nao_acessa_nenhuma(client, predio, session):
-    predio.vinculo_morador.unidade_id = None
+    predio.morador_unidade.status = "desvinculado"
+    predio.morador_unidade.desvinculado_em = datetime.now(UTC)
     session.flush()
     assert ver(client, predio, Perfil.MORADOR, predio.unidade_101.id).status_code == 404
+
+
+def test_unidade_do_morador_nao_depende_da_coluna_legada(client, predio, session):
+    predio.vinculo_morador.unidade_id = None
+    session.flush()
+    assert ver(client, predio, Perfil.MORADOR, predio.unidade_101.id).status_code == 200
+
+
+def test_morador_pode_acessar_segunda_unidade_com_vinculo_ativo(client, predio, session):
+    session.add(
+        MoradorUnidade(
+            usuario_id=predio.morador.id,
+            condominio_id=predio.condominio.id,
+            unidade_id=predio.unidade_102.id,
+            origem="convite",
+        )
+    )
+    session.flush()
+    assert ver(client, predio, Perfil.MORADOR, predio.unidade_102.id).status_code == 200
 
 
 def test_morador_desvinculado_perde_o_acesso_na_hora(client, predio, session):

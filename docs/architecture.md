@@ -39,7 +39,7 @@ O isolamento é lógico por `condominio_id`. Não há Row Level Security nem fil
 
 Todo endpoint de negócio precisa autenticar o usuário, validar vínculo ativo no condomínio do token, verificar papel e filtrar todas as consultas pelo condomínio autorizado. Um ID recebido pela URL ou corpo não prova autorização. Operações com objetos de outro condomínio são negadas sem revelar seus dados. O acesso global da plataforma exige verificação explícita, distinta dos perfis locais. Não confiar em cabeçalhos de usuário ou condomínio como autenticação.
 
-Estão implementados o login (TASK-80) e a porta de entrada dos endpoints de condomínio, `get_current_context` (TASK-18), que cobre identidade e condomínio (passos 1 e 2 da [matriz](permissoes-e-multitenant.md#5-ordem-de-checagem)). Perfil, unidade e aba (passos 3 e 4) ainda são das TASK-19 e TASK-21. Não há autenticação fictícia. Funcionalidades novas precisam de testes negativos de acesso entre condomínios e de privilégios.
+Estão implementados o login (TASK-80), `get_current_context` (TASK-18: identidade e condomínio), `require_permission` (TASK-19: perfil) e `require_aba` (TASK-21: unidade e aba do Morador). Eles cobrem os passos 1 a 4 da [matriz](permissoes-e-multitenant.md#5-ordem-de-checagem). Não há autenticação fictícia. Funcionalidades novas precisam de testes negativos de acesso entre condomínios e de privilégios.
 
 ## Como criar um endpoint novo respeitando o isolamento
 
@@ -147,6 +147,29 @@ Regras de bolso:
 - **Campos protegidos:** `criar` e `atualizar` levantam `CampoProtegido` se `dados` trouxer `condominio_id` (e `id`, no `atualizar`). Isso é erro de programação, não de entrada do cliente: valide o corpo com schemas explícitos antes de chegar ao repository.
 - **Rotas que não usam este contexto:** login, escolha de condomínio, `/auth/me` e `/plataforma/...` não têm `cid` e continuam com `get_usuario_autenticado`. O teste `test_nenhum_endpoint_recebe_condominio_id.py` aceita `condominio_id` do cliente apenas em `POST /auth/selecionar-condominio` e sob `/plataforma/`.
 - **Pendência (variante de cadastro, R7):** até existir a dependência do fluxo de cadastro do condomínio, a Administração de um condomínio **não ativo** recebe 403 em toda rota que use `ContextoDep`. É proposital; o login continua devolvendo token para ela.
+
+## Autorização por perfil, unidade e aba
+
+Uma rota de unidade combina a permissão do recurso com a aba correspondente. Exemplo de dependências para uma URL que contenha `{unidade_id}`:
+
+```python
+from fastapi import Depends
+
+from app.modules.auth.autorizacao import require_aba, require_permission
+
+dependencias = [
+    Depends(require_permission("visitantes:criar")),
+    Depends(require_aba("visitantes")),
+]
+```
+
+Use `dependencies=dependencias` na declaração da rota. O perfil é conferido antes da unidade/aba. Unidade alheia é 404; perfil ou aba sem acesso é 403. Nome de permissão ou aba inválido falha ao declarar a rota.
+
+`require_aba` consulta `moradores_unidade` e `permissoes_aba` a cada requisição. Funcionário e Administração passam pela checagem de unidade, mas não têm permissões por aba; por isso a dependência deve acompanhar `require_permission`. Rotas da plataforma usam `require_platform_permission`.
+
+Quando a unidade é obtida do corpo ou do recurso carregado, o service usa `garantir_acesso_a_unidade` e também deve verificar a aba aplicável ao Morador. Esse helper confere apenas a unidade. A autorização ainda usa o vínculo de condomínio para perfil/contexto. `/auth/me` permanece com a leitura legada de unidades e sem as abas do próprio Morador; a atualização desse contrato fica para uma entrega de integração com o frontend.
+
+O módulo de [permissões por aba](../backend/app/modules/permissoes_aba/README.md) contém o exemplo completo de GET/PUT, trava do último com Usuários e auditoria transacional.
 
 ## Configuração e falhas
 

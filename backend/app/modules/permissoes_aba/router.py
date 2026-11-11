@@ -28,7 +28,8 @@ router = APIRouter(prefix="/unidades/{unidade_id}/moradores", tags=["permissoes-
 def get_service(
     session: Annotated[Session, Depends(get_session)], contexto: ContextoDep
 ) -> PermissoesAbaService:
-    return PermissoesAbaService(session, contexto)  # o contexto vem do token + banco, nunca do cliente
+    # O contexto vem do token + banco, nunca do cliente.
+    return PermissoesAbaService(session, contexto)
 
 
 ServiceDep = Annotated[PermissoesAbaService, Depends(get_service)]

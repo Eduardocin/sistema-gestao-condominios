@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.permissoes import Perfil
 from app.modules.condominios.models import Condominio, VinculoCondominio
-from app.modules.unidades.models import Unidade
+from app.modules.unidades.models import MoradorUnidade, Unidade
 from app.modules.usuarios.models import Usuario
 from tests.isolamento.cenario import (
     cabecalho,
@@ -27,6 +27,7 @@ class Predio:
     funcionario: Usuario
     administracao: Usuario
     adm: Usuario  # ADM da plataforma: sem condomínio e sem vínculo
+    morador_unidade: MoradorUnidade
 
     def cabecalho_de(self, perfil: str) -> dict[str, str]:
         """Cabeçalho Authorization de cada perfil, com o token que o login emitiria."""
@@ -54,7 +55,14 @@ def montar_predio(session: Session, nome: str = "Residencial Aurora") -> Predio:
 
     morador = criar_usuario(session)
     vinculo = vincular(session, morador, condominio, perfil="morador")
-    vinculo.unidade_id = u101.id  # o morador mora na 101
+    vinculo.unidade_id = u101.id  # mantido para os consumidores ainda legados, como /auth/me
+    morador_unidade = MoradorUnidade(
+        condominio_id=condominio.id,
+        unidade_id=u101.id,
+        usuario_id=morador.id,
+        origem="cadastro",
+    )
+    session.add(morador_unidade)
     session.flush()
 
     funcionario = criar_usuario(session)
@@ -72,4 +80,5 @@ def montar_predio(session: Session, nome: str = "Residencial Aurora") -> Predio:
         funcionario=funcionario,
         administracao=administracao,
         adm=adm,
+        morador_unidade=morador_unidade,
     )

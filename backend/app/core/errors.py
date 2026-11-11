@@ -13,13 +13,22 @@ class ApiError(HTTPException):
 
     O front decide o que fazer pelo `code` (ex.: `not_authenticated`) e só exibe a
     `message`, que pode mudar de texto sem quebrar ninguém.
+
+    `reason` é opcional e serve para o 409: diz *qual* conflito aconteceu (ex.: `ultimo_usuarios`)
+    sem o front precisar ler a mensagem (convenções da API, seção 4).
     """
 
     def __init__(
-        self, status_code: int, code: str, message: str, headers: dict[str, str] | None = None
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        headers: dict[str, str] | None = None,
+        reason: str | None = None,
     ) -> None:
         super().__init__(status_code=status_code, detail=message, headers=headers)
         self.code = code
+        self.reason = reason
 
 
 class RecursoNaoEncontrado(Exception):
@@ -40,13 +49,13 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
+        # Erros lançados pelo FastAPI/Starlette não têm `code` próprio: caem em "http_error".
+        erro = {"code": getattr(exc, "code", "http_error"), "message": str(exc.detail)}
+        # `reason` só aparece quando existe: quem não o conhece continua funcionando igual.
+        if reason := getattr(exc, "reason", None):
+            erro["reason"] = reason
         return JSONResponse(
-            status_code=exc.status_code,
-            # Erros lançados pelo FastAPI/Starlette não têm `code` próprio: caem em "http_error".
-            content={
-                "error": {"code": getattr(exc, "code", "http_error"), "message": str(exc.detail)}
-            },
-            headers=exc.headers,
+            status_code=exc.status_code, content={"error": erro}, headers=exc.headers
         )
 
     @app.exception_handler(RequestValidationError)

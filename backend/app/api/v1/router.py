@@ -4,9 +4,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.modules.auth.router import router as auth_router
+from app.modules.permissoes_aba.router import router as permissoes_aba_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
+router.include_router(permissoes_aba_router)
 
 
 class HealthResponse(BaseModel):

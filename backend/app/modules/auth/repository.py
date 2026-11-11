@@ -1,4 +1,4 @@
-"""Consultas ao banco usadas pelo login. Aqui só se lê e escreve; nenhuma regra de negócio."""
+"""Consultas ao banco do login e da autorização. Só lê e escreve; sem regra de negócio."""
 
 import uuid
 
@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.condominios.models import Condominio, VinculoCondominio
-from app.modules.unidades.models import Unidade
+from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
 
 
@@ -57,15 +57,49 @@ def obter_unidade(
     )
 
 
-def listar_unidades_do_vinculo(
-    session: Session, *, vinculo_id: uuid.UUID, usuario_id: uuid.UUID, condominio_id: uuid.UUID
+def listar_unidades_do_morador(
+    session: Session, *, usuario_id: uuid.UUID, condominio_id: uuid.UUID
 ) -> set[uuid.UUID]:
-    unidade_id = session.scalar(
-        select(VinculoCondominio.unidade_id).where(
-            VinculoCondominio.id == vinculo_id,
-            VinculoCondominio.usuario_id == usuario_id,
-            VinculoCondominio.condominio_id == condominio_id,
-            VinculoCondominio.ativo.is_(True),
+    """Unidades em que o usuário mora hoje neste condomínio (ADR 0003).
+
+    Lê `moradores_unidade`, só os vínculos ativos: quem foi desvinculado deixa de enxergar a
+    unidade na requisição seguinte (R6). A coluna antiga `vinculos_condominio.unidade_id` não é
+    mais consultada aqui.
+    """
+    consulta = select(MoradorUnidade.unidade_id).where(
+        MoradorUnidade.usuario_id == usuario_id,
+        MoradorUnidade.condominio_id == condominio_id,
+        MoradorUnidade.status == "ativo",
+    )
+    return set(session.scalars(consulta))
+
+
+def morador_tem_acesso_a_aba(
+    session: Session,
+    *,
+    usuario_id: uuid.UUID,
+    condominio_id: uuid.UUID,
+    unidade_id: uuid.UUID,
+    aba: str,
+) -> bool:
+    """O morador está Com Acesso a esta aba, nesta unidade? (US-304)
+
+    A permissão é por morador *e* unidade: estar Com Acesso na 101 não vale para a 102. Sem a
+    linha da aba (ou com o vínculo desfeito), a resposta é False: negar por padrão.
+    """
+    com_acesso = session.scalar(
+        select(PermissaoAba.com_acesso)
+        .join(
+            MoradorUnidade,
+            (MoradorUnidade.id == PermissaoAba.morador_unidade_id)
+            & (MoradorUnidade.condominio_id == PermissaoAba.condominio_id),
+        )
+        .where(
+            MoradorUnidade.usuario_id == usuario_id,
+            MoradorUnidade.condominio_id == condominio_id,
+            MoradorUnidade.unidade_id == unidade_id,
+            MoradorUnidade.status == "ativo",
+            PermissaoAba.aba == aba,
         )
     )
-    return {unidade_id} if unidade_id is not None else set()
+    return com_acesso is True

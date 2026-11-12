@@ -34,7 +34,7 @@ export function LoginPage() {
         {(error || snapshot.message) && <Notice tone="alert" role="alert">{error || snapshot.message}</Notice>}
         <Button type="submit" loading={pending}>Entrar</Button>
       </form>
-      <Text size="sm" className={styles.link}>Ainda não tem conta? <Link to="/cadastro">Conhecer o cadastro</Link></Text>
+      <Text size="sm" className={styles.link}>Ainda não tem conta? <Link to="/cadastro">Cadastro</Link></Text>
     </Card><Link to="/">← Voltar à apresentação</Link>
   </Page><PublicFooter /></>
 }

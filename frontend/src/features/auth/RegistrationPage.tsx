@@ -161,7 +161,7 @@ export function RegistrationPage({ profile }: { profile: 'morador' | 'administra
             </Button>
           </form>
           <Text size="sm" className={styles.link}>
-            Já tem conta? <Link to="/login">Entrar</Link>
+            Já tem conta? <Link to="/login">Login</Link>
           </Text>
         </Card>
         <Link to="/cadastro">← Escolher outro tipo de conta</Link>

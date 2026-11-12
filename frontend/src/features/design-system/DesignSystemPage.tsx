@@ -269,7 +269,7 @@ export function DesignSystemPage() {
 
       <Section title="Páginas públicas" description="Componentes da landing page e das prévias de acesso. Links mantêm a semântica de navegação.">
         <div className={styles.publicExamples}>
-          <div className={styles.row}><ButtonLink to="/login">Entrar</ButtonLink><ButtonLink to="/cadastro" variant="secondary" size="sm">Conhecer o cadastro</ButtonLink></div>
+          <div className={styles.row}><ButtonLink to="/login">Login</ButtonLink><ButtonLink to="/cadastro" variant="secondary" size="sm">Cadastro</ButtonLink></div>
           <Heading level={3} size="display">Mais vida em condomínio.</Heading>
           <PublicHeader />
           <FeatureCard icon="package" title="Encomendas organizadas">Do recebimento à confirmação de retirada.</FeatureCard>

@@ -18,7 +18,7 @@ export function AccessPage() {
           <ButtonLink to="/cadastro/morador">Cadastrar como morador</ButtonLink>
         </Card>
         <Card><Heading level={2} size="md">Sou da Administração</Heading><Text tone="secondary">Crie uma conta para administrar condomínios. Tenha seu CPF ou CNPJ em mãos.</Text><ButtonLink to="/cadastro/administracao" variant="secondary">Cadastrar Administração</ButtonLink></Card>
-        <Text size="sm">Já tem uma conta? <Link to="/login">Entrar na sua conta</Link></Text>
+        <Text size="sm">Já tem uma conta? <Link to="/login">Login</Link></Text>
         <Link to="/">← Voltar à apresentação</Link>
       </Page>
       <PublicFooter />

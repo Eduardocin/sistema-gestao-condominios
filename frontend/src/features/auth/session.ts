@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
-import type { Condominium, Identity, LoginResponse, SessionSnapshot, SessionStorage } from './types.ts'
+import type { AccountRegistration, Condominium, Identity, LoginResponse, SessionSnapshot, SessionStorage } from './types.ts'
 import { condominiumStatuses } from './types.ts'
 
 export const sessionKey = 'gestao-condominios.session.v1'
@@ -145,6 +145,22 @@ export function createSessionClient(baseURL: string, storage?: SessionStorage) {
     } catch (error) { throw new Error(accessMessage(error), { cause: error }) }
   }
 
+  async function register(profile: 'morador' | 'administracao', account: AccountRegistration) {
+    logout()
+    const expected = epoch
+    try {
+      const { data } = await publicHttp.post<LoginResponse>(`/contas/${profile}`, account)
+      await acceptLogin(data, expected)
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const reason = error.response.data?.error?.reason
+        const fields: Record<string, string> = { email_ja_cadastrado: 'O e-mail já está cadastrado.', telefone_ja_cadastrado: 'O telefone já está cadastrado.', documento_ja_cadastrado: 'O CPF ou CNPJ já está cadastrado.' }
+        throw new Error(fields[reason] ?? 'Já existe uma conta com esses dados.', { cause: error })
+      }
+      throw new Error(accessMessage(error), { cause: error })
+    }
+  }
+
   async function selectCondominium(id: string) {
     const expected = epoch
     const { data } = await http.post<LoginResponse>('/auth/selecionar-condominio', { condominio_id: id })
@@ -168,7 +184,7 @@ export function createSessionClient(baseURL: string, storage?: SessionStorage) {
   }
 
   return {
-    http, login, selectCondominium, restore, logout,
+    http, login, register, selectCondominium, restore, logout,
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
   }

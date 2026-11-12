@@ -32,6 +32,40 @@ function json(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
+for (const profile of ['morador', 'administracao'] as const) {
+  test(`cadastro ${profile} usa rota pública e inicia sessão validada sem persistir dados pessoais`, async () => {
+    const storage = memoryStorage()
+    const account = { nome: 'Ana Exemplo', telefone: '11987654321', email: 'ana@example.com', senha: 'senha12345', ...(profile === 'administracao' ? { documento: '52998224725' } : {}) }
+    const api = await fixture((req, body, res) => {
+      if (req.url === `/contas/${profile}`) {
+        assert.deepEqual(body, account)
+        assert.equal(req.headers.authorization, undefined)
+        json(res, { ...loginResponse, condominio: null, condominios: [] }, 201)
+      } else {
+        assert.equal(req.url, '/auth/me')
+        assert.equal(req.headers.authorization, 'Bearer access-a')
+        json(res, { ...identity, condominio: null, unidades: [] })
+      }
+    })
+    try {
+      const client = createSessionClient(api.url, storage)
+      await client.register(profile, account)
+      assert.equal(client.getSnapshot().status, 'authenticated')
+      assert.equal(client.getSnapshot().identity?.condominio, null)
+      assert.deepEqual(Object.keys(JSON.parse(storage.getItem(sessionKey)!)).sort(), ['access_token', 'condominios', 'refresh_token'])
+    } finally { await api.close() }
+  })
+}
+
+test('cadastro duplicado informa o campo e mantém a sessão anônima', async () => {
+  const api = await fixture((_req, _body, res) => json(res, { error: { code: 'conflict', reason: 'email_ja_cadastrado' } }, 409))
+  try {
+    const client = createSessionClient(api.url)
+    await assert.rejects(client.register('morador', { nome: 'Ana Exemplo', telefone: '11987654321', email: 'ana@example.com', senha: 'senha12345' }), /e-mail já está cadastrado/i)
+    assert.equal(client.getSnapshot().status, 'anonymous')
+  } finally { await api.close() }
+})
+
 test('login envia o contrato, valida /me com Bearer e persiste somente tokens e vínculos', async () => {
   const storage = memoryStorage()
   const api = await fixture((req, body, res) => {

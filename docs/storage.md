@@ -1,8 +1,43 @@
 # Armazenamento — TASK-26
 
-Serviço interno implementado. A tabela `arquivos` existe desde a migração `20261103_0003`
-(TASK-81); a autorização central já está disponível, mas ainda falta integrar e publicar as rotas HTTP. Não existem endpoints de arquivos nesta
-entrega; contexto e política abaixo são contratos internos, não autenticação.
+Serviço interno e API autenticada implementados. A tabela `arquivos` existe desde a
+migração `20261103_0003` (TASK-81). Bytes ficam no MinIO; metadados no PostgreSQL.
+
+## API autenticada
+
+`POST /api/v1/arquivos/{modulo}?nome=foto.png` recebe **corpo binário**, com
+`Authorization: Bearer ...` e `Content-Type` correspondente ao arquivo. Não usa
+JSON/base64 nem multipart. Módulos: `encomendas`, `ocorrencias`, `suporte`, `fotos`.
+Condomínio e usuário vêm do JWT; parâmetros desconhecidos, incluindo
+`condominio_id`, são rejeitados. O corpo é lido com limite real mesmo sem Content-Length.
+
+Resposta 201: `id`, `nome_original`, `tipo_mime`, `tamanho_bytes`, `criado_em` e
+`download_url` (rota relativa da API). `Location` aponta para essa rota. A chave S3
+não aparece nos metadados públicos. Uma falha ao persistir compensa apenas o objeto
+recém-enviado; falha na compensação registra seu UUID para reconciliação.
+
+| Módulo | Quem envia | Regra adicional |
+| --- | --- | --- |
+| encomendas | Funcionário | Foto registrada pela portaria |
+| ocorrencias | Morador ou Administração | Morador envia `unidade_id` e precisa da aba Ocorrências |
+| suporte | Administração | Anexos de chamados |
+| fotos | Administração | Fotos de funcionários |
+
+`GET /api/v1/arquivos/{id}/download` exige Bearer e retorna `{"url": "...", "expires_in": 60}`,
+com `Cache-Control: no-store`. A URL assinada permite baixar diretamente do MinIO.
+Arquivo de outro condomínio ou fora do escopo retorna o mesmo 404 de um ID inexistente.
+
+Antes da vinculação, apenas quem enviou lê o upload. Depois, vale a autorização do
+recurso: encomendas e ocorrências respeitam unidade e aba do Morador, Administração
+consulta recursos do seu condomínio e Funcionário consulta fotos de encomendas.
+Suporte/documentos do condomínio admitem a exceção de leitura pelo ADM da plataforma.
+Revogar a aba impede emitir novas URLs, inclusive para o autor do upload já vinculado.
+URLs já emitidas continuam válidas até expirar. Arquivos sem condomínio (foto da conta)
+continuam fora deste recorte; as fotos opcionais não bloqueiam o cadastro de contas.
+
+Validação: 422; infraestrutura S3 indisponível: 503 `storage_unavailable`. O serviço
+interno continua oferecendo remoção para compensações autorizadas; não há exclusão
+pública de arquivos de negócio ou pessoas.
 
 ## Ambiente local — TASK-2
 
@@ -65,7 +100,7 @@ storage.remove(ctx, arquivo)
 
 Imports: `Settings/get_settings` em `app.core.config`; `StorageService` em
 `app.modules.storage.service`; `S3Adapter` em `.s3`; tipos em `.types`.
-O exemplo é de integração futura: a política e o contexto autorizado pertencem
+No uso direto pelos módulos, a política e o contexto autorizado pertencem
 ao chamador. Nenhuma rota pode construir contexto de IDs enviados pelo cliente.
 
 A política obrigatória `authorize(ctx, module, action, file)` nega por exceção.
@@ -88,7 +123,7 @@ vinculado. Se a limpeza também falhar, registrar seu ID para reconciliação se
 ocultar a falha original. Remover um arquivo já vinculado exige conferir suas
 referências; não apagar registros de negócio por tabela ou por prefixo.
 
-`StorageNotFound` corresponde ao futuro 404; `StorageValidationError` ao 422;
+`StorageNotFound` corresponde ao 404; `StorageValidationError` ao 422;
 `StorageError` é falha de infraestrutura com mensagem genérica. Não registrar
 credenciais, URLs assinadas ou detalhes das exceções internas.
 
@@ -123,5 +158,6 @@ em MinIO de teste. A suíte S3 cria/remove somente bucket aleatório `teste-*`.
 Sem essas variáveis, os testes de integração ficam como skip; isso não é prova
 de integração. O CI tem um job específico com MinIO real.
 
-TASK-2 ainda requer primeira execução por outro integrante. TASK-26 só pode ser
-fechada após persistência definitiva e teste de acesso cruzado pela API autenticada.
+`tests/test_storage_api.py` cobre autenticação, persistência, acesso cruzado, unidade,
+aba revogada, limites e compensação. O teste marcado `storage` também atravessa a API
+real com token e PostgreSQL, baixa o objeto no MinIO e confere a recusa de leitura anônima.

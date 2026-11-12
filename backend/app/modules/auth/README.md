@@ -6,6 +6,7 @@ Login e emissão de JWT (TASK-80 / US-101). Contrato HTTP em `docs/api-contracts
 | --- | --- |
 | `router.py` | Rotas `/api/v1/auth/*`. Só traduz HTTP para chamadas ao service |
 | `schemas.py` | Formatos de entrada e saída |
+| `presentation.py` | Montagem do `LoginResponse`, compartilhada pelo login e cadastro de contas |
 | `service.py` | Regras: credenciais, bloqueio, escolha do condomínio (R7), renovação do token |
 | `repository.py` | Consultas ao banco |
 | `security.py` | argon2id e JWT (sem banco nem HTTP, fácil de testar) |

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { homePath } from './navigation.ts'
+import { homePath, condominiumNotice } from './navigation.ts'
 import type { Identity } from './types.ts'
 
 const base: Identity = { usuario: { id: 'u', nome: 'Ana Exemplo', email: 'ana@example.com' }, condominio: null, unidades: [], administrador_plataforma: false }
@@ -22,4 +22,11 @@ test('restaurar sessão não abre operações para condomínio pendente, rejeita
       assert.equal(homePath({ ...base, condominio: { ...condominium, status, perfil } }, [condominium]), '/app/sem-condominio')
     }
   }
+})
+
+test('mensagens de acesso distinguem análise, rejeição, desativação e falta de vínculo', () => {
+  assert.match(condominiumNotice('pendente').title, /análise/)
+  assert.match(condominiumNotice('rejeitado').title, /rejeitado/)
+  assert.match(condominiumNotice('desativado').title, /desativado/)
+  assert.match(condominiumNotice(undefined).message, /vínculo/)
 })

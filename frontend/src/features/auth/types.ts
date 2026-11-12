@@ -1,4 +1,5 @@
 export interface User { id: string; nome: string; email: string }
+export interface AccountRegistration { nome: string; telefone: string; email: string; senha: string; documento?: string }
 export type Profile = 'administracao' | 'funcionario' | 'morador'
 export const condominiumStatuses = ['pendente', 'ativo', 'rejeitado', 'desativado'] as const
 export type CondominiumStatus = (typeof condominiumStatuses)[number]

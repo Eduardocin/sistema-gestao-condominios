@@ -2,7 +2,9 @@
 
 Status: proposta para revisão no portão dos leads. Vale para [nucleo.md](nucleo.md) (TASK-78), [convivencia.md](convivencia.md) (TASK-10), [plataforma.md](plataforma.md) (TASK-11) e [portaria.md](portaria.md) (TASK-12). Onde este documento repete o que já está em `portaria.md` ou `health.md`, o texto é o mesmo; o que é novo está marcado como **proposta**.
 
-Nenhuma rota destes contratos está implementada. Todas dependem da autorização central (US-1002) e da [matriz de permissões](../permissoes-e-multitenant.md).
+Os contratos descrevem o conjunto planejado. Consulte os routers e o OpenAPI para
+as rotas implementadas; autenticação, permissões por aba e arquivos já têm APIs.
+Rotas protegidas usam a autorização central (US-1002) e a [matriz de permissões](../permissoes-e-multitenant.md).
 
 ## 1. Base e formato
 
@@ -75,7 +77,8 @@ Fotos, anexos e documentos chegam como `*_arquivo_id`. O upload, a validação d
 ## 8. Do contrato ao OpenAPI
 
 Implementação interna da TASK-26 e políticas atuais: [storage.md](../storage.md).
-O serviço não expõe HTTP antes da autorização central e da persistência definitiva.
+A API de arquivos já integra autorização central e persistência definitiva; consulte
+[storage.md](../storage.md) para rotas, payload binário e regras por recurso.
 Para suporte, PDF até 5 MiB é uma proposta adicional a revisar com Tude.
 
 O FastAPI gera o `/openapi.json` a partir dos schemas Pydantic. Este documento é o contrato "humano" que os schemas devem reproduzir campo a campo. Ao implementar uma rota, o PR atualiza o contrato se algo mudou e inclui testes de contrato (status, campos e códigos de erro) além dos testes negativos da seção 11 da matriz.

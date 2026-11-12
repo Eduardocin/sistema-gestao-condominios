@@ -1,6 +1,6 @@
 # Núcleo — proposta de contrato REST (TASK-78)
 
-Status: rascunho para revisão do Gabriel e do front (Guilherme e Matheus) e aprovação no portão dos leads. Os endpoints de negócio do núcleo abaixo **não estão implementados**. A autenticação da seção 2 é referência ao PR #11 (TASK-80), ainda dependente da sua integração na main.
+Status: rascunho para revisão do Gabriel e do front (Guilherme e Matheus) e aprovação no portão dos leads. O cadastro de contas da seção 3.1–3.2 está implementado na TASK-31, assim como a autenticação da seção 2 (TASK-80). Os demais endpoints de negócio continuam propostas, salvo indicação específica. Detalhes do recorte implementado: [contas](../../backend/app/modules/contas/README.md).
 
 O núcleo é o que existe antes de qualquer módulo de negócio funcionar: contas, condomínio, estrutura do prédio, aprovação pelo ADM, chaves de acesso e vínculo do morador. Também fixa, como referência para o front, as duas rotas de login da TASK-80.
 
@@ -71,7 +71,7 @@ Assinatura HS256 configurada por `JWT_SECRET_KEY`; nomes e limites em `auth.md`.
 trazem `id` e `identificacao`, com o vínculo disponível no banco atual.
 
 **Campos futuros não são garantidos pela TASK-80:** `usuario.tipo_cadastro`
-depende da modelagem de contas do núcleo; permissões por aba dependem da
+é persistido pelo cadastro de contas, mas ainda não é exposto na sessão; permissões por aba dependem da
 TASK-21; múltiplas unidades dependem da tabela morador–unidade. Os exemplos
 das demais seções deste contrato continuam propostas para esses fluxos.
 
@@ -116,7 +116,7 @@ Erros: 409 `conflict` com `reason` = `email_ja_cadastrado` ou `telefone_ja_cadas
 
 `nome` (nome ou razão social, 3 a 120), `documento` (CPF de 11 ou CNPJ de 14 dígitos, **com validação dos dígitos verificadores**, único), `email`, `telefone` e `senha` com as mesmas regras de 3.1. O **documento comprobatório** (ata ou contrato) é opcional e é enviado no cadastro do prédio (seção 4.2), porque o DER o guarda por condomínio (`condominio_documentos`). Resposta 201 igual à de 3.1, com `tipo_cadastro = 'administracao'`. Erros: 409 com `reason` = `email_ja_cadastrado`, `telefone_ja_cadastrado` ou `documento_ja_cadastrado`.
 
-`tipo_cadastro` **não existe** no DER (ver pendências): sem ele, não há como distinguir a conta que pode cadastrar prédios de uma conta de morador sem vínculos.
+`tipo_cadastro` já existe na tabela `usuarios` e é preenchido por estas rotas. A criação de conta não implementa o assistente de cadastro do prédio nem cria vínculos automaticamente.
 
 ### 3.3 Demais rotas de conta (Gabriel, Sprint 3, só resumo)
 
@@ -443,7 +443,7 @@ Referência para o front. A regra completa está na seção 8 da matriz. As abas
 
 | Tema | Decisão ou alinhamento necessário | Quem |
 | --- | --- | --- |
-| `usuarios.tipo_cadastro` | **Proposta:** coluna `tipo_cadastro` (`morador`, `administracao`) no DER. Sem ela, uma conta de morador sem vínculo e uma de Administração são idênticas, e `POST /condominios` ficaria aberta a qualquer conta. Alternativa: `pode_cadastrar_condominio boolean`. | Davi e Paulo |
+| `usuarios.tipo_cadastro` | Coluna existente e preenchida pelos cadastros de morador/Administração (TASK-31). O futuro `POST /condominios` deve exigir `administracao`. | Davi e Paulo |
 | CNPJ duplicado | A regra 6 do DER é `UNIQUE (cnpj)` total, mas a US-203 pede que o CNPJ já cadastrado seja "sinalizado como possível duplicidade" na fila. Com o `UNIQUE`, o segundo cadastro nem chega à fila. **Proposta:** manter o `UNIQUE` (409 no cadastro) e fazer `possivel_duplicidade` apontar para condomínios de **mesmo nome e cidade** ou **mesmo CEP e número**, sinalizando o caso de CNPJ digitado errado. Confirmar. | Paulo, Gabriel e Davi |
 | Vínculo imediato × aprovado | A matriz e o DER (seção 7) preveem solicitar/aprovar; a US-301 vincula direto. Este contrato adota o imediato. | Paulo e Gabriel |
 | Dados do proprietário para o Morador | A US-302 mostra o proprietário ao Morador, mas a decisão 5 do DER diz que são dados que só a Administração vê. **Proposta:** o Morador vê nome, foto, e-mails, WhatsApps e telefone, **sem o documento**. LGPD (US-1007). | Paulo e Gabriel |

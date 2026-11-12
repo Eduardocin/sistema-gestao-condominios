@@ -129,6 +129,15 @@ def _credencial_invalida() -> ApiError:
     return ApiError(401, "not_authenticated", MENSAGEM_CREDENCIAL_INVALIDA)
 
 
+def emitir_sessao_do_usuario(
+    session: Session, *, usuario: Usuario, settings: Settings
+) -> SessaoEmitida:
+    """Emite a sessão após validar credenciais ou persistir um cadastro novo."""
+    acessos = _acessos_do_usuario(session, usuario)
+    selecionado = acessos[0] if len(acessos) == 1 and acessos[0].liberado else None
+    return _emitir_sessao(usuario, acessos, selecionado, settings)
+
+
 def _nao_autenticado() -> ApiError:
     return ApiError(
         401,
@@ -184,9 +193,7 @@ def login(
         session.commit()
 
     # 4) Descobre em qual condomínio o token já nasce.
-    acessos = _acessos_do_usuario(session, usuario)
-    selecionado = acessos[0] if len(acessos) == 1 and acessos[0].liberado else None
-    return _emitir_sessao(usuario, acessos, selecionado, settings)
+    return emitir_sessao_do_usuario(session, usuario=usuario, settings=settings)
 
 
 def selecionar_condominio(

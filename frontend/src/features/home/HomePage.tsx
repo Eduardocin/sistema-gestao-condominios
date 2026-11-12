@@ -28,10 +28,9 @@ export function HomePage() {
             <Heading level={1} size="display" id="apresentacao">Menos tarefas soltas. Mais vida em condomínio.</Heading>
             <Text tone="secondary">Moradores, administração e portaria mais próximos. Uma plataforma para organizar as rotinas e dar espaço ao que importa: viver bem.</Text>
             <div className={styles.actions}>
-              <ButtonLink to="/cadastro">Conhecer o cadastro <span aria-hidden="true">→</span></ButtonLink>
-              <ButtonLink to="/login" variant="secondary">Já tenho acesso</ButtonLink>
+              <ButtonLink to="/cadastro">Criar conta <span aria-hidden="true">→</span></ButtonLink>
+              <ButtonLink to="/login" variant="secondary">Entrar</ButtonLink>
             </div>
-            <Text size="xs" tone="secondary">Acesso e cadastro disponíveis em breve.</Text>
           </div>
           <CommunityVisual />
         </section>

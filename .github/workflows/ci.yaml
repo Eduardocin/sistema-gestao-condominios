@@ -66,13 +66,30 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
 
   storage:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci_local_only
+          POSTGRES_DB: storage_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d storage_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
+      DATABASE_URL: postgresql+psycopg://ci:ci_local_only@127.0.0.1:5432/storage_test
+      TEST_DATABASE_URL: postgresql+psycopg://ci:ci_local_only@127.0.0.1:5432/storage_test
       TEST_STORAGE_ENDPOINT: http://localhost:9000
       TEST_STORAGE_PUBLIC_ENDPOINT: http://127.0.0.1:9000
       TEST_STORAGE_ACCESS_KEY: ci_storage_user
@@ -101,7 +118,9 @@ jobs:
           curl -fsS http://127.0.0.1:9000/minio/health/live
       - name: Test private objects and externally signed downloads
         working-directory: backend
-        run: python -m pytest -q -m storage
+        run: |
+          python -m alembic upgrade head
+          python -m pytest -q -m storage
       - name: Stop dedicated storage
         if: always()
         run: docker rm -f storage-test || true

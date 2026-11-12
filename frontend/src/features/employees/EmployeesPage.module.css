@@ -1,0 +1,54 @@
+.content,
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.header,
+.actions,
+.pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.content table {
+  min-width: 40rem;
+}
+.header {
+  justify-content: space-between;
+}
+.responsibleForm,
+.filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block: var(--space-5);
+}
+.responsibleForm > :first-child,
+.filters > :first-child {
+  flex: 1 1 14rem;
+}
+/* Em linha, a margem inferior do campo desalinharia o botão (align-items: end). */
+.responsibleForm > div,
+.filters > div {
+  margin-bottom: 0;
+}
+/* Mesma altura do campo: herda o line-height usado pelo input/select. */
+.responsibleForm > button,
+.filters > button {
+  line-height: inherit;
+}
+.pagination {
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+@media (max-width: 40rem) {
+  .filters > *,
+  .responsibleForm > * {
+    flex: 1 1 100%;
+  }
+}

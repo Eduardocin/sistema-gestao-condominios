@@ -9,6 +9,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.modules.auth import service
 from app.modules.auth.dependencies import UsuarioAutenticado, get_usuario_autenticado
+from app.modules.auth.presentation import resposta_de_sessao
 from app.modules.auth.rate_limit import LoginRateLimiter, get_login_rate_limiter
 from app.modules.auth.schemas import (
     CondominioAcessoOut,
@@ -33,21 +34,6 @@ _RESPOSTAS_401: dict[int | str, dict[str, Any]] = {
 }
 
 
-def _resposta_de_sessao(sessao: service.SessaoEmitida) -> LoginResponse:
-    return LoginResponse(
-        access_token=sessao.access_token,
-        refresh_token=sessao.refresh_token,
-        expires_in=sessao.expires_in,
-        usuario=UsuarioOut.model_validate(sessao.usuario),
-        condominio=(
-            CondominioAcessoOut.model_validate(sessao.selecionado) if sessao.selecionado else None
-        ),
-        condominios=[CondominioAcessoOut.model_validate(a) for a in sessao.acessos],
-        requer_selecao=sessao.requer_selecao,
-        administrador_plataforma=sessao.usuario.administrador_plataforma,
-    )
-
-
 @router.post(
     "/login",
     response_model=LoginResponse,
@@ -63,7 +49,7 @@ def login(
     sessao = service.login(
         session, email=dados.identificador, senha=dados.senha, limiter=limiter, settings=settings
     )
-    return _resposta_de_sessao(sessao)
+    return resposta_de_sessao(sessao)
 
 
 @router.post(
@@ -88,7 +74,7 @@ def selecionar_condominio(
         condominio_id=dados.condominio_id,
         settings=settings,
     )
-    return _resposta_de_sessao(sessao)
+    return resposta_de_sessao(sessao)
 
 
 @router.post(

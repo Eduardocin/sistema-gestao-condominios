@@ -3,6 +3,9 @@
 ## Entregue
 
 - Login com e-mail/senha no contrato existente do backend.
+- Cadastro separado de Morador e Administração, com validação e sessão automática.
+- Gestão de funcionários pela Administração: lista, busca, paginação, cadastro e desligamento.
+- Cadastro dos responsáveis necessários às ações da conta compartilhada.
 - Seleção de condomínio para múltiplos vínculos e troca posterior.
 - Validação por `/auth/me` antes de mostrar a área interna, inclusive ao recarregar.
 - Sessão por aba em `sessionStorage`, sem guardar senha.
@@ -25,16 +28,21 @@ Rede indisponível ou erro temporário durante a restauração mantém tokens e 
 | Rota | Comportamento |
 | --- | --- |
 | `/login` | Formulário real; sessão válida segue para sua área |
+| `/cadastro` | Escolha entre conta de Morador e Administração |
+| `/cadastro/morador`, `/cadastro/administracao` | Cadastro real integrado à API |
 | `/selecionar-condominio` | Seleção autenticada entre vínculos |
 | `/app` | Resolve o destino pelo contexto validado |
 | `/app/morador` | Visão geral e unidades retornadas pela API |
 | `/app/portaria` | Visão geral do funcionário |
 | `/app/administracao` | Visão geral da administração |
+| `/app/administracao/funcionarios` | Gestão da equipe e cadastro de responsáveis |
 | `/app/plataforma` | Visão geral do administrador da plataforma |
 | `/app/sem-condominio` | Conta autenticada sem condomínio disponível para operações |
 | `/acesso-negado` | Mensagem de restrição e retorno à própria área |
 
-Cadastro permanece uma prévia desabilitada. Serviços operacionais aparecem como indisponíveis nas áreas reais. `/prototipos/portaria` continua sendo demonstração pública com dados fictícios em memória, sem integração operacional.
+Cadastro e funcionários têm integração real. Os demais serviços ainda não implementados
+aparecem como indisponíveis. `/prototipos/portaria` continua sendo demonstração pública
+com dados fictícios em memória, sem integração operacional.
 
 ## Limites da sessão
 
@@ -43,9 +51,26 @@ Cadastro permanece uma prévia desabilitada. Serviços operacionais aparecem com
 - Sair limpa esta aba; não há endpoint de revogação remota no contrato atual.
 - Se o navegador bloquear o storage, a sessão funciona em memória e se perde ao recarregar.
 - A sessão reconhece os quatro estados do condomínio: pendente, ativo, rejeitado e desativado, conforme o contrato ampliado no PR #17. Somente ativo abre as áreas operacionais; o fluxo de correção cadastral permanece fora deste recorte.
-- Cadastro, recuperação de senha, funcionários e permissões por aba ainda faltam: esta entrega não conclui a TASK-31, nem todos os itens da TASK-15 (por exemplo, formatador e validação de uso pela equipe).
+- Recuperação de senha, wizard do condomínio, vínculo com unidades, edição/histórico de
+  funcionários e tela de permissões por aba pertencem a entregas posteriores.
+- A base de rotas/sessão e o recorte de cadastro/lista/cadastro/desligamento de funcionários
+  atendem às TASK-15 e TASK-31. Prettier tem adoção gradual conforme o README do frontend.
 
 ## Evidências de validação
+
+Em 12/11/2026, a conclusão das TASK-15/26/31 passou por lint, Prettier, 26 testes
+frontend e build com typecheck. A API integrada passou por Ruff, Mypy, Alembic check
+e 411 testes com PostgreSQL 17 e MinIO reais, sem skips. No navegador foram exercitados
+cadastro de morador com sessão automática, senha com letras acentuadas, login da
+Administração, estado vazio, cadastro de responsável, cadastro e desligamento de
+funcionário e consulta dos desligados. No celular, os formulários se reorganizam e
+a tabela tem rolagem horizontal dentro do painel, sem alargar a página. Os testes
+visuais usaram banco e contas fictícias, separados do banco vazio da suíte.
+
+Revisões independentes de backend e frontend não deixaram bloqueios. Foram corrigidos
+compensação do upload sem depender do banco indisponível, consulta no repositório,
+limite do nome de responsável, senha Unicode, largura da tabela e documentação antiga.
+As evidências históricas abaixo descrevem entregas anteriores.
 
 Em 2026-11-01, lint, 17 testes e build com typecheck passaram em Node 24 no Docker. Os testes incluem os oito fluxos existentes da portaria e nove verificações de sessão/navegação, usando um servidor HTTP local real para os contratos do cliente.
 

@@ -32,6 +32,16 @@
 .filters > :first-child {
   flex: 1 1 14rem;
 }
+/* Em linha, a margem inferior do campo desalinharia o botão (align-items: end). */
+.responsibleForm > div,
+.filters > div {
+  margin-bottom: 0;
+}
+/* Mesma altura do campo: herda o line-height usado pelo input/select. */
+.responsibleForm > button,
+.filters > button {
+  line-height: inherit;
+}
 .pagination {
   justify-content: flex-end;
   margin-top: var(--space-4);

@@ -43,7 +43,7 @@ export function PublicHeader() {
             <a href="/#para-quem">Para quem é</a>
             <a href="/#como-funciona">Como funciona</a>
           </nav>
-          <ButtonLink to="/login" variant="secondary">Login <span aria-hidden="true">↗</span></ButtonLink>
+          <ButtonLink to="/login" variant="secondary">Entrar <span aria-hidden="true">↗</span></ButtonLink>
         </div>
       </header>
     </>
@@ -56,7 +56,7 @@ export function PublicFooter() {
       <div className={styles.footerInner}>
         <div><SiteBrand /><Text size="sm" tone="secondary" className={styles.footerNote}>Tecnologia para uma rotina mais próxima.</Text></div>
         <div className={styles.footerMeta}>
-          <nav aria-label="Links do rodapé"><Link to="/login">Login</Link><Link to="/cadastro">Cadastro</Link></nav>
+          <nav aria-label="Links do rodapé"><Link to="/login">Entrar</Link><Link to="/cadastro">Criar conta</Link></nav>
           <Text size="xs" tone="secondary">Gestão de Condomínios · Conectando pessoas e rotinas.</Text>
         </div>
       </div>
@@ -105,7 +105,7 @@ export function PublicCallToAction() {
   return (
     <div className={styles.callToAction}>
       <div><Text size="sm" className={styles.calloutEyebrow}>MAIS PROXIMIDADE. MENOS COMPLICAÇÃO.</Text><Heading level={2}>Um novo jeito de cuidar do seu condomínio.</Heading><Text tone="secondary">Mais praticidade para moradores e mais clareza para quem cuida do condomínio.</Text></div>
-      <ButtonLink to="/cadastro">Cadastro <span aria-hidden="true">→</span></ButtonLink>
+      <ButtonLink to="/cadastro">Criar conta <span aria-hidden="true">→</span></ButtonLink>
     </div>
   )
 }

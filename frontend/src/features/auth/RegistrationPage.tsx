@@ -81,7 +81,7 @@ export function RegistrationPage({ profile }: { profile: 'morador' | 'administra
         </div>
         <Card>
           <Heading level={2} size="md">
-            {administration ? 'Cadastro da Administração' : 'Cadastro de morador'}
+            Criar sua conta
           </Heading>
           <form onSubmit={submit} className={styles.form}>
             <Input
@@ -161,7 +161,7 @@ export function RegistrationPage({ profile }: { profile: 'morador' | 'administra
             </Button>
           </form>
           <Text size="sm" className={styles.link}>
-            Já tem conta? <Link to="/login">Login</Link>
+            Já tem uma conta? <Link to="/login">Entrar</Link>
           </Text>
         </Card>
         <Link to="/cadastro">← Escolher outro tipo de conta</Link>

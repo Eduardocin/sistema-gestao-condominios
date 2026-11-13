@@ -1,6 +1,6 @@
-# Portaria — proposta de contrato REST (TASK-12)
+# Portaria — contrato REST (TASK-12)
 
-Status: rascunho para revisão com modelo de dados, autorização central e armazenamento. Endpoints abaixo **não estão implementados**. A prévia `/prototipos/portaria` não os chama; IDs curtos e fotos em memória usados nela não são payloads de produção.
+Status: o fluxo de encomendas foi implementado na TASK-36 e está descrito conforme a API atual. As seções de visitantes permanecem como contrato planejado, ainda não implementado. A prévia `/prototipos/portaria` não chama a API; IDs curtos e fotos em memória usados nela não são payloads de produção.
 
 Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pelo servidor. Na interface, datas são apresentadas no fuso do condomínio. Atualizações de status usam ações explícitas, sem `PATCH status` genérico.
 
@@ -8,7 +8,7 @@ Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pel
 
 - Exigir JWT válido, condomínio ativo e vínculo/permissão carregados pela autorização central. `condominio_id` vem do contexto, nunca da URL ou do corpo. Rejeitar campos extras nos schemas de escrita.
 - Aplicar escopo do condomínio a todos os recursos e referências: unidade, morador, funcionário, visitante, autorização e arquivo. Referências externas ao escopo retornam 404 genérico.
-- Morador acessa apenas unidades com vínculo ativo e aba Encomendas/Visitantes habilitada. Confirmação de encomenda também exige ser o recebedor registrado. A regra consta da matriz após o PR #5; sua implementação na autorização central continua pendente.
+- Morador acessa apenas unidades com vínculo ativo e aba correspondente habilitada. Para encomendas, a confirmação também exige que sua conta esteja vinculada ao morador ativo identificado como recebedor na entrega.
 - `funcionario_id` identifica um nome ativo do condomínio; registrar também a identidade da conta autenticada no evento de auditoria. A conta compartilhada não identifica sozinha quem atuou.
 - Listas: `{"items": [], "page": 1, "page_size": 20, "total": 0}`. `page` >= 1, `page_size` de 1 a 100; ordenação por data decrescente e ID como desempate. Busca e filtros sempre dentro do escopo autorizado.
 - Objeto individual retorna diretamente seu JSON. Erros seguem `{"error":{"code":"...","message":"..."}}`, compatível com a estrutura de [health.md](health.md) e com os códigos propostos na matriz.
@@ -20,13 +20,14 @@ Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pel
 | 404 | `not_found` | Recurso ou referência inexistente ou fora do escopo; mensagem genérica |
 | 409 | `conflict` | Transição repetida, visita já ativa ou autorização inválida/expirada |
 | 422 | `validation_error` | Campos inválidos, foto ausente, autorização não concedida |
+| 503 | `storage_unavailable` | Storage temporariamente indisponível durante o recebimento |
 | 500 | `internal_error` | Falha inesperada com mensagem genérica, sem detalhes internos |
 
 `403` não deve ser usado para revelar a existência de um objeto de outro condomínio. Os nomes de códigos são proposta para o módulo; o backend atual de health ainda usa `http_error` em erros HTTP genéricos.
 
 ## Consultas para formulários
 
-Funcionário: `GET /portaria/unidades?busca=101`, `GET /portaria/unidades/{id}/moradores`, `GET /portaria/funcionarios` e `GET /portaria/visitantes?busca=Carlos`.
+Funcionário: `GET /portaria/unidades?busca=101`, `GET /portaria/unidades/{id}/moradores` e `GET /funcionarios?ativo=true`. Para a lista de quem pode confirmar uma entrega, passar `somente_confirmaveis=true` aos moradores; o backend retorna somente vínculos ativos com a aba Encomendas ativa. A consulta de visitantes segue planejada, ainda não implementada.
 
 Retornar apenas `id` e identificação/nome necessários ao formulário, com paginação comum; listar somente unidades, vínculos e nomes ativos do condomínio. Documento pessoal e outros dados de cadastro não integram essas respostas. O servidor valida novamente todas as referências na escrita.
 
@@ -34,25 +35,15 @@ Retornar apenas `id` e identificação/nome necessários ao formulário, com pag
 
 | Método e rota | Perfil / escopo | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `GET /encomendas` | Funcionário (condomínio); morador (suas unidades) | Query `busca`, `status`, `page`, `page_size` | 200, lista |
-| `GET /encomendas/{id}` | Mesmo escopo | — | 200, objeto com histórico |
-| `POST /encomendas` | Funcionário | JSON de recebimento | 201, objeto; `Location` do recurso |
-| `POST /encomendas/{id}/entrega` | Funcionário | `recebedor_id`, `funcionario_id` | 200, objeto atualizado |
+| `GET /encomendas` | Funcionário e Administração (condomínio); morador (suas unidades com aba ativa) | Query `busca`, `status`, `page`, `page_size` | 200, lista |
+| `GET /encomendas/{id}` | Mesmo escopo de leitura | — | 200, objeto com histórico |
+| `POST /encomendas` | Funcionário ativo | `multipart/form-data`: `unidade_id`, `destinatario_morador_unidade_id`, `descricao`, `recebido_por_funcionario_id`, `foto` | 201, objeto; `Location` do recurso |
+| `POST /encomendas/{id}/entrega` | Funcionário ativo | JSON `recebedor_morador_unidade_id`, `entregue_por_funcionario_id` | 200, objeto atualizado |
 | `POST /encomendas/{id}/confirmacao` | Morador que recebeu | `{}`; identidade vem do contexto | 200, objeto atualizado |
 
-Recebimento:
+No recebimento, a foto é enviada no mesmo `multipart/form-data` que os demais campos. Aceita JPG/JPEG, PNG ou WebP até 5 MiB. O backend valida a imagem e a envia ao storage privado; a transação registra os metadados do arquivo, a encomenda, auditoria e o evento de e-mail na outbox. `condominio_id` e identidade do funcionário vêm do contexto autenticado, não do formulário. O evento `encomenda_registrada` fica pendente em `envios_email`; o worker de envio da US-803 ainda não está implementado, portanto o sucesso do recebimento não significa que o e-mail foi enviado.
 
-```json
-{
-  "unidade_id": "UUID",
-  "destinatario_id": "UUID",
-  "descricao": "Caixa pequena · Livraria",
-  "foto_arquivo_id": "UUID",
-  "funcionario_id": "UUID"
-}
-```
-
-Descrição de 1 a 200 caracteres após trim (proposta). Foto obrigatória: arquivo de imagem validado, pertencente ao contexto e destinado a este módulo. O armazenamento da TASK-26 fornecerá o ID; não aceitar URL arbitrária, caminho de disco nem imagem base64 neste endpoint. JPG/PNG/WebP e 5 MB são limites propostos, sujeitos à revisão da TASK-26. O upload e sua limpeza não são definidos como implementados por este contrato.
+`descricao` aceita de 1 a 200 caracteres após trim. A unidade, o morador destinatário e o funcionário informado devem estar ativos e pertencer ao condomínio autenticado; o morador deve ter vínculo ativo com a unidade. Campos extras, inclusive `condominio_id`, são rejeitados.
 
 Objeto de encomenda:
 
@@ -64,17 +55,18 @@ Objeto de encomenda:
   "descricao": "Caixa pequena · Livraria",
   "foto_arquivo_id": "UUID",
   "status": "aguardando_retirada",
-  "recebimento": {"em": "2026-10-20T15:00:00Z", "funcionario_id": "UUID"},
+  "recebimento": {"em": "2026-10-20T15:00:00Z", "funcionario_id": "UUID", "funcionario_nome": "Carlos Silva"},
   "entrega": null,
-  "confirmacao": null
+  "confirmacao": null,
+  "pode_confirmar": false
 }
 ```
 
-Após entrega, `status = entregue_aguardando_confirmacao` e `entrega = {"em":"...","funcionario_id":"UUID","recebedor_id":"UUID"}`. Após confirmação, `status = retirada_confirmada` e `confirmacao = {"em":"...","morador_id":"UUID"}`. Nomes de exibição dos responsáveis podem ser incluídos nas estruturas de histórico, somente no escopo autorizado. Datas e atores anteriores são preservados.
+O objeto também contém `unidade`, `destinatario` (ambos com `id` e nome/identificação) e `foto_arquivo_id`. Após entrega, `status = entregue_aguardando_confirmacao` e `entrega` inclui data, funcionário que registrou e morador recebedor, com nomes para exibição. Após confirmação, `status = retirada_confirmada` e `confirmacao` inclui data e morador. `pode_confirmar` só é verdadeiro na resposta ao morador ativo que recebeu a encomenda. Datas são emitidas pelo servidor em ISO 8601 com fuso.
 
-Regras: destinatário e recebedor têm vínculo ativo na unidade; recebedor pode diferir do destinatário. Entrega só parte de `aguardando_retirada`; confirmação só parte de `entregue_aguardando_confirmacao`. Repetição retorna 409. Morador que não é o recebedor não tem acesso à ação sobre esse objeto (404). Pendências não expiram nem se confirmam automaticamente. A portaria não possui endpoint para confirmar pelo morador.
+Regras: destinatário e recebedor têm vínculo ativo na unidade; recebedor pode diferir do destinatário e também precisa ter acesso ativo à aba Encomendas. A opção `somente_confirmaveis=true` na consulta de moradores filtra a lista da portaria por essa permissão. Entrega só parte de `aguardando_retirada`; confirmação só parte de `entregue_aguardando_confirmacao`. Repetição retorna 409. Uma encomenda de outro condomínio ou fora das unidades autorizadas retorna 404; o morador que não é recebedor não pode confirmar e recebe 404. Perfil/aba sem acesso retorna 403; conteúdo ou referências inválidas retornam 422; indisponibilidade do MinIO retorna 503. Pendências não expiram nem se confirmam automaticamente. A portaria não possui endpoint para confirmar pelo morador.
 
-Leitura da foto deve ser protegida pelo escopo da encomenda. O mecanismo de download e a eventual URL temporária serão definidos na TASK-26; não expor arquivos publicamente.
+Para ler a foto, usar `GET /arquivos/{foto_arquivo_id}/download` com Bearer. A rota verifica o escopo da encomenda e devolve uma URL assinada temporária; o storage permanece privado.
 
 ## Autorização prévia por período
 

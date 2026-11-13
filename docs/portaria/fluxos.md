@@ -8,7 +8,7 @@ Identificar unidade e destinatário com vínculo ativo → descrever a encomenda
 
 ## 02 — Entrega e confirmação
 
-Localizar encomenda aguardando retirada → identificar quem retira e conferir vínculo ativo na mesma unidade → entregar fisicamente → registrar funcionário e data/hora → mudar para **Entregue, aguardando confirmação** → o morador que recebeu confirma pela própria conta → mudar para **Retirada confirmada**.
+Localizar encomenda aguardando retirada → identificar quem retira e conferir vínculo ativo e acesso à aba Encomendas na mesma unidade → entregar fisicamente → registrar funcionário e data/hora → mudar para **Entregue, aguardando confirmação** → o morador que recebeu confirma pela própria conta → mudar para **Retirada confirmada**.
 
 O destinatário ou outro morador ativo da unidade pode retirar. Recebimento, entrega e confirmação mantêm atores e horários distintos. Não repetir a entrega. A portaria consulta pendências e cobra confirmação por contato externo; não há assinatura, confirmação automática, prazo de encerramento nem confirmação administrativa em nome do morador.
 

@@ -8,22 +8,65 @@ import { PortariaPage } from '../features/portaria/PortariaPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RegistrationPage } from '../features/auth/RegistrationPage'
 import { EmployeesPage } from '../features/employees/EmployeesPage'
-import { AccessDenied, AppEntry, RequireSession, SelectCondominiumPage } from '../features/auth/SessionPages'
+import {
+  AccessDenied,
+  AppEntry,
+  RequireSession,
+  SelectCondominiumPage,
+} from '../features/auth/SessionPages'
 import { WorkspacePage } from '../features/auth/WorkspacePage'
+import { PackagesWorkspacePage } from '../features/portaria/PackagesWorkspacePage'
+import { ResidentPackagesPage } from '../features/portaria/ResidentPackagesPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/cadastro', element: <AccessPage /> },
   { path: '/cadastro/morador', element: <RegistrationPage key="morador" profile="morador" /> },
-  { path: '/cadastro/administracao', element: <RegistrationPage key="administracao" profile="administracao" /> },
+  {
+    path: '/cadastro/administracao',
+    element: <RegistrationPage key="administracao" profile="administracao" />,
+  },
   { path: '/status', element: <StatusPage /> },
   { path: '/design-system', element: <DesignSystemPage /> },
   { path: '/prototipos/portaria', element: <PortariaPage /> },
   { path: '/selecionar-condominio', element: <SelectCondominiumPage /> },
   { path: '/app', element: <AppEntry /> },
-  { path: '/app/administracao/funcionarios', element: <RequireSession><EmployeesPage /></RequireSession> },
-  ...['morador', 'portaria', 'administracao', 'plataforma', 'sem-condominio'].map((area) => ({ path: `/app/${area}`, element: <WorkspacePage area={area} /> })),
-  { path: '/acesso-negado', element: <RequireSession><AccessDenied /></RequireSession> },
+  {
+    path: '/app/administracao/funcionarios',
+    element: (
+      <RequireSession>
+        <EmployeesPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/portaria/encomendas',
+    element: (
+      <RequireSession>
+        <PackagesWorkspacePage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/morador/encomendas',
+    element: (
+      <RequireSession>
+        <ResidentPackagesPage />
+      </RequireSession>
+    ),
+  },
+  ...['morador', 'portaria', 'administracao', 'plataforma', 'sem-condominio'].map((area) => ({
+    path: `/app/${area}`,
+    element: <WorkspacePage area={area} />,
+  })),
+  {
+    path: '/acesso-negado',
+    element: (
+      <RequireSession>
+        <AccessDenied />
+      </RequireSession>
+    ),
+  },
   { path: '*', element: <NotFoundPage /> },
 ])

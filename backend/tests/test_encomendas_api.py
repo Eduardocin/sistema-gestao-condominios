@@ -1,18 +1,24 @@
 """Consultas reais de encomendas com isolamento de condomínio e permissão por unidade."""
 
+import io
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
 from app.main import create_app
+from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.encomendas.models import Encomenda
 from app.modules.funcionarios.models import Funcionario
+from app.modules.notificacoes.models import EnvioEmail
 from app.modules.storage.models import Arquivo
 from app.modules.unidades.models import MoradorUnidade, PermissaoAba
+from app.modules.usuarios.models import Usuario
 from tests.autorizacao.cenario import montar_predio
 from tests.autorizacao.conftest import session as session
 from tests.isolamento.cenario import criar_usuario
@@ -119,6 +125,42 @@ def permitir_aba_encomendas(session: Session, predio) -> PermissaoAba:
     session.add(permissao)
     session.flush()
     return permissao
+
+
+def foto_png() -> bytes:
+    imagem = Image.new("RGB", (2, 2), color="white")
+    conteudo = io.BytesIO()
+    imagem.save(conteudo, format="PNG")
+    return conteudo.getvalue()
+
+
+def contar(session: Session, modelo) -> int:
+    return session.scalar(select(func.count()).select_from(modelo)) or 0
+
+
+def receber_encomenda(
+    client,
+    predio,
+    funcionario: Funcionario,
+    *,
+    unidade_id=None,
+    morador_id=None,
+    campos_extras: dict[str, str] | None = None,
+):
+    campos = {
+        "unidade_id": str(unidade_id or predio.unidade_101.id),
+        "destinatario_morador_unidade_id": str(morador_id or predio.morador_unidade.id),
+        "descricao": "Caixa de livros",
+        "recebido_por_funcionario_id": str(funcionario.id),
+    }
+    if campos_extras:
+        campos.update(campos_extras)
+    return client.post(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("funcionario"),
+        data=campos,
+        files={"foto": ("nota.png", foto_png(), "image/png")},
+    )
 
 
 def test_listar_encomendas_filtra_status_busca_pagina_e_condominio(client, session):
@@ -286,3 +328,188 @@ def test_opcoes_da_portaria_omitem_unidade_e_moradores_inativos(client, session)
     assert [item["id"] for item in unidades.json()["items"]] == [str(predio.unidade_101.id)]
     assert [item["id"] for item in moradores.json()["items"]] == [str(predio.morador_unidade.id)]
     assert proibido_ao_morador.status_code == 403
+
+
+def test_recebimento_multipart_grava_encomenda_foto_auditoria_e_outbox(client, session, adapter):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    totais_antes = {
+        modelo: contar(session, modelo)
+        for modelo in (Encomenda, Arquivo, RegistroAuditoria, EnvioEmail)
+    }
+    conteudo_foto = foto_png()
+
+    resposta = receber_encomenda(client, predio, funcionario)
+
+    assert resposta.status_code == 201, resposta.text
+    pacote_id = UUID(resposta.json()["id"])
+    assert resposta.headers["location"] == f"/api/v1/encomendas/{pacote_id}"
+    pacote = session.get(Encomenda, pacote_id)
+    assert pacote is not None
+    arquivo = session.get(Arquivo, pacote.foto_nota_arquivo_id)
+    assert arquivo is not None
+    assert arquivo.condominio_id == predio.condominio.id
+    assert arquivo.nome_original == "nota.png"
+    assert arquivo.tipo_mime == "image/png"
+    assert adapter.objects == {arquivo.chave_storage: conteudo_foto}
+    assert pacote.status == "aguardando_retirada"
+    assert pacote.registrada_em is not None
+    assert contar(session, Encomenda) == totais_antes[Encomenda] + 1
+    assert contar(session, Arquivo) == totais_antes[Arquivo] + 1
+
+    auditoria = session.scalar(
+        select(RegistroAuditoria).where(
+            RegistroAuditoria.acao == "encomenda.receber",
+            RegistroAuditoria.recurso_id == pacote_id,
+        )
+    )
+    assert auditoria is not None
+    assert auditoria.condominio_id == predio.condominio.id
+    assert auditoria.usuario_id == predio.funcionario.id
+    assert auditoria.responsavel_nome == funcionario.nome
+    assert auditoria.perfil == "funcionario"
+    assert contar(session, RegistroAuditoria) == totais_antes[RegistroAuditoria] + 1
+
+    notificacao = session.scalar(
+        select(EnvioEmail).where(
+            EnvioEmail.evento == "encomenda_registrada",
+            EnvioEmail.recurso_id == pacote_id,
+        )
+    )
+    assert notificacao is not None
+    assert notificacao.condominio_id == predio.condominio.id
+    assert notificacao.destinatario == predio.morador.email
+    assert notificacao.status == "pendente"
+    assert notificacao.enviado_em is None
+    assert contar(session, EnvioEmail) == totais_antes[EnvioEmail] + 1
+
+
+def test_recebimento_rejeita_referencias_de_outro_condominio(client, session, adapter):
+    predio_a = montar_predio(session, "Residencial Aurora")
+    predio_b = montar_predio(session, "Residencial Boreal")
+    funcionario_b = criar_funcionario(session, predio_b)
+    totais_antes = tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo))
+
+    resposta = receber_encomenda(
+        client,
+        predio_a,
+        funcionario_b,
+        unidade_id=predio_b.unidade_101.id,
+        morador_id=predio_b.morador_unidade.id,
+    )
+
+    assert resposta.status_code == 404, resposta.text
+    assert tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo)) == totais_antes
+    assert adapter.objects == {}
+
+
+def test_recebimento_rejeita_condominio_id_enviado_pelo_cliente(client, session, adapter):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    totais_antes = tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo))
+
+    resposta = receber_encomenda(
+        client,
+        predio,
+        funcionario,
+        campos_extras={"condominio_id": str(predio.condominio.id)},
+    )
+
+    assert resposta.status_code == 422, resposta.text
+    assert tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo)) == totais_antes
+    assert adapter.objects == {}
+
+
+def test_recebimento_rejeita_funcionario_inativo(client, session, adapter):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio, ativo=False)
+    totais_antes = tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo))
+
+    resposta = receber_encomenda(client, predio, funcionario)
+
+    assert resposta.status_code == 404, resposta.text
+    assert tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo)) == totais_antes
+    assert adapter.objects == {}
+
+
+def test_recebimento_rejeita_destinatario_sem_vinculo_ativo_na_unidade(client, session, adapter):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    outro_morador = Usuario(
+        nome="Morador da unidade vizinha",
+        email=f"vizinho-{uuid4().hex}@exemplo.test",
+        tipo_cadastro="morador",
+        ativo=True,
+    )
+    session.add(outro_morador)
+    session.flush()
+    vinculo_outra_unidade = MoradorUnidade(
+        condominio_id=predio.condominio.id,
+        unidade_id=predio.unidade_102.id,
+        usuario_id=outro_morador.id,
+        status="ativo",
+        origem="cadastro",
+    )
+    session.add(vinculo_outra_unidade)
+    session.flush()
+    totais_antes = tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo))
+
+    resposta = receber_encomenda(
+        client,
+        predio,
+        funcionario,
+        unidade_id=predio.unidade_101.id,
+        morador_id=vinculo_outra_unidade.id,
+    )
+
+    assert resposta.status_code == 404, resposta.text
+    assert tuple(contar(session, modelo) for modelo in (Encomenda, Arquivo)) == totais_antes
+    assert adapter.objects == {}
+
+
+def test_falha_no_storage_nao_grava_encomenda(client, session, adapter):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    totais_antes = tuple(
+        contar(session, modelo) for modelo in (Encomenda, Arquivo, RegistroAuditoria, EnvioEmail)
+    )
+
+    def falhar_upload(key, data, content_type):
+        raise OSError("falha simulada do storage")
+
+    adapter.put = falhar_upload
+    resposta = receber_encomenda(client, predio, funcionario)
+
+    assert resposta.status_code == 503, resposta.text
+    assert (
+        tuple(
+            contar(session, modelo)
+            for modelo in (Encomenda, Arquivo, RegistroAuditoria, EnvioEmail)
+        )
+        == totais_antes
+    )
+    assert adapter.objects == {}
+
+
+def test_falha_no_commit_compensa_objeto_recente(client, session, adapter, monkeypatch):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    totais_antes = tuple(
+        contar(session, modelo) for modelo in (Encomenda, Arquivo, RegistroAuditoria, EnvioEmail)
+    )
+
+    def falhar_commit():
+        raise RuntimeError("falha simulada de commit")
+
+    monkeypatch.setattr(session, "commit", falhar_commit)
+    resposta = receber_encomenda(client, predio, funcionario)
+
+    assert resposta.status_code == 500, resposta.text
+    assert (
+        tuple(
+            contar(session, modelo)
+            for modelo in (Encomenda, Arquivo, RegistroAuditoria, EnvioEmail)
+        )
+        == totais_antes
+    )
+    assert adapter.objects == {}

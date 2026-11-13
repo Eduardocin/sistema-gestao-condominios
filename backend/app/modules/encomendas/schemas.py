@@ -2,13 +2,30 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class StatusEncomenda(StrEnum):
     AGUARDANDO_RETIRADA = "aguardando_retirada"
     ENTREGUE_AGUARDANDO_CONFIRMACAO = "entregue_aguardando_confirmacao"
     RETIRADA_CONFIRMADA = "retirada_confirmada"
+
+
+class EncomendaEntrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unidade_id: uuid.UUID
+    destinatario_morador_unidade_id: uuid.UUID
+    descricao: str = Field(min_length=1, max_length=200)
+    recebido_por_funcionario_id: uuid.UUID
+
+    @field_validator("descricao")
+    @classmethod
+    def normalizar_descricao(cls, valor: str) -> str:
+        descricao = valor.strip()
+        if not descricao:
+            raise ValueError("Informe a descrição da encomenda.")
+        return descricao
 
 
 class UnidadeResumo(BaseModel):

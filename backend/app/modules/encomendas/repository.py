@@ -36,6 +36,12 @@ class LinhaEncomenda:
     confirmacao_morador_nome: str | None
 
 
+@dataclass(frozen=True)
+class ReferenciasRecebimento:
+    funcionario: Funcionario
+    destinatario_email: str
+
+
 def _filtros(
     contexto: ContextoCondominio,
     *,
@@ -233,6 +239,59 @@ def obter_unidade_ativa(session: Session, condominio_id: UUID, unidade_id: UUID)
             Unidade.condominio_id == condominio_id,
             Unidade.ativo.is_(True),
         )
+    )
+
+
+def obter_referencias_recebimento(
+    session: Session,
+    condominio_id: UUID,
+    *,
+    unidade_id: UUID,
+    destinatario_morador_unidade_id: UUID,
+    recebido_por_funcionario_id: UUID,
+) -> ReferenciasRecebimento | None:
+    unidade = session.scalar(
+        select(Unidade)
+        .where(
+            Unidade.id == unidade_id,
+            Unidade.condominio_id == condominio_id,
+            Unidade.ativo.is_(True),
+        )
+        .with_for_update(read=True)
+    )
+    if unidade is None:
+        return None
+
+    destinatario = session.execute(
+        select(MoradorUnidade, Usuario.email)
+        .join(Usuario, Usuario.id == MoradorUnidade.usuario_id)
+        .where(
+            MoradorUnidade.id == destinatario_morador_unidade_id,
+            MoradorUnidade.condominio_id == condominio_id,
+            MoradorUnidade.unidade_id == unidade.id,
+            MoradorUnidade.status == "ativo",
+            Usuario.ativo.is_(True),
+        )
+        .with_for_update(read=True)
+    ).one_or_none()
+    if destinatario is None:
+        return None
+
+    funcionario = session.scalar(
+        select(Funcionario)
+        .where(
+            Funcionario.id == recebido_por_funcionario_id,
+            Funcionario.condominio_id == condominio_id,
+            Funcionario.ativo.is_(True),
+        )
+        .with_for_update(read=True)
+    )
+    if funcionario is None:
+        return None
+
+    return ReferenciasRecebimento(
+        funcionario=funcionario,
+        destinatario_email=destinatario.email,
     )
 
 

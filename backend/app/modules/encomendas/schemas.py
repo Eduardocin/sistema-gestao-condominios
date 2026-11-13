@@ -28,6 +28,17 @@ class EncomendaEntrada(BaseModel):
         return descricao
 
 
+class EntregaEntrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recebedor_morador_unidade_id: uuid.UUID
+    entregue_por_funcionario_id: uuid.UUID
+
+
+class ConfirmacaoEntrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class UnidadeResumo(BaseModel):
     id: uuid.UUID
     identificacao: str

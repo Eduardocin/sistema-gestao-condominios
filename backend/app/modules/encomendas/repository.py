@@ -29,6 +29,8 @@ class LinhaEncomenda:
     recebimento_funcionario_id: UUID
     recebimento_funcionario_nome: str
     recebedor_id: UUID | None
+    recebedor_usuario_id: UUID | None
+    recebedor_status: str | None
     recebedor_nome: str | None
     entrega_funcionario_id: UUID | None
     entrega_funcionario_nome: str | None
@@ -40,6 +42,12 @@ class LinhaEncomenda:
 class ReferenciasRecebimento:
     funcionario: Funcionario
     destinatario_email: str
+
+
+@dataclass(frozen=True)
+class ReferenciasEntrega:
+    funcionario: Funcionario
+    recebedor: MoradorUnidade
 
 
 def _filtros(
@@ -99,6 +107,8 @@ def _consulta_linhas(contexto: ContextoCondominio):
             _FuncionarioRecebimento.id,
             _FuncionarioRecebimento.nome,
             _RecebedorLink.id,
+            _RecebedorLink.usuario_id,
+            _RecebedorLink.status,
             _RecebedorUsuario.nome,
             _FuncionarioEntrega.id,
             _FuncionarioEntrega.nome,
@@ -203,6 +213,19 @@ def obter(session: Session, condominio_id: UUID, encomenda_id: UUID) -> Encomend
     )
 
 
+def obter_para_atualizacao(
+    session: Session, condominio_id: UUID, encomenda_id: UUID
+) -> Encomenda | None:
+    return session.scalar(
+        select(Encomenda)
+        .where(
+            Encomenda.id == encomenda_id,
+            Encomenda.condominio_id == condominio_id,
+        )
+        .with_for_update()
+    )
+
+
 def obter_linha(
     session: Session, contexto: ContextoCondominio, encomenda_id: UUID
 ) -> LinhaEncomenda | None:
@@ -295,6 +318,90 @@ def obter_referencias_recebimento(
     )
 
 
+def obter_referencias_entrega(
+    session: Session,
+    condominio_id: UUID,
+    unidade_id: UUID,
+    *,
+    recebedor_morador_unidade_id: UUID,
+    entregue_por_funcionario_id: UUID,
+) -> ReferenciasEntrega | None:
+    recebedor = session.scalar(
+        select(MoradorUnidade)
+        .join(Usuario, Usuario.id == MoradorUnidade.usuario_id)
+        .where(
+            MoradorUnidade.id == recebedor_morador_unidade_id,
+            MoradorUnidade.condominio_id == condominio_id,
+            MoradorUnidade.unidade_id == unidade_id,
+            MoradorUnidade.status == "ativo",
+            Usuario.ativo.is_(True),
+            select(1)
+            .select_from(PermissaoAba)
+            .where(
+                PermissaoAba.morador_unidade_id == MoradorUnidade.id,
+                PermissaoAba.condominio_id == condominio_id,
+                PermissaoAba.aba == "encomendas",
+                PermissaoAba.com_acesso.is_(True),
+            )
+            .exists(),
+        )
+        .with_for_update(read=True)
+    )
+    if recebedor is None:
+        return None
+
+    funcionario = session.scalar(
+        select(Funcionario)
+        .where(
+            Funcionario.id == entregue_por_funcionario_id,
+            Funcionario.condominio_id == condominio_id,
+            Funcionario.ativo.is_(True),
+        )
+        .with_for_update(read=True)
+    )
+    if funcionario is None:
+        return None
+
+    return ReferenciasEntrega(
+        funcionario=funcionario,
+        recebedor=recebedor,
+    )
+
+
+def recebedor_ativo(
+    session: Session,
+    condominio_id: UUID,
+    unidade_id: UUID,
+    morador_unidade_id: UUID,
+    usuario_id: UUID,
+) -> bool:
+    return (
+        session.scalar(
+            select(MoradorUnidade.id)
+            .join(Usuario, Usuario.id == MoradorUnidade.usuario_id)
+            .where(
+                MoradorUnidade.id == morador_unidade_id,
+                MoradorUnidade.condominio_id == condominio_id,
+                MoradorUnidade.unidade_id == unidade_id,
+                MoradorUnidade.usuario_id == usuario_id,
+                MoradorUnidade.status == "ativo",
+                Usuario.ativo.is_(True),
+                select(1)
+                .select_from(PermissaoAba)
+                .where(
+                    PermissaoAba.morador_unidade_id == MoradorUnidade.id,
+                    PermissaoAba.condominio_id == condominio_id,
+                    PermissaoAba.aba == "encomendas",
+                    PermissaoAba.com_acesso.is_(True),
+                )
+                .exists(),
+            )
+            .with_for_update(read=True)
+        )
+        is not None
+    )
+
+
 def listar_moradores(
     session: Session,
     condominio_id: UUID,
@@ -302,13 +409,26 @@ def listar_moradores(
     *,
     page: int,
     page_size: int,
+    somente_confirmaveis: bool = False,
 ) -> tuple[list[tuple[MoradorUnidade, str]], int]:
-    filtros = (
+    filtros = [
         MoradorUnidade.condominio_id == condominio_id,
         MoradorUnidade.unidade_id == unidade_id,
         MoradorUnidade.status == "ativo",
         Usuario.ativo.is_(True),
-    )
+    ]
+    if somente_confirmaveis:
+        filtros.append(
+            select(1)
+            .select_from(PermissaoAba)
+            .where(
+                PermissaoAba.morador_unidade_id == MoradorUnidade.id,
+                PermissaoAba.condominio_id == condominio_id,
+                PermissaoAba.aba == "encomendas",
+                PermissaoAba.com_acesso.is_(True),
+            )
+            .exists()
+        )
     consulta = (
         select(MoradorUnidade, Usuario.nome)
         .join(Usuario, Usuario.id == MoradorUnidade.usuario_id)

@@ -21,7 +21,7 @@ from app.modules.unidades.models import MoradorUnidade, PermissaoAba
 from app.modules.usuarios.models import Usuario
 from tests.autorizacao.cenario import montar_predio
 from tests.autorizacao.conftest import session as session
-from tests.isolamento.cenario import criar_usuario
+from tests.isolamento.cenario import cabecalho, criar_usuario, token_de, vincular
 
 pytestmark = pytest.mark.postgres
 
@@ -79,6 +79,7 @@ def criar_encomenda(
     descricao: str,
     unidade_id: UUID | None = None,
     status: str = "aguardando_retirada",
+    recebedor_morador_unidade_id: UUID | None = None,
 ) -> Encomenda:
     arquivo_id = uuid4()
     session.add(
@@ -101,13 +102,17 @@ def criar_encomenda(
         foto_nota_arquivo_id=arquivo_id,
         recebido_por_funcionario_id=funcionario.id,
     )
-    if status == "retirada_confirmada":
+    if status in {"entregue_aguardando_confirmacao", "retirada_confirmada"}:
         agora = datetime.now(UTC)
         encomenda.status = status
         encomenda.registrada_em = agora - timedelta(seconds=10)
         encomenda.entregue_em = agora
-        encomenda.recebedor_morador_unidade_id = predio.morador_unidade.id
+        encomenda.recebedor_morador_unidade_id = (
+            recebedor_morador_unidade_id or predio.morador_unidade.id
+        )
         encomenda.entregue_por_funcionario_id = funcionario.id
+    if status == "retirada_confirmada":
+        agora = datetime.now(UTC)
         encomenda.confirmada_em = agora
         encomenda.confirmado_por_usuario_id = predio.morador.id
     session.add(encomenda)
@@ -160,6 +165,34 @@ def receber_encomenda(
         headers=predio.cabecalho_de("funcionario"),
         data=campos,
         files={"foto": ("nota.png", foto_png(), "image/png")},
+    )
+
+
+def entregar_encomenda(
+    client,
+    predio,
+    encomenda: Encomenda,
+    funcionario: Funcionario,
+    *,
+    recebedor_id: UUID | None = None,
+):
+    return client.post(
+        f"/api/v1/encomendas/{encomenda.id}/entrega",
+        headers=predio.cabecalho_de("funcionario"),
+        json={
+            "recebedor_morador_unidade_id": str(recebedor_id or predio.morador_unidade.id),
+            "entregue_por_funcionario_id": str(funcionario.id),
+        },
+    )
+
+
+def confirmar_encomenda(client, predio, encomenda: Encomenda, *, usuario=None):
+    usuario = usuario or predio.morador
+    token = token_de(usuario, predio.condominio.id, perfil="morador")
+    return client.post(
+        f"/api/v1/encomendas/{encomenda.id}/confirmacao",
+        headers=cabecalho(token),
+        json={},
     )
 
 
@@ -328,6 +361,50 @@ def test_opcoes_da_portaria_omitem_unidade_e_moradores_inativos(client, session)
     assert [item["id"] for item in unidades.json()["items"]] == [str(predio.unidade_101.id)]
     assert [item["id"] for item in moradores.json()["items"]] == [str(predio.morador_unidade.id)]
     assert proibido_ao_morador.status_code == 403
+
+
+def test_entrega_exige_recebedor_com_aba_encomendas_ativa(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    morador_com_acesso = criar_usuario(session)
+    vincular(session, morador_com_acesso, predio.condominio)
+    vinculo_com_acesso = MoradorUnidade(
+        condominio_id=predio.condominio.id,
+        unidade_id=predio.unidade_101.id,
+        usuario_id=morador_com_acesso.id,
+        status="ativo",
+        origem="cadastro",
+    )
+    session.add(vinculo_com_acesso)
+    session.flush()
+    session.add(
+        PermissaoAba(
+            condominio_id=predio.condominio.id,
+            morador_unidade_id=vinculo_com_acesso.id,
+            aba="encomendas",
+            com_acesso=True,
+        )
+    )
+    encomenda = criar_encomenda(session, predio, funcionario, descricao="Entrega com permissão")
+
+    opcoes = client.get(
+        f"/api/v1/portaria/unidades/{predio.unidade_101.id}/moradores",
+        params={"somente_confirmaveis": "true"},
+        headers=predio.cabecalho_de("funcionario"),
+    )
+    entrega_sem_aba = entregar_encomenda(client, predio, encomenda, funcionario)
+    entrega_com_aba = entregar_encomenda(
+        client,
+        predio,
+        encomenda,
+        funcionario,
+        recebedor_id=vinculo_com_acesso.id,
+    )
+
+    assert opcoes.status_code == 200
+    assert [item["id"] for item in opcoes.json()["items"]] == [str(vinculo_com_acesso.id)]
+    assert entrega_sem_aba.status_code == 404
+    assert entrega_com_aba.status_code == 200, entrega_com_aba.text
 
 
 def test_recebimento_multipart_grava_encomenda_foto_auditoria_e_outbox(client, session, adapter):
@@ -513,3 +590,225 @@ def test_falha_no_commit_compensa_objeto_recente(client, session, adapter, monke
         == totais_antes
     )
     assert adapter.objects == {}
+
+
+def test_entrega_grava_ator_data_e_estado_pendente(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    encomenda = criar_encomenda(session, predio, funcionario, descricao="Entrega registrada")
+    auditorias_antes = contar(session, RegistroAuditoria)
+
+    resposta = entregar_encomenda(client, predio, encomenda, funcionario)
+
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["status"] == "entregue_aguardando_confirmacao"
+    assert resposta.json()["entrega"]["funcionario_id"] == str(funcionario.id)
+    assert resposta.json()["entrega"]["recebedor_id"] == str(predio.morador_unidade.id)
+    assert resposta.json()["pode_confirmar"] is False
+    session.refresh(encomenda)
+    assert encomenda.status == "entregue_aguardando_confirmacao"
+    assert encomenda.entregue_em is not None
+    assert encomenda.entregue_em >= encomenda.registrada_em
+    auditoria = session.scalar(
+        select(RegistroAuditoria).where(
+            RegistroAuditoria.acao == "encomenda.entregar",
+            RegistroAuditoria.recurso_id == encomenda.id,
+        )
+    )
+    assert auditoria is not None
+    assert auditoria.usuario_id == predio.funcionario.id
+    assert auditoria.responsavel_nome == funcionario.nome
+    assert auditoria.perfil == "funcionario"
+    assert contar(session, RegistroAuditoria) == auditorias_antes + 1
+
+
+def test_entrega_repetida_retorna_409_sem_auditoria_duplicada(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    encomenda = criar_encomenda(session, predio, funcionario, descricao="Entrega única")
+    primeira = entregar_encomenda(client, predio, encomenda, funcionario)
+    auditorias_apos_primeira = contar(session, RegistroAuditoria)
+
+    repetida = entregar_encomenda(client, predio, encomenda, funcionario)
+
+    assert primeira.status_code == 200, primeira.text
+    assert repetida.status_code == 409, repetida.text
+    assert contar(session, RegistroAuditoria) == auditorias_apos_primeira
+    session.refresh(encomenda)
+    assert encomenda.status == "entregue_aguardando_confirmacao"
+
+
+def test_morador_confirmador_deve_ser_o_recebedor_ativo(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    outro_usuario = criar_usuario(session)
+    vincular(session, outro_usuario, predio.condominio, perfil="morador")
+    outro_vinculo = MoradorUnidade(
+        condominio_id=predio.condominio.id,
+        unidade_id=predio.unidade_101.id,
+        usuario_id=outro_usuario.id,
+        status="ativo",
+        origem="cadastro",
+    )
+    session.add(outro_vinculo)
+    session.flush()
+    session.add(
+        PermissaoAba(
+            condominio_id=predio.condominio.id,
+            morador_unidade_id=outro_vinculo.id,
+            aba="encomendas",
+            com_acesso=True,
+        )
+    )
+    session.flush()
+    encomenda = criar_encomenda(
+        session,
+        predio,
+        funcionario,
+        descricao="Confirmação do recebedor",
+        status="entregue_aguardando_confirmacao",
+    )
+
+    recebedor = client.get(
+        f"/api/v1/encomendas/{encomenda.id}", headers=predio.cabecalho_de("morador")
+    )
+    outro_morador = client.get(
+        f"/api/v1/encomendas/{encomenda.id}",
+        headers=cabecalho(token_de(outro_usuario, predio.condominio.id, perfil="morador")),
+    )
+    negada_a_outro_morador = confirmar_encomenda(client, predio, encomenda, usuario=outro_usuario)
+    predio.morador_unidade.status = "desvinculado"
+    predio.morador_unidade.desvinculado_em = datetime.now(UTC)
+    negada_ao_vinculo_inativo = confirmar_encomenda(client, predio, encomenda)
+
+    assert recebedor.status_code == outro_morador.status_code == 200
+    assert recebedor.json()["pode_confirmar"] is True
+    assert outro_morador.json()["pode_confirmar"] is False
+    assert negada_a_outro_morador.status_code == 404
+    assert negada_ao_vinculo_inativo.status_code == 404
+    session.refresh(encomenda)
+    assert encomenda.status == "entregue_aguardando_confirmacao"
+
+
+def test_morador_sem_aba_nao_consulta_encomenda(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    encomenda = criar_encomenda(
+        session,
+        predio,
+        funcionario,
+        descricao="Aba sem acesso",
+        status="entregue_aguardando_confirmacao",
+    )
+
+    leitura = client.get(
+        f"/api/v1/encomendas/{encomenda.id}", headers=predio.cabecalho_de("morador")
+    )
+    confirmacao = confirmar_encomenda(client, predio, encomenda)
+
+    assert leitura.status_code == confirmacao.status_code == 403
+    session.refresh(encomenda)
+    assert encomenda.status == "entregue_aguardando_confirmacao"
+
+
+def test_admin_nao_pode_entregar_ou_confirmar(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    encomenda = criar_encomenda(session, predio, funcionario, descricao="Ação de funcionário")
+    headers_admin = predio.cabecalho_de("administracao")
+
+    entrega = client.post(
+        f"/api/v1/encomendas/{encomenda.id}/entrega",
+        headers=headers_admin,
+        json={
+            "recebedor_morador_unidade_id": str(predio.morador_unidade.id),
+            "entregue_por_funcionario_id": str(funcionario.id),
+        },
+    )
+    confirmacao = client.post(
+        f"/api/v1/encomendas/{encomenda.id}/confirmacao", headers=headers_admin, json={}
+    )
+
+    assert entrega.status_code == confirmacao.status_code == 403
+    session.refresh(encomenda)
+    assert encomenda.status == "aguardando_retirada"
+
+
+def test_funcionario_nao_pode_confirmar(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    encomenda = criar_encomenda(
+        session,
+        predio,
+        funcionario,
+        descricao="Confirmação do morador",
+        status="entregue_aguardando_confirmacao",
+    )
+    auditorias_antes = contar(session, RegistroAuditoria)
+
+    resposta = client.post(
+        f"/api/v1/encomendas/{encomenda.id}/confirmacao",
+        headers=predio.cabecalho_de("funcionario"),
+        json={},
+    )
+
+    assert resposta.status_code == 403
+    assert contar(session, RegistroAuditoria) == auditorias_antes
+    session.refresh(encomenda)
+    assert encomenda.status == "entregue_aguardando_confirmacao"
+
+
+def test_confirmacao_nao_pode_ser_desfeita(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    encomenda = criar_encomenda(
+        session,
+        predio,
+        funcionario,
+        descricao="Confirmação única",
+        status="entregue_aguardando_confirmacao",
+    )
+    auditorias_antes = contar(session, RegistroAuditoria)
+
+    primeira = confirmar_encomenda(client, predio, encomenda)
+    auditorias_apos_primeira = contar(session, RegistroAuditoria)
+    repetida = confirmar_encomenda(client, predio, encomenda)
+
+    assert primeira.status_code == 200, primeira.text
+    assert primeira.json()["status"] == "retirada_confirmada"
+    assert primeira.json()["confirmacao"]["morador_id"] == str(predio.morador.id)
+    assert primeira.json()["pode_confirmar"] is False
+    assert repetida.status_code == 409
+    assert auditorias_apos_primeira == auditorias_antes + 1
+    assert contar(session, RegistroAuditoria) == auditorias_apos_primeira
+    session.refresh(encomenda)
+    assert encomenda.status == "retirada_confirmada"
+
+
+def test_transicao_de_outro_condominio_retorna_404(client, session):
+    predio_a = montar_predio(session, "Residencial Aurora")
+    predio_b = montar_predio(session, "Residencial Boreal")
+    funcionario_a = criar_funcionario(session, predio_a)
+    funcionario_b = criar_funcionario(session, predio_b)
+    encomenda_b = criar_encomenda(
+        session,
+        predio_b,
+        funcionario_b,
+        descricao="Privada da Boreal",
+        status="entregue_aguardando_confirmacao",
+    )
+
+    entrega = entregar_encomenda(client, predio_a, encomenda_b, funcionario_a)
+    confirmacao = client.post(
+        f"/api/v1/encomendas/{encomenda_b.id}/confirmacao",
+        headers=predio_a.cabecalho_de("morador"),
+        json={},
+    )
+
+    assert entrega.status_code == confirmacao.status_code == 404
+    session.refresh(encomenda_b)
+    assert encomenda_b.status == "entregue_aguardando_confirmacao"

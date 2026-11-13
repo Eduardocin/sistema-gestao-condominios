@@ -10,8 +10,10 @@ from app.db.session import get_session
 from app.modules.auth.autorizacao import require_permission
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.encomendas.schemas import (
+    ConfirmacaoEntrada,
     EncomendaEntrada,
     EncomendaSaida,
+    EntregaEntrada,
     PaginaEncomendas,
     PaginaMoradores,
     PaginaUnidades,
@@ -112,6 +114,41 @@ def registrar(
     return service.obter(encomenda.id)
 
 
+@router.post(
+    "/{encomenda_id}/entrega",
+    response_model=EncomendaSaida,
+    dependencies=[Depends(require_permission("encomendas:editar"))],
+)
+def entregar(
+    encomenda_id: uuid.UUID,
+    dados: EntregaEntrada,
+    service: ServiceDep,
+    request: Request,
+) -> EncomendaSaida:
+    encomenda = service.entregar(
+        encomenda_id,
+        recebedor_morador_unidade_id=dados.recebedor_morador_unidade_id,
+        entregue_por_funcionario_id=dados.entregue_por_funcionario_id,
+        ip=ip_do_cliente(request),
+    )
+    return service.obter(encomenda.id)
+
+
+@router.post(
+    "/{encomenda_id}/confirmacao",
+    response_model=EncomendaSaida,
+    dependencies=[Depends(require_permission("encomendas:editar"))],
+)
+def confirmar(
+    encomenda_id: uuid.UUID,
+    _dados: ConfirmacaoEntrada,
+    service: ServiceDep,
+    request: Request,
+) -> EncomendaSaida:
+    encomenda = service.confirmar(encomenda_id, ip=ip_do_cliente(request))
+    return service.obter(encomenda.id)
+
+
 @router.get(
     "",
     response_model=PaginaEncomendas,
@@ -160,5 +197,11 @@ def listar_moradores(
     service: ServiceDep,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    somente_confirmaveis: bool = False,
 ) -> PaginaMoradores:
-    return service.listar_moradores(unidade_id, page=page, page_size=page_size)
+    return service.listar_moradores(
+        unidade_id,
+        page=page,
+        page_size=page_size,
+        somente_confirmaveis=somente_confirmaveis,
+    )

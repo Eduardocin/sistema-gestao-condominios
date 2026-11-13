@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from typing import BinaryIO
 from uuid import UUID
 
@@ -184,6 +185,133 @@ class EncomendasService:
                     )
             raise
 
+    def entregar(
+        self,
+        id_: UUID,
+        *,
+        recebedor_morador_unidade_id: UUID,
+        entregue_por_funcionario_id: UUID,
+        ip: str | None,
+    ) -> Encomenda:
+        self._exigir_funcionario()
+        try:
+            encomenda = repository.obter_para_atualizacao(
+                self.session, self.contexto.condominio_id, id_
+            )
+            if encomenda is None:
+                raise RecursoNaoEncontrado
+            if encomenda.status != "aguardando_retirada":
+                raise ApiError(
+                    409,
+                    "conflict",
+                    "A encomenda não está aguardando retirada.",
+                    reason="transicao_invalida",
+                )
+
+            referencias = repository.obter_referencias_entrega(
+                self.session,
+                self.contexto.condominio_id,
+                encomenda.unidade_id,
+                recebedor_morador_unidade_id=recebedor_morador_unidade_id,
+                entregue_por_funcionario_id=entregue_por_funcionario_id,
+            )
+            if referencias is None:
+                raise RecursoNaoEncontrado
+
+            agora = datetime.now(UTC)
+            status_anterior = encomenda.status
+            encomenda.status = "entregue_aguardando_confirmacao"
+            encomenda.entregue_em = agora
+            encomenda.recebedor_morador_unidade_id = referencias.recebedor.id
+            encomenda.entregue_por_funcionario_id = referencias.funcionario.id
+            self.session.add(
+                RegistroAuditoria(
+                    condominio_id=self.contexto.condominio_id,
+                    usuario_id=self.contexto.usuario_id,
+                    responsavel_nome=referencias.funcionario.nome,
+                    perfil=self.contexto.perfil,
+                    acao="encomenda.entregar",
+                    recurso_tipo="encomenda",
+                    recurso_id=encomenda.id,
+                    antes={"status": status_anterior},
+                    depois={
+                        "status": encomenda.status,
+                        "entregue_em": agora.isoformat(),
+                        "recebedor_morador_unidade_id": str(referencias.recebedor.id),
+                        "entregue_por_funcionario_id": str(referencias.funcionario.id),
+                    },
+                    ip=ip,
+                )
+            )
+            self.session.commit()
+            return encomenda
+        except (ApiError, RecursoNaoEncontrado):
+            # Essas validações acontecem antes de qualquer escrita; a dependência da
+            # requisição encerra a transação ao traduzir a exceção em resposta HTTP.
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def confirmar(self, id_: UUID, *, ip: str | None) -> Encomenda:
+        if self.contexto.perfil != "morador":
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        try:
+            encomenda = repository.obter_para_atualizacao(
+                self.session, self.contexto.condominio_id, id_
+            )
+            if encomenda is None:
+                raise RecursoNaoEncontrado
+
+            conferir_unidade(self.session, self.contexto, encomenda.unidade_id, "encomendas")
+            if encomenda.recebedor_morador_unidade_id is None or not repository.recebedor_ativo(
+                self.session,
+                self.contexto.condominio_id,
+                encomenda.unidade_id,
+                encomenda.recebedor_morador_unidade_id,
+                self.contexto.usuario_id,
+            ):
+                raise RecursoNaoEncontrado
+            if encomenda.status != "entregue_aguardando_confirmacao":
+                raise ApiError(
+                    409,
+                    "conflict",
+                    "A encomenda não está aguardando confirmação.",
+                    reason="transicao_invalida",
+                )
+
+            agora = datetime.now(UTC)
+            status_anterior = encomenda.status
+            encomenda.status = "retirada_confirmada"
+            encomenda.confirmada_em = agora
+            encomenda.confirmado_por_usuario_id = self.contexto.usuario_id
+            self.session.add(
+                RegistroAuditoria(
+                    condominio_id=self.contexto.condominio_id,
+                    usuario_id=self.contexto.usuario_id,
+                    responsavel_nome=None,
+                    perfil=self.contexto.perfil,
+                    acao="encomenda.confirmar",
+                    recurso_tipo="encomenda",
+                    recurso_id=encomenda.id,
+                    antes={"status": status_anterior},
+                    depois={
+                        "status": encomenda.status,
+                        "confirmada_em": agora.isoformat(),
+                        "confirmado_por_usuario_id": str(self.contexto.usuario_id),
+                    },
+                    ip=ip,
+                )
+            )
+            self.session.commit()
+            return encomenda
+        except (ApiError, RecursoNaoEncontrado):
+            # Não houve alteração antes das falhas de permissão, escopo ou estado.
+            raise
+        except Exception:
+            self.session.rollback()
+            raise
+
     def listar(
         self,
         *,
@@ -237,7 +365,14 @@ class EncomendasService:
             total=total,
         )
 
-    def listar_moradores(self, unidade_id: UUID, *, page: int, page_size: int) -> PaginaMoradores:
+    def listar_moradores(
+        self,
+        unidade_id: UUID,
+        *,
+        page: int,
+        page_size: int,
+        somente_confirmaveis: bool = False,
+    ) -> PaginaMoradores:
         self._exigir_funcionario()
         unidade = repository.obter_unidade_ativa(
             self.session, self.contexto.condominio_id, unidade_id
@@ -250,6 +385,7 @@ class EncomendasService:
             unidade.id,
             page=page,
             page_size=page_size,
+            somente_confirmaveis=somente_confirmaveis,
         )
         return PaginaMoradores(
             items=[MoradorOpcao(id=morador.id, nome=nome) for morador, nome in linhas],
@@ -262,8 +398,7 @@ class EncomendasService:
         if self.contexto.perfil != "funcionario":
             raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
 
-    @staticmethod
-    def _saida(linha: LinhaEncomenda) -> EncomendaSaida:
+    def _saida(self, linha: LinhaEncomenda) -> EncomendaSaida:
         encomenda = linha.encomenda
         entrega = None
         if (
@@ -307,5 +442,10 @@ class EncomendasService:
             ),
             entrega=entrega,
             confirmacao=confirmacao,
-            pode_confirmar=False,
+            pode_confirmar=(
+                self.contexto.perfil == "morador"
+                and encomenda.status == "entregue_aguardando_confirmacao"
+                and linha.recebedor_usuario_id == self.contexto.usuario_id
+                and linha.recebedor_status == "ativo"
+            ),
         )

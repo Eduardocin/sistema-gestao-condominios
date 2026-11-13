@@ -1,0 +1,156 @@
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.core.contexto import ContextoCondominio
+from app.core.errors import ApiError, RecursoNaoEncontrado
+from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO
+from app.modules.encomendas import repository
+from app.modules.encomendas.repository import LinhaEncomenda
+from app.modules.encomendas.schemas import (
+    ConfirmacaoSaida,
+    EncomendaSaida,
+    EntregaSaida,
+    MoradorOpcao,
+    MoradorResumo,
+    PaginaEncomendas,
+    PaginaMoradores,
+    PaginaUnidades,
+    RecebimentoSaida,
+    StatusEncomenda,
+    UnidadeOpcao,
+    UnidadeResumo,
+)
+from app.modules.storage.policy import conferir_unidade
+
+
+class EncomendasService:
+    def __init__(self, session: Session, contexto: ContextoCondominio):
+        self.session = session
+        self.contexto = contexto
+
+    def listar(
+        self,
+        *,
+        busca: str | None,
+        status: StatusEncomenda | None,
+        page: int,
+        page_size: int,
+    ) -> PaginaEncomendas:
+        linhas, total = repository.listar(
+            self.session,
+            self.contexto,
+            busca=busca,
+            status=status.value if status is not None else None,
+            page=page,
+            page_size=page_size,
+        )
+        return PaginaEncomendas(
+            items=[self._saida(linha) for linha in linhas],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def obter(self, id_: UUID) -> EncomendaSaida:
+        encomenda = repository.obter(self.session, self.contexto.condominio_id, id_)
+        if encomenda is None:
+            raise RecursoNaoEncontrado
+        if self.contexto.perfil == "morador":
+            conferir_unidade(self.session, self.contexto, encomenda.unidade_id, "encomendas")
+        linha = repository.obter_linha(self.session, self.contexto, id_)
+        if linha is None:
+            raise RecursoNaoEncontrado
+        return self._saida(linha)
+
+    def listar_unidades(self, *, busca: str | None, page: int, page_size: int) -> PaginaUnidades:
+        self._exigir_funcionario()
+        unidades, total = repository.listar_unidades(
+            self.session,
+            self.contexto.condominio_id,
+            busca=busca,
+            page=page,
+            page_size=page_size,
+        )
+        return PaginaUnidades(
+            items=[
+                UnidadeOpcao(id=unidade.id, identificacao=unidade.identificacao)
+                for unidade in unidades
+            ],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def listar_moradores(self, unidade_id: UUID, *, page: int, page_size: int) -> PaginaMoradores:
+        self._exigir_funcionario()
+        unidade = repository.obter_unidade_ativa(
+            self.session, self.contexto.condominio_id, unidade_id
+        )
+        if unidade is None:
+            raise RecursoNaoEncontrado
+        linhas, total = repository.listar_moradores(
+            self.session,
+            self.contexto.condominio_id,
+            unidade.id,
+            page=page,
+            page_size=page_size,
+        )
+        return PaginaMoradores(
+            items=[MoradorOpcao(id=morador.id, nome=nome) for morador, nome in linhas],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def _exigir_funcionario(self) -> None:
+        if self.contexto.perfil != "funcionario":
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+
+    @staticmethod
+    def _saida(linha: LinhaEncomenda) -> EncomendaSaida:
+        encomenda = linha.encomenda
+        entrega = None
+        if (
+            encomenda.entregue_em is not None
+            and linha.entrega_funcionario_id is not None
+            and linha.entrega_funcionario_nome is not None
+            and linha.recebedor_id is not None
+            and linha.recebedor_nome is not None
+        ):
+            entrega = EntregaSaida(
+                em=encomenda.entregue_em,
+                funcionario_id=linha.entrega_funcionario_id,
+                funcionario_nome=linha.entrega_funcionario_nome,
+                recebedor_id=linha.recebedor_id,
+                recebedor_nome=linha.recebedor_nome,
+            )
+
+        confirmacao = None
+        if (
+            encomenda.confirmada_em is not None
+            and linha.confirmacao_morador_id is not None
+            and linha.confirmacao_morador_nome is not None
+        ):
+            confirmacao = ConfirmacaoSaida(
+                em=encomenda.confirmada_em,
+                morador_id=linha.confirmacao_morador_id,
+                morador_nome=linha.confirmacao_morador_nome,
+            )
+
+        return EncomendaSaida(
+            id=encomenda.id,
+            unidade=UnidadeResumo(id=linha.unidade_id, identificacao=linha.unidade_identificacao),
+            destinatario=MoradorResumo(id=linha.destinatario_id, nome=linha.destinatario_nome),
+            descricao=encomenda.descricao,
+            foto_arquivo_id=encomenda.foto_nota_arquivo_id,
+            status=StatusEncomenda(encomenda.status),
+            recebimento=RecebimentoSaida(
+                em=encomenda.registrada_em,
+                funcionario_id=linha.recebimento_funcionario_id,
+                funcionario_nome=linha.recebimento_funcionario_nome,
+            ),
+            entrega=entrega,
+            confirmacao=confirmacao,
+            pode_confirmar=False,
+        )

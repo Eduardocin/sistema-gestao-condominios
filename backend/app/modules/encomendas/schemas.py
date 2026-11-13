@@ -1,0 +1,87 @@
+import uuid
+from datetime import datetime
+from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict
+
+
+class StatusEncomenda(StrEnum):
+    AGUARDANDO_RETIRADA = "aguardando_retirada"
+    ENTREGUE_AGUARDANDO_CONFIRMACAO = "entregue_aguardando_confirmacao"
+    RETIRADA_CONFIRMADA = "retirada_confirmada"
+
+
+class UnidadeResumo(BaseModel):
+    id: uuid.UUID
+    identificacao: str
+
+
+class MoradorResumo(BaseModel):
+    id: uuid.UUID
+    nome: str
+
+
+class RecebimentoSaida(BaseModel):
+    em: datetime
+    funcionario_id: uuid.UUID
+    funcionario_nome: str
+
+
+class EntregaSaida(BaseModel):
+    em: datetime
+    funcionario_id: uuid.UUID
+    funcionario_nome: str
+    recebedor_id: uuid.UUID
+    recebedor_nome: str
+
+
+class ConfirmacaoSaida(BaseModel):
+    em: datetime
+    morador_id: uuid.UUID
+    morador_nome: str
+
+
+class EncomendaSaida(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    unidade: UnidadeResumo
+    destinatario: MoradorResumo
+    descricao: str
+    foto_arquivo_id: uuid.UUID
+    status: StatusEncomenda
+    recebimento: RecebimentoSaida
+    entrega: EntregaSaida | None
+    confirmacao: ConfirmacaoSaida | None
+    pode_confirmar: bool
+
+
+class UnidadeOpcao(BaseModel):
+    id: uuid.UUID
+    identificacao: str
+
+
+class MoradorOpcao(BaseModel):
+    id: uuid.UUID
+    nome: str
+
+
+class PaginaEncomendas(BaseModel):
+    items: list[EncomendaSaida]
+    page: int
+    page_size: int
+    total: int
+
+
+class PaginaUnidades(BaseModel):
+    items: list[UnidadeOpcao]
+    page: int
+    page_size: int
+    total: int
+
+
+class PaginaMoradores(BaseModel):
+    items: list[MoradorOpcao]
+    page: int
+    page_size: int
+    total: int

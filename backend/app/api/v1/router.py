@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 from app.modules.auth.router import router as auth_router
 from app.modules.contas.router import router as contas_router
+from app.modules.encomendas.router import portaria_router as portaria_encomendas_router
+from app.modules.encomendas.router import router as encomendas_router
 from app.modules.funcionarios.router import responsaveis_router
 from app.modules.funcionarios.router import router as funcionarios_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
@@ -13,6 +15,8 @@ from app.modules.storage.router import router as storage_router
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
 router.include_router(contas_router)
+router.include_router(encomendas_router)
+router.include_router(portaria_encomendas_router)
 router.include_router(funcionarios_router)
 router.include_router(responsaveis_router)
 router.include_router(permissoes_aba_router)

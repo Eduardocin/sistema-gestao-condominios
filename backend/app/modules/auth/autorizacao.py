@@ -128,6 +128,43 @@ def garantir_acesso_a_unidade(
         raise RecursoNaoEncontrado
 
 
+def _conferir_nome_da_aba(aba: str) -> None:
+    if aba not in ABAS_MORADOR:
+        raise ValueError(f"Aba inválida: {aba!r}. Use uma de {list(ABAS_MORADOR)}.")
+
+
+def garantir_aba_da_unidade(
+    session: Session, contexto: ContextoCondominio, unidade_id: uuid.UUID, aba: str
+) -> None:
+    """Passo 4 completo, para quando a unidade vem da query, do corpo ou do próprio registro.
+
+    Ordem: 404 se a unidade não é de quem pede (igual a "não existe") e, só depois, 403 se for
+    Morador sem a aba Com Acesso. Funcionário e Administração não têm aba (matriz, seção 8):
+    para eles basta a unidade ser do condomínio. Não substitui `require_permission`.
+    """
+    _conferir_nome_da_aba(aba)
+
+    # 4a) A unidade é dele? Se não, 404, e a aba nem é consultada.
+    garantir_acesso_a_unidade(session, contexto, unidade_id)
+
+    # 4b) Só o Morador tem aba. Lemos do banco a cada requisição (R6): mudar a permissão
+    # vale na requisição seguinte, mesmo com o mesmo token.
+    if contexto.perfil == permissoes.Perfil.MORADOR and not repository.morador_tem_acesso_a_aba(
+        session,
+        usuario_id=contexto.usuario_id,
+        condominio_id=contexto.condominio_id,
+        unidade_id=unidade_id,
+        aba=aba,
+    ):
+        registrar_negacao(
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            perfil=contexto.perfil,
+            permissao=f"aba:{aba}",
+        )
+        raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+
+
 def require_aba(aba: str) -> Callable[..., ContextoCondominio]:
     """Passo 4 completo: a unidade é de quem pede e, se for Morador, ele está Com Acesso à aba.
 
@@ -148,33 +185,14 @@ def require_aba(aba: str) -> Callable[..., ContextoCondominio]:
     substitui `require_permission`: sem ele, um Funcionário passaria em qualquer rota.
     """
     # Falha ao declarar a rota, não ao primeiro cliente: "visitante" (sem s) derruba o import.
-    if aba not in ABAS_MORADOR:
-        raise ValueError(f"Aba inválida: {aba!r}. Use uma de {list(ABAS_MORADOR)}.")
+    _conferir_nome_da_aba(aba)
 
     def verificar(
         contexto: ContextoDep,
         unidade_id: uuid.UUID,
         session: Annotated[Session, Depends(get_session)],
     ) -> ContextoCondominio:
-        # 4a) A unidade é dele? Se não, 404 (igual a "não existe"), e a aba nem é consultada.
-        garantir_acesso_a_unidade(session, contexto, unidade_id)
-
-        # 4b) Só o Morador tem aba. Lemos do banco a cada requisição (R6): mudar a permissão
-        # vale na requisição seguinte, mesmo com o mesmo token.
-        if contexto.perfil == permissoes.Perfil.MORADOR and not repository.morador_tem_acesso_a_aba(
-            session,
-            usuario_id=contexto.usuario_id,
-            condominio_id=contexto.condominio_id,
-            unidade_id=unidade_id,
-            aba=aba,
-        ):
-            registrar_negacao(
-                usuario_id=contexto.usuario_id,
-                condominio_id=contexto.condominio_id,
-                perfil=contexto.perfil,
-                permissao=f"aba:{aba}",
-            )
-            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        garantir_aba_da_unidade(session, contexto, unidade_id, aba)  # 404 da unidade, depois 403
         return contexto
 
     return verificar

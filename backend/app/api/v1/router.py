@@ -8,6 +8,7 @@ from app.modules.contas.router import router as contas_router
 from app.modules.funcionarios.router import responsaveis_router
 from app.modules.funcionarios.router import router as funcionarios_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
+from app.modules.reservas.router import router as reservas_router
 from app.modules.storage.router import router as storage_router
 
 router = APIRouter(prefix="/api/v1")
@@ -16,6 +17,7 @@ router.include_router(contas_router)
 router.include_router(funcionarios_router)
 router.include_router(responsaveis_router)
 router.include_router(permissoes_aba_router)
+router.include_router(reservas_router)
 router.include_router(storage_router)
 
 

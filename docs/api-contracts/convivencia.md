@@ -16,6 +16,12 @@ Histórias cobertas: US-601 a US-605, US-701 a US-704, US-402, US-501, US-502.
 
 ## 2. Áreas comuns
 
+O catálogo de áreas é compartilhado pelo condomínio: para listar, detalhar e baixar a foto,
+o Morador precisa da aba Reservas Com Acesso em pelo menos uma unidade em que tenha vínculo
+ativo no condomínio selecionado. A permissão é lida novamente a cada requisição. Isso não
+libera operações em outra unidade: agenda, criação e cancelamento continuam conferindo a
+aba na unidade específica. Fotos de áreas desativadas ficam disponíveis só à Administração.
+
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /areas-comuns` | Morador `[Reserva de Áreas]`: só ativas. Administração: todas, filtro `ativa` | `page`, `page_size`, `ativa` (só Administração) | 200, lista |

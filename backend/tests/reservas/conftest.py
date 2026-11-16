@@ -11,6 +11,7 @@ from app.core.tempo import agora, get_relogio
 from app.db.session import get_session
 from app.main import create_app
 from tests.autorizacao.cenario import Predio, montar_predio
+from tests.reservas.cenario import definir_aba
 
 
 @pytest.fixture
@@ -53,10 +54,14 @@ def client(session: Session, relogio: RelogioDeTeste) -> Generator[TestClient]:
 
 @pytest.fixture
 def predio(session: Session) -> Predio:
-    return montar_predio(session)
+    predio = montar_predio(session)
+    definir_aba(session, predio.morador_unidade)
+    return predio
 
 
 @pytest.fixture
 def outro_predio(session: Session) -> Predio:
     """Um segundo condomínio completo, para os testes de isolamento."""
-    return montar_predio(session, "Residencial Horizonte")
+    predio = montar_predio(session, "Residencial Horizonte")
+    definir_aba(session, predio.morador_unidade)
+    return predio

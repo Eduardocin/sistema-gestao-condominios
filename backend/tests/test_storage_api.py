@@ -96,6 +96,38 @@ def test_mesmo_condominio_nao_libera_upload_nao_vinculado_de_outro_usuario(clien
     assert response.status_code == 404
 
 
+def test_foto_area_respeita_aba_condominio_e_desativacao(client, session):
+    from tests.reservas.cenario import corpo, definir_aba
+
+    p = montar_predio(session)
+    outro = montar_predio(session, "Outro condomínio")
+    data = enviar(client, p, "administracao", "fotos").json()
+    response = client.post(
+        "/api/v1/areas-comuns",
+        headers=p.cabecalho_de("administracao"),
+        json=corpo(uuid.UUID(data["id"])),
+    )
+    assert response.status_code == 201, response.text
+    area_id = response.json()["id"]
+    download = data["download_url"]
+    headers = p.cabecalho_de("morador")
+    assert client.get(download, headers=headers).status_code == 404
+    definir_aba(session, p.morador_unidade)
+    assert client.get(download, headers=headers).status_code == 200
+    assert client.get(download, headers=p.cabecalho_de("funcionario")).status_code == 404
+    assert client.get(download, headers=outro.cabecalho_de("morador")).status_code == 404
+    definir_aba(session, p.morador_unidade, com_acesso=False)
+    assert client.get(download, headers=headers).status_code == 404
+    definir_aba(session, p.morador_unidade)
+    response = client.post(
+        f"/api/v1/areas-comuns/{area_id}/desativacao",
+        headers=p.cabecalho_de("administracao"),
+    )
+    assert response.status_code == 200
+    assert client.get(download, headers=headers).status_code == 404
+    assert client.get(download, headers=p.cabecalho_de("administracao")).status_code == 200
+
+
 @pytest.mark.parametrize("perfil", ["morador", "administracao", "plataforma"])
 def test_foto_encomenda_so_portaria_pode_enviar(client, session, perfil):
     assert enviar(client, montar_predio(session), perfil=perfil).status_code == 403

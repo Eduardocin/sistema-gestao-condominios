@@ -196,3 +196,34 @@ def require_aba(aba: str) -> Callable[..., ContextoCondominio]:
         return contexto
 
     return verificar
+
+
+def garantir_aba_no_condominio(session: Session, contexto: ContextoCondominio, aba: str) -> None:
+    """Catálogo compartilhado: Morador precisa da aba em alguma unidade ativa do condomínio.
+
+    Não substitui a checagem por unidade nas operações de reserva.
+    """
+    _conferir_nome_da_aba(aba)
+    if contexto.perfil != permissoes.Perfil.MORADOR:
+        return
+    unidades = repository.listar_unidades_do_morador(
+        session, usuario_id=contexto.usuario_id, condominio_id=contexto.condominio_id
+    )
+    if any(
+        repository.morador_tem_acesso_a_aba(
+            session,
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            unidade_id=unidade_id,
+            aba=aba,
+        )
+        for unidade_id in unidades
+    ):
+        return
+    registrar_negacao(
+        usuario_id=contexto.usuario_id,
+        condominio_id=contexto.condominio_id,
+        perfil=contexto.perfil,
+        permissao=f"aba:{aba}",
+    )
+    raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)

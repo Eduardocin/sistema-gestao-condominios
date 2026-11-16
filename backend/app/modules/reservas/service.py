@@ -20,7 +20,7 @@ from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.core.permissoes import Perfil
 from app.core.tempo import Relogio, agora, inicio_do_slot, no_fuso
-from app.modules.auth.autorizacao import garantir_aba_da_unidade
+from app.modules.auth.autorizacao import garantir_aba_da_unidade, garantir_aba_no_condominio
 from app.modules.funcionarios.repository import RepositorioResponsaveis
 from app.modules.permissoes_aba.repository import RepositorioAuditoria
 from app.modules.reservas.models import AreaComum, Reserva
@@ -131,6 +131,7 @@ class AreasComunsService:
     # --- leitura --------------------------------------------------------------------------
 
     def listar(self, *, page: int, page_size: int, ativa: bool | None) -> AreasPaginadas:
+        garantir_aba_no_condominio(self.session, self.contexto, ABA_RESERVAS)
         # Morador só enxerga ativas, mesmo que peça `ativa=false`. O filtro é só da Administração.
         if self.contexto.perfil == Perfil.MORADOR:
             ativa = True
@@ -144,6 +145,7 @@ class AreasComunsService:
         )
 
     def obter(self, area_id: uuid.UUID) -> AreaComum:
+        garantir_aba_no_condominio(self.session, self.contexto, ABA_RESERVAS)
         area = self.areas.obter(area_id)  # 404 se não existir ou for de outro condomínio
         if self.contexto.perfil == Perfil.MORADOR and not area.ativa:
             raise RecursoNaoEncontrado  # área desativada some para o Morador

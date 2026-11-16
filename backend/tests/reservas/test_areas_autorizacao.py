@@ -1,13 +1,14 @@
 """Áreas comuns: matriz por perfil, 401/403 e isolamento entre condomínios."""
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
 from app.core.permissoes import Perfil
 from tests.autorizacao.cenario import montar_predio
 from tests.isolamento.cenario import cabecalho, token_de, vincular
-from tests.reservas.cenario import corpo, criar_area, criar_arquivo
+from tests.reservas.cenario import corpo, criar_area, criar_arquivo, definir_aba
 
 PERFIS = [Perfil.MORADOR, Perfil.FUNCIONARIO, Perfil.ADMINISTRACAO, Perfil.PLATAFORMA]
 
@@ -22,6 +23,37 @@ ROTAS = [
     ("reativar", "POST", "/areas-comuns/{id}/reativacao", False, False, [403, 403, 200, 403]),
 ]
 IDS = [rota[0] for rota in ROTAS]
+
+
+def test_catalogo_exige_aba_e_revogacao_vale_com_o_mesmo_token(client, session, predio):
+    area = criar_area(session, predio)
+    headers = predio.cabecalho_de(Perfil.MORADOR)
+    urls = ["/api/v1/areas-comuns", f"/api/v1/areas-comuns/{area.id}"]
+    for acesso, esperado in [(False, 403), (True, 200), (False, 403)]:
+        definir_aba(session, predio.morador_unidade, com_acesso=acesso)
+        for url in urls:
+            assert client.get(url, headers=headers).status_code == esperado
+
+
+def test_catalogo_aceita_aba_em_outra_unidade_ativa(client, session, predio):
+    from app.modules.unidades.models import MoradorUnidade
+
+    definir_aba(session, predio.morador_unidade, com_acesso=False)
+    outro_vinculo = MoradorUnidade(
+        condominio_id=predio.condominio.id,
+        usuario_id=predio.morador.id,
+        unidade_id=predio.unidade_102.id,
+        origem="cadastro",
+    )
+    session.add(outro_vinculo)
+    session.flush()
+    definir_aba(session, outro_vinculo)
+    headers = predio.cabecalho_de(Perfil.MORADOR)
+    assert client.get("/api/v1/areas-comuns", headers=headers).status_code == 200
+    outro_vinculo.status = "desvinculado"
+    outro_vinculo.desvinculado_em = datetime.now(UTC)
+    session.flush()
+    assert client.get("/api/v1/areas-comuns", headers=headers).status_code == 403
 
 
 def chamar(client, predio, session, rota, perfil):

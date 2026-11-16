@@ -169,11 +169,14 @@ class RepositorioAuditoria(RepositorioDoCondominio[RegistroAuditoria]):
         antes: dict[str, Any],
         depois: dict[str, Any],
         ip: str | None,
+        responsavel_nome: str | None = None,
     ) -> None:
         self.criar(
             {
                 "usuario_id": self.contexto.usuario_id,
                 "perfil": self.contexto.perfil,
+                # Conta compartilhada: o nome escolhido na lista (plataforma.md, seção 4.1).
+                "responsavel_nome": responsavel_nome,
                 "acao": acao,
                 "recurso_tipo": recurso_tipo,
                 "recurso_id": recurso_id,

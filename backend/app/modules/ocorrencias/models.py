@@ -36,6 +36,8 @@ class Ocorrencia(Base):
             "(status = 'resolvida') = (resolvida_em IS NOT NULL)", name="resolucao_com_data"
         ),
         Index("ix_ocorrencias_condominio_status_criado", "condominio_id", "status", "criado_em"),
+        # GET /ocorrencias do Morador: sempre por unidade, com filtro de status.
+        Index("ix_ocorrencias_unidade_status_criado", "unidade_id", "status", "criado_em"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

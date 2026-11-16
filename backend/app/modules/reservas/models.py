@@ -163,6 +163,9 @@ class Reserva(Base):
             postgresql_where=text("status = 'ativa'"),
         ),
         Index("ix_reservas_area_data", "area_id", "data"),
+        # GET /reservas: a Administração filtra por status e período; o Morador lista a unidade.
+        Index("ix_reservas_condominio_status_data", "condominio_id", "status", "data"),
+        Index("ix_reservas_unidade_data", "unidade_id", "data"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

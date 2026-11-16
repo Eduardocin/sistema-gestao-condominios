@@ -477,3 +477,61 @@ def test_encomenda_nao_aceita_estado_desconhecido(session):
     row = dados_encomenda(criar_predio(session), "desconhecido")
     with pytest.raises(IntegrityError), session.begin_nested():
         session.execute(Encomenda.__table__.insert().values(row))
+
+
+# Tabelas sem condominio_id por desenho: contas e catálogo global, plataforma e login.
+TABELAS_GLOBAIS = {
+    "alembic_version",
+    "comunicados",
+    "condominios",
+    "tentativas_chave_acesso",
+    "tokens_recuperacao_senha",
+    "usuarios",
+}
+
+
+def _tabelas(session: Session, sql: str) -> set[str]:
+    return set(session.scalars(text(sql)))
+
+
+def test_toda_tabela_de_negocio_tem_condominio_id(session):
+    sem_coluna = _tabelas(
+        session,
+        """
+        SELECT t.table_name FROM information_schema.tables t
+        WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+          AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns c
+            WHERE c.table_schema = 'public' AND c.table_name = t.table_name
+              AND c.column_name = 'condominio_id')
+        """,
+    )
+    assert sem_coluna == TABELAS_GLOBAIS
+
+
+def test_condominio_id_tem_chave_estrangeira_e_indice(session):
+    sem_fk = _tabelas(
+        session,
+        """
+        SELECT c.relname FROM pg_class c
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'condominio_id'
+        WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_constraint k
+            WHERE k.conrelid = c.oid AND k.contype = 'f'
+              AND k.confrelid = 'public.condominios'::regclass
+              AND k.conkey = ARRAY[a.attnum])
+        """,
+    )
+    sem_indice = _tabelas(
+        session,
+        """
+        SELECT c.relname FROM pg_class c
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'condominio_id'
+        WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_index i WHERE i.indrelid = c.oid AND i.indkey[0] = a.attnum)
+        """,
+    )
+    assert sem_fk == set()
+    assert sem_indice == set()

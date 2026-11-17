@@ -23,6 +23,7 @@ from app.core.tempo import Relogio, agora, inicio_do_slot, no_fuso
 from app.modules.auditoria import service as auditoria
 from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.auth.autorizacao import garantir_aba_da_unidade, garantir_aba_no_condominio
+from app.modules.avisos import service as avisos
 from app.modules.funcionarios.repository import RepositorioResponsaveis
 from app.modules.reservas.models import AreaComum, Reserva
 from app.modules.reservas.repository import (
@@ -479,11 +480,20 @@ class ReservasService:
         self.reservas.atualizar(reserva.id, valores)
 
         if responsavel is not None:
-            # TODO(TASK-48): na mesma transação, antes do commit, entram aqui (1) o aviso para a
-            # unidade com o motivo (`publicar_para_unidade`, plataforma.md seção 1) e (2) o
-            # e-mail `reserva_cancelada` ao morador que reservou (plataforma.md seção 6).
-            # O cancelamento pelo Morador não gera aviso nem e-mail.
-            pass
+            avisos.publicar_para_unidade(
+                self.session,
+                ctx=self.contexto,
+                unidade_id=reserva.unidade_id,
+                titulo="Reserva cancelada pela Administração",
+                texto=(
+                    f"A reserva de {reserva.data:%d/%m/%Y} às {reserva.hora_inicio:%H:%M} "
+                    f"foi cancelada pela Administração. Motivo: {dados.motivo}"
+                ),
+                responsavel_id=responsavel.id,
+                ip=ip,
+                relogio=self.relogio,
+            )
+            # O enfileiramento de e-mail depende do serviço de e-mail (fora da TASK-48).
 
         depois: dict[str, Any] = {
             "status": "cancelada",

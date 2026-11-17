@@ -20,9 +20,13 @@ Histórias cobertas: US-801 a US-804, US-901 a US-903, US-1004, US-209, US-210, 
 
 ## 1. Avisos do condomínio (US-801, US-802)
 
+**Implementado na TASK-48**, com prefixo `/api/v1`, usando o esquema existente sem nova
+migration. Detalhes e testes: [módulo de avisos](../../backend/app/modules/avisos/README.md).
+
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /avisos` | Morador e Funcionário: só vigentes. Administração: todos | `situacao` (só Administração: `vigentes`, `agendados`, `encerrados`, `todos`; padrão `vigentes`), paginação | 200, lista |
+| `GET /avisos/vigentes` | Mesmo escopo | paginação; sempre vigentes | 200, lista (alias do mesmo serviço) |
 | `GET /avisos/{id}` | Mesmo escopo | — | 200, objeto |
 | `POST /avisos` | Administração | JSON abaixo | 201, objeto |
 | `PUT /avisos/{id}` | Administração | JSON abaixo | 200, objeto |
@@ -60,6 +64,15 @@ Objeto de aviso:
 
 `situacao` é derivada, nesta precedência: `encerrado` (tem `encerrado_em`), `expirado` (`fim_em` já passou), `agendado` (`inicio_em` no futuro) e `vigente`. `publicado_por` só aparece para a Administração.
 
+Na listagem, `situacao=encerrados` inclui tanto os expirados (`fim_em <= agora`) quanto
+os encerrados antecipadamente. Morador e Funcionário têm `situacao` forçada a `vigentes`,
+mesmo se pedirem outro filtro válido. A consulta por ID aplica a mesma visibilidade (404
+genérico para aviso fora do escopo). Listas seguem `{"items": [], "page": 1, "page_size": 20,
+"total": 0}`; `page >= 1`, `page_size` entre 1 e 100. Desempate por `id DESC`.
+`importante` tem padrão `false`; título/texto são aparados nas extremidades e não aceitam
+apenas espaços. Timestamps sem fuso e campos desconhecidos retornam 422. Criação inclui
+`Location: /api/v1/avisos/{id}`.
+
 Regras:
 
 - **Vigente** é `inicio_em <= agora < fim_em` e `encerrado_em` nulo. Aviso expirado "some sozinho" porque a consulta filtra por data, sem nenhum job.
@@ -67,18 +80,26 @@ Regras:
 - **Avisos por unidade.** O DER tem `avisos.unidade_id` para avisar uma unidade de reserva cancelada (US-605, US-602). Esses avisos **são criados só pelo servidor**, pela função interna abaixo, e o corpo de `POST /avisos` rejeita `unidade_id`. O Morador vê os avisos gerais e os das **suas** unidades; o Funcionário só os gerais. A Administração vê todos, com o campo `unidade` preenchido nos automáticos; esses não podem ser editados (`PUT` retorna 409, `reason: "aviso_automatico"`).
 - `PUT` e `encerramento` só valem para aviso não encerrado e não expirado (senão 409, `reason: "aviso_encerrado"`). Encerrar não apaga: grava `encerrado_em`.
 - Auditoria: `aviso.publicar`, `aviso.editar` e `aviso.encerrar`.
+- O autor da publicação é preservado nas edições; `responsavel_id` de `PUT` e encerramento
+  identifica quem executou a ação na auditoria. Responsável ausente retorna 422; inativo,
+  inexistente ou de outro condomínio retorna 404. `unidade` tem `{id, identificacao}` nos
+  automáticos. As operações usam a mesma transação da auditoria central e nunca apagam o aviso.
 
 **Função interna** usada por [convivencia.md](convivencia.md) (cancelamento de reserva e bloqueio de data):
 
 ```python
 def publicar_para_unidade(
-    session: Session, *, ctx: ContextoRequisicao, unidade_id: UUID,
+    session: Session, *, ctx: ContextoCondominio, unidade_id: UUID,
     titulo: str, texto: str, responsavel_id: UUID, importante: bool = True,
-    dias_de_exibicao: int = 7,
+    dias_de_exibicao: int = 7, ip: str | None = None, relogio: Relogio = agora,
 ) -> UUID: ...
 ```
 
-Cria o aviso na **mesma transação** do chamador (sem `commit`). Vigência: do momento atual até `dias_de_exibicao` dias depois (proposta: 7).
+Cria e audita o aviso na **mesma transação** do chamador (sem `commit`). Exige contexto da
+Administração, responsável ativo e unidade do mesmo condomínio; `dias_de_exibicao` é inteiro
+positivo. Vigência: do momento atual até `dias_de_exibicao` dias depois (padrão: 7).
+O cancelamento administrativo de reserva já usa essa função. Cadastro de bloqueios e e-mail
+assíncrono não estão incluídos na TASK-48.
 
 ## 2. Comunicados da plataforma (US-804, Should, Sprint 3)
 

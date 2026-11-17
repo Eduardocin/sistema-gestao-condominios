@@ -33,8 +33,9 @@ Contrato: seções 2 e 4 de [convivencia.md](../../../../docs/api-contracts/conv
 - **Concorrência.** As regras "uma reserva por unidade, área e dia" e "um slot, uma reserva" são dos índices parciais `uq_reservas_unidade_area_dia_ativa` e `uq_reservas_area_horario_ativa`. O service tenta o `INSERT` num savepoint e traduz o `IntegrityError` pelo nome do índice (`reserva_duplicada_unidade`, `horario_ocupado`). Não renomear esses índices.
 - **Relógio.** "Passado" é início do slot <= agora, em America/Sao_Paulo (`app/core/tempo.py`). A dependência `get_relogio` deixa os testes congelarem o tempo.
 - **Bloqueios.** Só leitura (`bloqueios_area` com `removido_em IS NULL`). O cadastro de bloqueios é outra task (US-602, Sprint 3).
-- **Auditoria.** `reserva.criar` e `reserva.cancelar`, na mesma transação. Provisório: usa o `RepositorioAuditoria` de `permissoes_aba` até existir `registrar_acao` (TASK-82).
-- **Pendente (TASK-48).** O cancelamento pela Administração ainda não cria o aviso para a unidade nem enfileira o e-mail `reserva_cancelada`. O ponto exato está marcado com `TODO(TASK-48)` em `ReservasService.cancelar`, antes do commit.
+- **Auditoria.** `reserva.criar` e `reserva.cancelar` usam o serviço central `registrar_acao` (TASK-82), na mesma transação.
+- **Aviso para a unidade (TASK-48).** O cancelamento pela Administração chama `publicar_para_unidade` do [serviço de avisos](../avisos/service.py), com o motivo, data e hora. Reserva, aviso e os dois eventos são persistidos na mesma transação. Cancelamento pelo Morador não cria aviso.
+- **Pendente.** Enfileirar o e-mail `reserva_cancelada` depende do serviço de e-mail assíncrono, fora do escopo da TASK-48. O cadastro de bloqueios também continua em outra task.
 
 Testes: `backend/tests/reservas/`. `test_reservas_concorrencia.py` usa conexões reais com commit (sem a fixture de rollback) e apaga o que criou.
 

@@ -200,6 +200,10 @@ Qualquer outra transição retorna 409 (`reason: "transicao_invalida"`). Não ex
 
 ### 4.2 Cadastrar o prédio — o assistente envia tudo de uma vez (US-202, Must, Sprint 1)
 
+**Implementado na TASK-28**, junto à listagem mínima `GET /condominios/meus` da seção 4.3.
+Reutiliza os modelos e constraints existentes, sem migration. Detalhes e limites:
+[módulo de condomínios](../../backend/app/modules/condominios/README.md).
+
 `POST /condominios` — conta com `tipo_cadastro = 'administracao'`, sem `cid`. A mesma conta pode cadastrar vários prédios (cada chamada cria um condomínio).
 
 O assistente do front pergunta nome, blocos, quantidade de andares, apartamentos por andar e o nome de cada apartamento, e mostra a árvore para conferência (**tudo isso é do front**). O que chega à API é a **árvore explícita**, sem "quantidades": o front expande 3 andares × 4 apartamentos nos 12 nomes. Um único pedido, validado e gravado **numa transação só**: ou entra tudo, ou nada.
@@ -207,11 +211,11 @@ O assistente do front pergunta nome, blocos, quantidade de andares, apartamentos
 ```json
 {
   "nome": "Residencial Aurora",
-  "cnpj": "12345678000199",
+  "cnpj": "11222333000181",
   "endereco": {"cep": "50030230", "logradouro": "Rua da Aurora", "numero": "100", "complemento": null,
                "bairro": "Boa Vista", "cidade": "Recife", "uf": "PE"},
   "logo_arquivo_id": null,
-  "documentos": ["UUID"],
+  "documentos": [],
   "blocos": [
     {
       "nome": "Bloco A",
@@ -238,13 +242,39 @@ O assistente do front pergunta nome, blocos, quantidade de andares, apartamentos
 Resposta 201, com o cabeçalho `Location: /api/v1/condominios/meus` (ver nota):
 
 ```json
-{"id": "UUID", "nome": "Residencial Aurora", "cnpj": "12345678000199", "status": "pendente",
+{"id": "UUID", "nome": "Residencial Aurora", "cnpj": "11222333000181", "status": "pendente",
  "enviado_em": "2026-11-10T14:03:00Z", "estrutura": {"blocos": 1, "andares": 2, "unidades": 6}}
 ```
 
 Nota: como o recurso do dia a dia é `GET /condominio` (singular, do token), a resposta traz o `id` e o `Location` aponta para `/api/v1/condominios/meus`; para trabalhar nesse prédio, o front chama `POST /auth/selecionar-condominio`.
 
 Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andares[1].unidades[2]`, [convencoes.md](convencoes.md) seção 4); 409 `conflict` com `reason = "cnpj_ja_cadastrado"`. **Efeitos na mesma transação:** `condominios` (`pendente`, `enviado_em`, `criado_por_usuario_id`), `blocos`, `andares`, `unidades` (todas `ativo`), `condominio_documentos`, um `vinculos_condominio` ativo de perfil `administracao` para o criador, o evento `enviado` e a auditoria `condominio.enviar`. **Não gera chaves de acesso**: isso é na aprovação (US-203).
+
+**Precisões da entrega TASK-28:**
+
+- A autorização usa identidade e tipo de cadastro lidos do banco, sem exigir `cid`. ADM da
+  plataforma, Morador e contas sem `tipo_cadastro=administracao` recebem 403. A conta existente
+  é reutilizada; cada pedido gera um novo condomínio e seu vínculo. Não há IDs de criador,
+  condomínio, bloco ou andar aceitos do cliente.
+- Os limites da tabela são aplicados. Nomes e identificações são aparados nas extremidades;
+  unicidade respeita a igualdade das constraints existentes. UF é normalizada em maiúsculas.
+  Ordem exige inteiro (sem coerção de texto/booleano). Campos extras em qualquer nível são 422.
+  Os detalhes do 422 de schema incluem somente caminhos e mensagens, sem valores recebidos;
+  a extensão não altera as respostas de validação dos demais módulos.
+- O índice único de CNPJ protege pedidos concorrentes. Uma única transação confirma toda a
+  árvore, vínculo, histórico e evento; falhas revertem todos. A auditoria registra conta, IP,
+  novo condomínio e contagens, sem CNPJ/endereço/documentos. Perfil local e responsável são
+  nulos neste cadastro global, anterior à seleção do novo condomínio e à lista de responsáveis.
+- **Dependência de arquivos:** o storage atual exige condomínio existente e não oferece upload
+  para este cadastro inicial. Por isso, aceita `logo_arquivo_id` nulo/omitido e `documentos`
+  vazio/omitido. Referências não vazias retornam 422 com `reason=arquivos_indisponiveis_no_cadastro`;
+  não se vinculam arquivos de outro condomínio nem se altera seu escopo. Até existir esse upload,
+  não há linhas em `condominio_documentos` produzidas pelo cadastro inicial.
+- **Divergências do card:** rascunho persistido, retomada e endpoints por etapa não foram
+  implementados. O frontend controla etapas, expansão em massa e conferência da árvore antes
+  do envio único. Áreas comuns permanecem no módulo existente de reservas, fora deste payload.
+  A lista de responsáveis usa o fluxo existente após selecionar o condomínio; não é recriada
+  pelo assistente. Aprovação e chaves continuam na TASK-29; vínculo de Morador, na TASK-30.
 
 ### 4.3 Dados do condomínio e histórico (US-204, US-206)
 
@@ -256,6 +286,12 @@ Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andar
 | `POST /condominio/reenvio` | Administração | `{}` | 200, objeto com `status = 'pendente'` |
 | `GET /condominio/documentos` | Administração | — | 200, lista de documentos |
 | `POST /condominio/documentos` | Administração | `{"arquivo_id": "UUID"}` | 201, documento |
+
+`GET /api/v1/condominios/meus` está implementado na TASK-28: lista direta, sem paginação,
+ordenada por nome e ID, limitada aos vínculos ativos de perfil Administração da conta.
+Inclui todos os estados do condomínio; revogar o vínculo o remove da próxima consulta.
+As demais rotas da tabela continuam fora dessa entrega. Selecionar um condomínio pendente
+não libera suas operações do dia a dia, que continuam sob a autorização central.
 
 `GET /condominio` para a Administração:
 

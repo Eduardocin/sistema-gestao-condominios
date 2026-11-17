@@ -53,6 +53,10 @@ def _nome(campo: str) -> str:
 
 
 def _documento(valor: Any) -> str:
+    if isinstance(valor, str) and re.fullmatch(
+        r"\*{3}\.\d{3}\.\d{3}-\*{2}|\*{2}\.\*{3}\.\d{3}/\d{4}-\*{2}", valor
+    ):
+        return valor
     if not isinstance(valor, (str, int)) or isinstance(valor, bool):
         return OMITIDO
     digitos = re.sub(r"\D", "", str(valor))

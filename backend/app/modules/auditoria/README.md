@@ -1,8 +1,8 @@
-# Auditoria — TASK-82 / US-1004
+# Auditoria — TASK-82 e TASK-49 / US-1004 e US-903
 
 Serviço central de inserção em `registros_auditoria`, usando o esquema oficial já existente.
 A migration 0003 impede UPDATE, DELETE e TRUNCATE; esta entrega não altera migrations.
-Não há rota de consulta: ela pertence à TASK-49.
+A consulta exclusiva do ADM da plataforma é implementada pela TASK-49, descrita abaixo.
 
 ## Interfaces internas
 
@@ -81,4 +81,60 @@ exclusivo de banco descartável. Eventos de segurança são best effort conforme
 no banco é observável no log, mas não substitui o erro HTTP original.
 
 Ocorrências aguardam a TASK-40; aprovação, chaves e vínculos aguardam as respectivas tasks.
-Avisos e consulta HTTP de auditoria não fazem parte desta entrega.
+Avisos não fazem parte deste módulo; a consulta HTTP abaixo é a entrega da TASK-49.
+
+## Consulta da plataforma — TASK-49 / US-903
+
+`GET /api/v1/plataforma/auditoria` exige `require_platform_permission("auditoria:ver")`.
+Sem identidade válida: 401; Morador, Funcionário e Administração: 403. O filtro por condomínio é
+aceito nesta rota de plataforma e não constitui contexto de autorização para outros módulos.
+Não existem operações HTTP de escrita ou exclusão da trilha.
+
+Filtros opcionais: `condominio_id`, `usuario_id`, `de`, `ate`, `acao`, `recurso_tipo`, `recurso_id`.
+Ação é exata (`reserva.cancelar`) ou prefixo terminado por ponto (`reserva.`); `_` é literal.
+Datas `AAAA-MM-DD` incluem todo o dia no fuso `America/Sao_Paulo`, com limite superior exclusivo
+no início do dia seguinte. Período invertido retorna 422. Sem `condominio_id`, a consulta inclui
+todos os condomínios e eventos globais; sem usuário/condomínio, as referências da resposta são nulas.
+
+Resposta: `{"items": [...], "page_size": 20, "next_cursor": null}`. Cada item contém `id`, `acao`,
+`criado_em`, `usuario` e `condominio` (somente ID/nome), `responsavel_nome`, `perfil`, `recurso_tipo`,
+`recurso_id`, `antes`, `depois` e `ip`. Antes/depois passam novamente pela sanitização para proteger
+registros legados, sem tentar alterá-los. Máscaras já seguras são preservadas.
+
+### Cursor
+
+Ordem fixa: `criado_em DESC, id DESC`. `page_size` aceita 1 a 100, padrão 20. A consulta busca apenas
+`page_size + 1` linhas, sem OFFSET nem contagem total. Se houver continuação, o cursor representa
+a última linha devolvida: JSON `{"criado_em":"2026-11-17T12:00:00Z","id":1021}` codificado em
+base64url UTF-8 sem padding. Ele não contém credenciais nem concede acesso: a autorização do ADM
+é conferida em cada pedido. Não tem assinatura e pode representar qualquer posição válida.
+
+O cliente reapresenta `cursor` mantendo os mesmos filtros. Só entram tuplas `(criado_em,id)` menores
+que a posição, inclusive quando vários eventos têm o mesmo horário. `next_cursor=null` encerra a
+leitura. Cursor malformado, data sem fuso, ID inválido ou campos extras retornam 422 no envelope
+padrão. A navegação não é snapshot: inserções mais recentes aparecem ao reiniciar a consulta;
+eventos inseridos posteriormente com data anterior ao cursor podem aparecer na continuação.
+
+### Evidência de desempenho
+
+Teste reproduzível: [test_desempenho.py](../../../tests/auditoria/test_desempenho.py).
+Em 17/11/2026: Windows, Python 3.13.17, PostgreSQL 17.12 em Docker exclusivo, conexão local,
+100.000 eventos sintéticos além de 1.007 registros presentes na transação, cache aquecido,
+uma execução de aquecimento e 20 amostras por cenário, páginas de 100 itens. A medição inclui
+TestClient HTTP/ASGI, autenticação real, PostgreSQL, sanitização e serialização; não inclui rede
+HTTP externa. Logs operacionais estavam silenciados. Orçamento do teste local: p95 < 1 segundo.
+
+| Cenário | p50 HTTP/ASGI (ms) | p95 HTTP/ASGI (ms) | SQL no EXPLAIN (ms) |
+| --- | ---: | ---: | ---: |
+| Sem filtros | 14,118 | 20,127 | 0,277 |
+| Condomínio | 14,531 | 20,564 | 0,199 |
+| Usuário | 14,794 | 19,947 | 0,304 |
+| Ação rara (100 ocorrências em 100 mil) | 29,337 | 34,906 | 9,743 |
+| Filtros combinados | 16,989 | 23,833 | 0,208 |
+| Cursor após 90 mil eventos | 14,864 | 20,337 | 0,234 |
+
+`EXPLAIN (ANALYZE, BUFFERS)` mostrou `ix_registros_auditoria_criado_em` com `Incremental Sort`
+na maioria dos cenários; o filtro raro usou `Seq Scan` e `Sort`, ainda dentro do orçamento.
+Não houve necessidade demonstrada de índice ou migration novos. São resultados locais com
+amostras limitadas, não uma garantia de latência em produção. A carga sintética fica na transação
+revertida da fixture; o teste não apaga eventos existentes ou desativa o trigger para essa carga.

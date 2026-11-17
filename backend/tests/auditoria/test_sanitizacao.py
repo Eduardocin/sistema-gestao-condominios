@@ -90,3 +90,9 @@ def test_ip_vem_da_conexao_e_ignora_cabecalhos_arbitrarios(host, esperado):
 def test_constante_contem_todos_os_campos_exigidos_pelo_contrato():
     assert {"senha", "senha_hash", "token", "token_hash", "codigo"} <= CAMPOS_SECRETOS
     assert sanitizar({"JWTSecretKey": "segredo"}) == {}
+
+
+@pytest.mark.parametrize("documento", ["***.982.247-**", "**.***.333/0001-**"])
+def test_sanitizacao_de_documento_e_idempotente_para_consulta(documento):
+    dados = {"pessoa": {"documento": documento}}
+    assert sanitizar(sanitizar(dados)) == dados

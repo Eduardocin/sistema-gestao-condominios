@@ -1,6 +1,6 @@
 # Plataforma — proposta de contrato REST e serviços transversais (TASK-11)
 
-Status: rascunho para revisão no portão dos leads. O serviço central de auditoria da seção 4.1 está implementado na TASK-82; a consulta HTTP da seção 4.3 continua pendente da TASK-49. As demais seções devem ser confrontadas com os módulos e routers para distinguir entregas e propostas. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
+Status: rascunho para revisão no portão dos leads. O serviço central de auditoria da seção 4.1 está implementado na TASK-82; a consulta HTTP da seção 4.3 está implementada na TASK-49. As demais seções devem ser confrontadas com os módulos e routers para distinguir entregas e propostas. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seções 3.2 e 3.5. Permissões: [matriz](../permissoes-e-multitenant.md), seções 7, 9 e 10.
 
@@ -207,7 +207,7 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `GET /plataforma/auditoria` | ADM | `condominio_id`, `de`, `ate` (datas, fuso do condomínio), `acao` (valor exato ou prefixo `reserva.`), `usuario_id`, `recurso_tipo`, `recurso_id`, paginação | 200, lista |
+| `GET /plataforma/auditoria` | ADM | `condominio_id`, `de`, `ate` (datas inclusivas no fuso do condomínio), `acao` (valor exato ou prefixo `reserva.`), `usuario_id`, `recurso_tipo`, `recurso_id`, `cursor`, `page_size` | 200, página por cursor |
 
 ```json
 {
@@ -226,7 +226,29 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 }
 ```
 
-Ordem: `id` decrescente (o `id` é `bigint` de inserção). **A rota é só de leitura**: sem `PUT`, `PATCH` nem `DELETE`. Nenhum outro perfil acessa a auditoria (matriz); a única exceção proposta é o histórico de funcionários (seção 5). Registros sem condomínio (plataforma, login falho) têm `condominio: null`.
+Ordem implementada na TASK-49: `criado_em DESC, id DESC`, com desempate estável. **A rota é só de leitura**: sem `PUT`, `PATCH` nem `DELETE`. Nenhum outro perfil acessa a auditoria (matriz); a única exceção proposta é o histórico de funcionários (seção 5). Registros sem condomínio (plataforma, login falho) têm `condominio: null`.
+
+**Paginação implementada.** Prefixo completo `/api/v1/plataforma/auditoria`. Resposta
+`{"items": [...], "page_size": 20, "next_cursor": "..."}`; o objeto acima representa um item.
+`page_size` vai de 1 a 100 (padrão 20). Não há `page` nem `total` nesta rota: é a exceção de cursor
+à paginação geral. `next_cursor=null` indica o fim.
+
+O cursor é base64url sem padding do JSON `{"criado_em":"2026-11-17T12:00:00Z","id":1021}`.
+É uma posição, não uma credencial; toda requisição verifica novamente `auditoria:ver` pela
+autorização central da plataforma. A consulta seguinte usa comparação composta estritamente
+menor e os mesmos filtros. Não há assinatura ou promessa de snapshot entre pedidos.
+Cursor inválido retorna 422 `validation_error`; a mensagem não devolve o conteúdo recebido.
+
+`de`/`ate` são datas `AAAA-MM-DD` inclusivas no fuso do projeto; internamente usa-se início do
+primeiro dia e limite exclusivo no início do dia seguinte ao último. `de > ate` retorna 422.
+O limite máximo de `ate` é 9999-12-30. Ação aceita `grupo.verbo` ou prefixo `grupo.` literal.
+Sem filtro de condomínio, eventos de todos os condomínios e os globais são incluídos. Usuário
+ou condomínio inexistente no filtro resulta em lista vazia, sem alterar a autorização.
+As referências expõem somente ID/nome; dados anteriores/posteriores são sanitizados também na
+leitura, incluindo registros legados e máscaras já existentes.
+
+Índices existentes foram mantidos após teste com 100 mil eventos e EXPLAIN. Condições, tempos e
+comando reproduzível: [evidência da TASK-49](../../backend/app/modules/auditoria/README.md#evidência-de-desempenho).
 
 ## 5. Funcionários, responsáveis e conta compartilhada (US-209, US-210)
 

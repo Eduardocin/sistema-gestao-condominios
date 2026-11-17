@@ -5,8 +5,10 @@ Nenhum schema/migration é criado aqui; o banco deve estar migrado pelo Alembic.
 """
 
 import os
+import uuid
 from collections.abc import Generator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +16,9 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import session as banco
+from app.db.session import get_session
 from app.main import create_app
+from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.auth.rate_limit import get_login_rate_limiter
 from app.modules.auth.security import hash_senha
 from app.modules.funcionarios.models import Funcionario, ResponsavelAdministracao
@@ -97,3 +101,96 @@ def client(cenario) -> Generator[TestClient]:
     with TestClient(create_app(), client=("203.0.113.20", 50000)) as client:
         yield client
     get_login_rate_limiter().resetar()
+
+
+ROTA = "/api/v1/plataforma/auditoria"
+
+
+@dataclass
+class CasoConsulta:
+    cenario: Cenario
+    session: Session
+    client: TestClient
+    eventos: list[RegistroAuditoria]
+    tipo: str
+
+    @property
+    def headers(self):
+        return self.cenario.a.cabecalho_de("plataforma")
+
+    def consultar(self, **params):
+        return self.client.get(
+            ROTA, headers=self.headers, params={"recurso_tipo": self.tipo, **params}
+        )
+
+
+@pytest.fixture
+def consulta(cenario) -> Generator[CasoConsulta]:
+    tipo = f"consulta_{uuid.uuid4().hex}"
+    with cenario.fabrica.kw["bind"].connect() as connection:
+        transaction = connection.begin()
+        try:
+            with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
+                instantes = [
+                    datetime(2026, 11, 16, 2, 59, 59, tzinfo=UTC),
+                    datetime(2026, 11, 16, 3, tzinfo=UTC),
+                    datetime(2026, 11, 17, 2, 59, 59, 999999, tzinfo=UTC),
+                    datetime(2026, 11, 17, 3, tzinfo=UTC),
+                    datetime(2026, 11, 17, 3, tzinfo=UTC),
+                ]
+                usuarios = [
+                    cenario.a.administracao.id,
+                    cenario.a.morador.id,
+                    cenario.b.administracao.id,
+                    None,
+                    cenario.a.adm.id,
+                ]
+                condominios = [
+                    cenario.a.condominio.id,
+                    cenario.a.condominio.id,
+                    cenario.b.condominio.id,
+                    None,
+                    None,
+                ]
+                acoes = [
+                    "condominio.aprovar",
+                    "condominio.rejeitar",
+                    "permissao_aba.alterar",
+                    "seguranca.login_falho",
+                    "seguranca.login",
+                ]
+                registros = [
+                    RegistroAuditoria(
+                        usuario_id=usuarios[i],
+                        condominio_id=condominios[i],
+                        acao=acoes[i],
+                        recurso_tipo=tipo,
+                        recurso_id=(
+                            cenario.a.unidade_101.id if i < 2 else cenario.b.unidade_101.id
+                        ),
+                        responsavel_nome="Síndica" if i == 0 else None,
+                        perfil="plataforma" if i == 4 else None,
+                        criado_em=instantes[i],
+                        antes={"status": "pendente"} if i == 0 else None,
+                        depois={
+                            "status": "ativo",
+                            "senha": "SEGREDO_LEGADO",
+                            "pessoa": {
+                                "documento": "52998224725",
+                                "token": "TOKEN_LEGADO",
+                            },
+                        }
+                        if i == 0
+                        else None,
+                        ip="203.0.113.9" if i == 0 else None,
+                    )
+                    for i in range(5)
+                ]
+                session.add_all(registros)
+                session.flush()
+                app = create_app()
+                app.dependency_overrides[get_session] = lambda: session
+                with TestClient(app) as client:
+                    yield CasoConsulta(cenario, session, client, registros, tipo)
+        finally:
+            transaction.rollback()

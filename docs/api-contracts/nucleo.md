@@ -290,7 +290,8 @@ Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andar
 `GET /api/v1/condominios/meus` está implementado na TASK-28: lista direta, sem paginação,
 ordenada por nome e ID, limitada aos vínculos ativos de perfil Administração da conta.
 Inclui todos os estados do condomínio; revogar o vínculo o remove da próxima consulta.
-As demais rotas da tabela continuam fora dessa entrega. Selecionar um condomínio pendente
+`GET /condominio` para Administração foi implementado na TASK-29. As escritas restantes
+da tabela continuam fora dessas entregas. Selecionar um condomínio pendente
 não libera suas operações do dia a dia, que continuam sob a autorização central.
 
 `GET /condominio` para a Administração:
@@ -335,6 +336,10 @@ Para a Administração, cada unidade traz também `tem_proprietario` e `moradore
 
 ## 5. Aprovação pelo ADM (US-203, Must, Sprint 1) e gestão de condomínios ativos (US-208)
 
+**Implementado na TASK-29:** fila/detalhe e ações de aprovação/rejeição, mais a leitura
+administrativa de `GET /condominio`. Sem desativação, reativação ou reenvio.
+Precisões, atomicidade e limites: [condomínios](../../backend/app/modules/condominios/README.md#aprovação-e-rejeição--task-29--us-203).
+
 Rotas sob `/plataforma/...`, só para `administrador_plataforma` (R9). O ADM **não** vê o dia a dia de nenhum condomínio (R8).
 
 | Método e rota | Permissão | Entrada | Sucesso |
@@ -371,6 +376,12 @@ A fila vem do **mais antigo para o mais recente** (`enviado_em` crescente), para
 Aprovar ou rejeitar algo que não esteja `pendente` retorna 409. O ADM é uma conta individual, por isso estas rotas **não recebem `responsavel_id`**: a auditoria já registra quem agiu. Para o ADM abrir os **documentos** do cadastro, a leitura de arquivos da TASK-26 precisa liberar o ADM nos arquivos de `condominio_documentos`, exceção estreita à R8 (pendências).
 
 ## 6. Proprietário e chaves de acesso (US-207, Must, Sprint 1)
+
+**Implementado na TASK-29:** as sete rotas das seções 6.1–6.2. Escritas de proprietário e
+chaves exigem `responsavel_id` conforme as convenções de contas compartilhadas. As exclusões
+do alfabeto deixam 31 símbolos, apesar da contagem 32 proposta no texto. A notificação da
+aprovação é somente enfileirada; envio efetivo fica na Sprint 3. Detalhes e divergências:
+[unidades](../../backend/app/modules/unidades/README.md).
 
 ### 6.1 Unidades e proprietário (Administração)
 

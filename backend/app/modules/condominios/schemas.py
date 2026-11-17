@@ -109,3 +109,113 @@ class CondominioResumo(BaseModel):
     nome: str
     status: StatusCondominio
     perfil: Literal["administracao"] = "administracao"
+
+
+class AcaoAprovacao(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class RejeicaoEntrada(AcaoAprovacao):
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+class FiltrosFila(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: StatusCondominio = "pendente"
+    busca: str | None = Field(default=None, max_length=150)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class AdministracaoSaida(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    nome: str
+    email: str
+
+
+class DocumentoSaida(BaseModel):
+    arquivo_id: uuid.UUID
+    nome_original: str
+
+
+class DuplicidadeSaida(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nome: str
+    status: StatusCondominio
+
+
+class ItemFila(DuplicidadeSaida):
+    cnpj: str | None
+    enviado_em: datetime | None
+    administracao: AdministracaoSaida | None
+    documentos: list[DocumentoSaida]
+    estrutura: ContagemEstrutura
+    possivel_duplicidade: list[DuplicidadeSaida]
+
+
+class PaginaFila(BaseModel):
+    items: list[ItemFila]
+    page: int
+    page_size: int
+    total: int
+
+
+class AnaliseSaida(BaseModel):
+    evento: str
+    motivo: str | None
+    em: datetime
+
+
+class EnderecoSaida(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cep: str | None
+    logradouro: str | None
+    numero: str | None
+    complemento: str | None
+    bairro: str | None
+    cidade: str | None
+    uf: str | None
+
+
+class CondominioSaida(DuplicidadeSaida):
+    cnpj: str | None
+    endereco: EnderecoSaida
+    logo_arquivo_id: uuid.UUID | None
+    motivo_rejeicao: str | None
+    aprovado_em: datetime | None
+    analises: list[AnaliseSaida]
+
+
+class UnidadeAnalise(BaseModel):
+    id: uuid.UUID
+    identificacao: str
+    ativo: bool
+
+
+class AndarAnalise(BaseModel):
+    id: uuid.UUID
+    nome: str
+    ordem: int
+    ativo: bool
+    unidades: list[UnidadeAnalise]
+
+
+class BlocoAnalise(BaseModel):
+    id: uuid.UUID
+    nome: str
+    ativo: bool
+    andares: list[AndarAnalise]
+
+
+class DetalhePlataforma(CondominioSaida):
+    enviado_em: datetime | None
+    administracao: AdministracaoSaida | None
+    documentos: list[DocumentoSaida]
+    estrutura: ContagemEstrutura
+    possivel_duplicidade: list[DuplicidadeSaida]
+    blocos: list[BlocoAnalise]

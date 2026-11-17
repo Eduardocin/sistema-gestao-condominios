@@ -118,15 +118,59 @@ Erros: 409 `conflict` com `reason` = `email_ja_cadastrado` ou `telefone_ja_cadas
 
 `tipo_cadastro` já existe na tabela `usuarios` e é preenchido por estas rotas. A criação de conta não implementa o assistente de cadastro do prédio nem cria vínculos automaticamente.
 
-### 3.3 Demais rotas de conta (Gabriel, Sprint 3, só resumo)
+### 3.3 Perfil (recorte TASK-27) e demais rotas de conta (US-103, Gabriel, Sprint 3)
 
 | Método e rota | Quem | O que faz | História |
 | --- | --- | --- | --- |
 | `GET /contas/me` | Qualquer conta | Dados da conta | US-103 |
-| `PUT /contas/me` | Qualquer conta | Edita nome, telefone, e-mail e `foto_arquivo_id` | US-103 |
+| `PUT /contas/me` | Cadastro global de Morador/Administração | Edita nome, telefone e e-mail; foto depende de storage global | US-103 (recorte TASK-27) |
 | `PUT /contas/me/senha` | Qualquer conta | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve um token novo | US-103, US-210 |
 | `POST /contas/recuperacao-senha` | Público | `{"email"}`; **sempre 202**, exista ou não a conta; enfileira o e-mail `recuperacao_senha` | US-102 |
 | `POST /contas/redefinicao-senha` | Público | `{"token", "senha_nova"}`; token de uso único (`UPDATE ... WHERE usado_em IS NULL`) e com validade; incrementa `sessao_versao` | US-102 |
+
+**Implementado na TASK-27:** somente `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
+das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103; as rotas de senha
+da tabela continuam propostas. Os cadastros existentes e seu `LoginResponse` são preservados.
+
+`GET` exige Bearer válido, inclusive sem `cid`, e retorna os dados da identidade autenticada:
+
+```json
+{
+  "id": "UUID", "nome": "Ana Martins", "email": "ana@exemplo.com",
+  "telefone": "11987654321", "tipo_cadastro": "morador", "documento": null,
+  "foto_arquivo_id": null
+}
+```
+
+Documento e referência à foto, quando existentes, são retornados somente para o próprio
+usuário; telefone e tipo também podem ser nulos em contas legadas. Nunca retorna senha,
+hash, tokens internos ou privilégios. Não há usuário de destino na URL ou no corpo.
+
+`PUT` exige `{"nome": "Ana Martins", "telefone": "11987654321", "email": "ana@exemplo.com"}`
+e retorna 200 com o mesmo formato de `GET`. Os três campos são obrigatórios e seguem as
+validações do cadastro (nome completo para Morador, normalização de espaços/e-mail e telefone
+com 10 ou 11 dígitos). Campos extras retornam 422, inclusive `documento`, `foto_arquivo_id`,
+`senha`, `tipo_cadastro`, privilégios, estado e IDs. Duplicidade de e-mail/telefone em outra
+conta retorna 409 com `email_ja_cadastrado`/`telefone_ja_cadastrado`; manter o próprio dado
+é permitido. Edição não troca senha, versão de sessão, documento, privilégios nem vínculos.
+Sem sessão válida ou com conta inativa: 401. Contas sem tipo de cadastro e ADM podem ler,
+mas recebem 403 na edição neste recorte; gestão de acesso compartilhado continua na US-210.
+
+A foto opcional da US-104 permanece dependente do upload global de conta, não implementado
+no [storage atual](../storage.md). A referência existente é legível, mas não pode ser
+associada por esta escrita. Documento comprobatório continua ligado ao condomínio (3.2).
+
+Auditoria: `conta.criar` e `conta.editar`, recurso `usuario` e ID da conta, via serviço
+central na mesma transação. O contexto é global (`condominio_id`, `perfil` e responsável
+nulos), mesmo se houver `cid` no JWT: tipo de cadastro não é um perfil local validado.
+Criação usa somente campos públicos; edição usa somente alterações, sem senha/hash/tokens;
+documento passa pela máscara central. Contas compartilhadas não usam esta escrita para
+contornar a identificação de responsável ou a revogação exigida na US-210.
+
+**Divergência documental:** o card TASK-27 menciona conta pendente. Mantém-se autenticação
+imediata, conforme US-104 e o contrato já implementado; a conta não ganha condomínio nem
+unidade. Aprovação de condomínio é TASK-29 e vínculo por unidade é TASK-30. Não se adiciona
+estado de conta nem se altera `usuarios.ativo` para representar essa pendência.
 
 ## 4. Condomínio (cadastro, estados e dados)
 

@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError
+from app.modules.auditoria import service as auditoria
+from app.modules.auditoria.schemas import ContextoAuditoria
 from app.modules.permissoes_aba.repository import (
-    RepositorioAuditoria,
     RepositorioMoradores,
     RepositorioPermissoes,
     RepositorioUnidades,
@@ -51,7 +52,6 @@ class PermissoesAbaService:
         self.unidades = RepositorioUnidades(session, contexto)
         self.moradores = RepositorioMoradores(session, contexto)
         self.permissoes = RepositorioPermissoes(session, contexto)
-        self.auditoria = RepositorioAuditoria(session, contexto)
 
     def _montar(
         self, morador: MoradorUnidade, nome: str, abas: Mapping[str, bool]
@@ -106,13 +106,14 @@ class PermissoesAbaService:
         if mudancas:
             self._conferir_trava_do_ultimo(unidade_id, morador.id, atuais, mudancas)
             self.permissoes.definir(morador.id, mudancas, alterado_por=self.contexto.usuario_id)
-            self.auditoria.registrar(
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
                 acao=ACAO_AUDITORIA,
                 recurso_tipo="morador_unidade",
                 recurso_id=morador.id,
                 antes={aba: atuais.get(aba, False) for aba in mudancas},
                 depois=dict(mudancas),
-                ip=ip,
             )
         self.session.commit()  # também solta a tranca da unidade
 

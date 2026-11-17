@@ -20,9 +20,10 @@ from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.core.permissoes import Perfil
 from app.core.tempo import Relogio, agora, inicio_do_slot, no_fuso
+from app.modules.auditoria import service as auditoria
+from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.auth.autorizacao import garantir_aba_da_unidade, garantir_aba_no_condominio
 from app.modules.funcionarios.repository import RepositorioResponsaveis
-from app.modules.permissoes_aba.repository import RepositorioAuditoria
 from app.modules.reservas.models import AreaComum, Reserva
 from app.modules.reservas.repository import (
     FiltrosAdministracao,
@@ -230,8 +231,6 @@ class ReservasService:
         self.reservas = RepositorioReservas(session, contexto)
         self.bloqueios = RepositorioBloqueios(session, contexto)
         self.responsaveis = RepositorioResponsaveis(session, contexto)
-        # TODO: trocar por registrar_acao (TASK-82)
-        self.auditoria = RepositorioAuditoria(session, contexto)
 
     @property
     def _e_morador(self) -> bool:
@@ -372,7 +371,9 @@ class ReservasService:
                 ),
             },
         )
-        self.auditoria.registrar(
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
             acao="reserva.criar",
             recurso_tipo="reserva",
             recurso_id=reserva.id,
@@ -383,7 +384,6 @@ class ReservasService:
                 "data": dados.data.isoformat(),
                 "hora_inicio": hora.strftime("%H:%M"),
             },
-            ip=ip,
         )
         self.session.commit()  # reserva e auditoria juntas, ou nenhuma das duas
         return self._saida(reserva.id)
@@ -492,14 +492,17 @@ class ReservasService:
         if responsavel is not None:
             depois["responsavel_id"] = str(responsavel.id)
             depois["motivo"] = dados.motivo
-        self.auditoria.registrar(
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
             acao="reserva.cancelar",
             recurso_tipo="reserva",
             recurso_id=reserva.id,
             antes={"status": "ativa"},
             depois=depois,
-            ip=ip,
-            responsavel_nome=responsavel.nome if responsavel is not None else None,
+            responsavel=(
+                ResponsavelRef("administracao", responsavel.id) if responsavel is not None else None
+            ),
         )
         self.session.commit()
         return self._saida(reserva.id)

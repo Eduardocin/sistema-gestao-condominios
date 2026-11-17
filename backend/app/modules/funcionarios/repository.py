@@ -1,11 +1,9 @@
 import uuid
-from typing import Any
 
 from sqlalchemy import Select, func, select
 
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
-from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.condominios.models import Condominio
 from app.modules.funcionarios.models import Funcionario, ResponsavelAdministracao
 from app.modules.storage.models import Arquivo
@@ -101,32 +99,3 @@ class RepositorioFotos(RepositorioDoCondominio[Arquivo]):
             or arquivo.chave_storage != chave_esperada
         ):
             raise RecursoNaoEncontrado
-
-
-class RepositorioAuditoriaFuncionarios(RepositorioDoCondominio[RegistroAuditoria]):
-    modelo = RegistroAuditoria
-
-    def registrar(
-        self,
-        *,
-        acao: str,
-        recurso_tipo: str,
-        recurso_id: uuid.UUID,
-        responsavel_nome: str | None,
-        antes: dict[str, Any],
-        depois: dict[str, Any],
-        ip: str | None,
-    ) -> None:
-        self.criar(
-            {
-                "usuario_id": self.contexto.usuario_id,
-                "perfil": self.contexto.perfil,
-                "responsavel_nome": responsavel_nome,
-                "acao": acao,
-                "recurso_tipo": recurso_tipo,
-                "recurso_id": recurso_id,
-                "antes": antes,
-                "depois": depois,
-                "ip": ip,
-            }
-        )

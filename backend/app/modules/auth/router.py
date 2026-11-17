@@ -2,11 +2,12 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
+from app.modules.auditoria.contexto import ip_do_cliente
 from app.modules.auth import service
 from app.modules.auth.dependencies import UsuarioAutenticado, get_usuario_autenticado
 from app.modules.auth.presentation import resposta_de_sessao
@@ -41,13 +42,19 @@ _RESPOSTAS_401: dict[int | str, dict[str, Any]] = {
     responses={**_RESPOSTAS_401, 429: {"description": "Muitas tentativas (`too_many_attempts`)."}},
 )
 def login(
+    request: Request,
     dados: LoginRequest,
     session: SessionDep,
     settings: SettingsDep,
     limiter: Annotated[LoginRateLimiter, Depends(get_login_rate_limiter)],
 ) -> LoginResponse:
     sessao = service.login(
-        session, email=dados.identificador, senha=dados.senha, limiter=limiter, settings=settings
+        session,
+        email=dados.identificador,
+        senha=dados.senha,
+        limiter=limiter,
+        settings=settings,
+        ip=ip_do_cliente(request),
     )
     return resposta_de_sessao(sessao)
 

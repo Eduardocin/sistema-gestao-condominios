@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError
+from app.modules.auditoria import service as auditoria
+from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.funcionarios.models import Funcionario, ResponsavelAdministracao
 from app.modules.funcionarios.repository import (
-    RepositorioAuditoriaFuncionarios,
     RepositorioFotos,
     RepositorioFuncionarios,
     RepositorioResponsaveis,
@@ -22,7 +23,6 @@ class FuncionariosService:
         self.funcionarios = RepositorioFuncionarios(session, contexto)
         self.responsaveis = RepositorioResponsaveis(session, contexto)
         self.fotos = RepositorioFotos(session, contexto)
-        self.auditoria = RepositorioAuditoriaFuncionarios(session, contexto)
 
     def listar(
         self, *, ativo: bool, busca: str | None, page: int, page_size: int
@@ -41,14 +41,15 @@ class FuncionariosService:
             if dados.foto_arquivo_id is not None:
                 self.fotos.conferir(dados.foto_arquivo_id)
             funcionario = self.funcionarios.criar(dados.model_dump(exclude={"responsavel_id"}))
-            self.auditoria.registrar(
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
                 acao="funcionario.cadastrar",
                 recurso_tipo="funcionario",
                 recurso_id=funcionario.id,
-                responsavel_nome=responsavel.nome,
+                responsavel=ResponsavelRef("administracao", responsavel.id),
                 antes={},
                 depois={"nome": funcionario.nome, "funcao": funcionario.funcao, "ativo": True},
-                ip=ip,
             )
             self.session.commit()
             return funcionario
@@ -64,14 +65,15 @@ class FuncionariosService:
                 raise ApiError(409, "conflict", "Funcionário já desligado.", reason="ja_desligado")
             funcionario.ativo = False
             funcionario.desligado_em = datetime.now(UTC)
-            self.auditoria.registrar(
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
                 acao="funcionario.desativar",
                 recurso_tipo="funcionario",
                 recurso_id=funcionario.id,
-                responsavel_nome=responsavel.nome,
+                responsavel=ResponsavelRef("administracao", responsavel.id),
                 antes={"ativo": True},
                 depois={"ativo": False, "desligado_em": funcionario.desligado_em.isoformat()},
-                ip=ip,
             )
             self.session.commit()
             return funcionario
@@ -93,14 +95,14 @@ class FuncionariosService:
                     reason="nome_duplicado",
                 )
             responsavel = self.responsaveis.criar({"nome": nome})
-            self.auditoria.registrar(
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
                 acao="responsaveis.alterar",
                 recurso_tipo="responsavel_administracao",
                 recurso_id=responsavel.id,
-                responsavel_nome=None,
                 antes={},
                 depois={"nome": responsavel.nome, "ativo": True},
-                ip=ip,
             )
             self.session.commit()
             return responsavel

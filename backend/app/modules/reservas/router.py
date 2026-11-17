@@ -17,13 +17,13 @@ from app.core.errors import ApiError
 from app.core.permissoes import Perfil
 from app.core.tempo import Relogio, get_relogio
 from app.db.session import get_session
+from app.modules.auditoria.contexto import ip_do_cliente
 from app.modules.auth.autorizacao import (
     MENSAGEM_SEM_PERMISSAO,
     registrar_negacao,
     require_permission,
 )
 from app.modules.auth.dependencies import ContextoDep
-from app.modules.permissoes_aba.router import ip_do_cliente
 from app.modules.reservas.models import AreaComum
 from app.modules.reservas.repository import FiltrosAdministracao
 from app.modules.reservas.schemas import (

@@ -13,7 +13,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
-from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
 
@@ -151,37 +150,4 @@ class RepositorioPermissoes(RepositorioDoCondominio[PermissaoAba]):
                     "alterado_em": func.now(),
                 },
             )
-        )
-
-
-class RepositorioAuditoria(RepositorioDoCondominio[RegistroAuditoria]):
-    """Grava eventos na trilha. PROVISÓRIO: quando a TASK-24 (US-1004) criar o serviço de
-    auditoria, troque `registrar` por ele. A tabela só aceita INSERT (trigger do banco)."""
-
-    modelo = RegistroAuditoria
-
-    def registrar(
-        self,
-        *,
-        acao: str,
-        recurso_tipo: str,
-        recurso_id: uuid.UUID,
-        antes: dict[str, Any],
-        depois: dict[str, Any],
-        ip: str | None,
-        responsavel_nome: str | None = None,
-    ) -> None:
-        self.criar(
-            {
-                "usuario_id": self.contexto.usuario_id,
-                "perfil": self.contexto.perfil,
-                # Conta compartilhada: o nome escolhido na lista (plataforma.md, seção 4.1).
-                "responsavel_nome": responsavel_nome,
-                "acao": acao,
-                "recurso_tipo": recurso_tipo,
-                "recurso_id": recurso_id,
-                "antes": antes,
-                "depois": depois,
-                "ip": ip,
-            }
         )

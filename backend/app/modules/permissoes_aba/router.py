@@ -5,7 +5,6 @@ A ordem da matriz está nas dependências de cada rota: o perfil primeiro (`requ
 o service roda. Aqui só traduzimos HTTP <-> service.
 """
 
-import ipaddress
 import uuid
 from typing import Annotated, Any
 
@@ -13,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
+from app.modules.auditoria.contexto import ip_do_cliente
 from app.modules.auth.autorizacao import require_aba, require_permission
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.permissoes_aba.schemas import (
@@ -39,15 +39,6 @@ _ERROS: dict[int | str, dict[str, Any]] = {
     403: {"description": "Perfil ou aba sem acesso (`forbidden`)."},
     404: {"description": "Unidade ou morador inexistente, ou de outra unidade (`not_found`)."},
 }
-
-
-def ip_do_cliente(request: Request) -> str | None:
-    """IP de quem chamou, para a auditoria. Se não for um IP válido, não guardamos nada."""
-    host = request.client.host if request.client else None
-    try:
-        return str(ipaddress.ip_address(host)) if host else None
-    except ValueError:
-        return None
 
 
 @router.get(

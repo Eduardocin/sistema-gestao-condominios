@@ -70,4 +70,4 @@ Claims: `sub` (usuário), `cid` (condomínio, ausente antes de escolher um), `sv
 - O contador de tentativas fica na memória do processo (vale para um único servidor).
 - O status do condomínio é provisório: `ativo` ou `desativado`, a partir de `condominios.ativo`.
 - Não há rotação nem revogação individual de refresh token; para derrubar sessões, aumentar `sessao_versao`.
-- Falha de login ainda só vai para o log; vira evento de auditoria quando a US-1004 existir.
+- TASK-82 / US-1004: login confirmado registra `seguranca.login` na mesma transação do eventual rehash. Falhas e bloqueios registram `seguranca.login_falho` e `seguranca.login_bloqueado` em transação independente, sem senha, token ou e-mail digitado. Falha de auditoria de segurança não altera o 401/429 original.

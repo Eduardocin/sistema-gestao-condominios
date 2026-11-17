@@ -1,6 +1,6 @@
 # Plataforma — proposta de contrato REST e serviços transversais (TASK-11)
 
-Status: rascunho para revisão no portão dos leads. Endpoints e funções abaixo **não estão implementados**. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
+Status: rascunho para revisão no portão dos leads. O serviço central de auditoria da seção 4.1 está implementado na TASK-82; a consulta HTTP da seção 4.3 continua pendente da TASK-49. As demais seções devem ser confrontadas com os módulos e routers para distinguir entregas e propostas. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seções 3.2 e 3.5. Permissões: [matriz](../permissoes-e-multitenant.md), seções 7, 9 e 10.
 
@@ -144,7 +144,7 @@ Mensagem em chamado `encerrado` retorna 409 (`reason: "chamado_encerrado"`); a A
 
 ### 4.1 O serviço único que os módulos chamam
 
-A US-1004 exige "um mecanismo único que os outros módulos chamam". Interface proposta, no módulo `auditoria`:
+A US-1004 exige "um mecanismo único que os outros módulos chamam". Interface implementada no módulo `auditoria` (TASK-82); detalhes e integrações em [auditoria](../../backend/app/modules/auditoria/README.md):
 
 ```python
 @dataclass(frozen=True)
@@ -155,7 +155,7 @@ class ResponsavelRef:
 def registrar_acao(
     session: Session,
     *,
-    ctx: ContextoRequisicao,            # usuario_id, condominio_id, perfil, ip: vêm da autorização central
+    ctx: ContextoAuditoria,            # usuario_id, condominio_id, perfil, ip: vêm da autorização central
     acao: str,                          # "grupo.verbo", do catálogo da seção 4.2
     recurso_tipo: str,                  # "reserva", "condominio", "unidade"...
     recurso_id: UUID | None,
@@ -166,7 +166,7 @@ def registrar_acao(
 
 def registrar_evento_seguranca(
     *, acao: str, usuario_id: UUID | None, condominio_id: UUID | None,
-    ip: str | None, recurso_tipo: str | None = None, recurso_id: UUID | None = None,
+    ip: str | None, perfil: str | None = None, recurso_tipo: str | None = None, recurso_id: UUID | None = None,
     detalhe: Mapping[str, Any] | None = None,
 ) -> None: ...
 ```
@@ -175,11 +175,19 @@ Regras de uso:
 
 1. **Mesma transação.** `registrar_acao` faz `session.add` + `flush`, **sem `commit`** (quem commita é o service, como em `architecture.md`). A ação e o evento são gravados juntos ou nenhum dos dois. Esquecer a chamada é o erro mais provável, por isso o checklist da matriz (seção 13) já pede a chamada em toda ação crítica.
 2. **Eventos de segurança em transação própria.** `login falho`, `acesso negado (403)` e `404 cross-tenant` acontecem **em requisições que falham** e fazem rollback; se usassem a sessão da requisição, o evento sumiria junto. `registrar_evento_seguranca` abre uma sessão curta e independente, faz o commit dela e nunca propaga erro para a requisição (falha de auditoria de segurança vai para o log, não derruba a resposta de 403).
-3. **Responsável.** Nas ações da Administração, `responsavel` é obrigatório e o serviço **valida** que o ID pertence ao condomínio do contexto e está ativo, copiando o **nome** para `responsavel_nome` (o nome fica gravado mesmo que a lista mude depois). Para ações do Funcionário, `ResponsavelRef(tipo="funcionario")`. A conta autenticada (`usuario_id`) é gravada sempre.
+3. **Responsável.** Nas ações da Administração, `responsavel` é obrigatório e o serviço **valida** que o ID pertence ao condomínio do contexto e está ativo, copiando o **nome** para `responsavel_nome` (o nome fica gravado mesmo que a lista mude depois). Para ações do Funcionário, `ResponsavelRef(tipo="funcionario")`. A conta autenticada (`usuario_id`) é gravada sempre. A gestão da própria lista de responsáveis preserva a exceção da seção 5.2; login identifica a conta antes da seleção de pessoa.
 4. **`antes` e `depois` guardam só o que mudou**, como dicionários simples. O serviço **remove ou mascara** campos sensíveis antes de gravar: `senha`, `senha_hash`, `token`, `token_hash`, `codigo` (chave de acesso; grava-se o ID da chave, nunca o código) e `documento` (CPF/CNPJ aparece mascarado, `***.456.789-**`). A lista de campos sensíveis é uma constante testada.
 5. `ip` e `criado_em` vêm do servidor. Nada disso é aceito do cliente.
 6. **Um evento por ação lógica.** Aprovar um condomínio gera **um** evento `condominio.aprovar` (com `depois: {"chaves_geradas": 38}`), não 38. Em operações em lote, como o bloqueio de data que cancela reservas, cada reserva cancelada tem o seu `reserva.cancelar` mais o `area.bloquear`; isso está dito em [convivencia.md](convivencia.md).
 7. A tabela é só de inserção: não existe `UPDATE` nem `DELETE` nem rota para eles, e o trigger do DER (regra 21) recusa os dois no banco.
+
+**Comportamento de segurança implementado.** O middleware registra uma única negação autenticada
+por resposta 403. Em 404 de recurso sob contexto validado, `seguranca.acesso_cross_tenant` representa
+a tentativa `recurso_fora_do_escopo_ou_inexistente`, sem comprovar a existência do ID nem consultar
+outro condomínio; URLs desconhecidas ficam fora desse evento. IP vem da conexão ASGI; a rota
+registrada é o modelo estático, sem parâmetros, query, corpo ou cabeçalhos sensíveis. A sessão
+independente usa limites locais de espera por lock/comando e log fixo em falhas, sem traceback
+ou parâmetros SQL. Referências ainda não confirmadas ou inexistentes ficam nulas.
 
 ### 4.2 Catálogo de ações e quem chama
 
@@ -187,7 +195,7 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 
 | Dono | Ações |
 | --- | --- |
-| Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login_falho`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
+| Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login`, `seguranca.login_falho`, `seguranca.login_bloqueado`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
 | Paulo (condomínio, chaves, vínculos) | `condominio.enviar` *(proposta: cadastro inicial)*, `condominio.reenviar`, `condominio.aprovar`, `condominio.rejeitar` (com motivo), `condominio.desativar`, `condominio.reativar`, `condominio.editar`, `chave.gerar`, `chave.regenerar`, `chave.revogar`, `seguranca.chave_invalida` *(proposta: tentativas erradas, US-301)*, `vinculo.aprovar`, `vinculo.rejeitar`, `vinculo.desfazer`, `proprietario.editar` |
 | Vitor (convivência) | `reserva.cancelar`, `area.bloquear`, `ocorrencia.resolver`, `ocorrencia.reabrir` |
 | Eduardo (portaria) | `encomenda.entregar`, `encomenda.confirmar` |

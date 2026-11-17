@@ -1,4 +1,3 @@
-import ipaddress
 import uuid
 from typing import Annotated
 
@@ -7,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
 from app.db.session import get_session
+from app.modules.auditoria.contexto import ip_do_cliente
 from app.modules.auth.autorizacao import require_permission
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.funcionarios.dependencies import contexto_responsaveis
@@ -25,14 +25,6 @@ router = APIRouter(prefix="/funcionarios", tags=["funcionarios"])
 responsaveis_router = APIRouter(prefix="/responsaveis-administracao", tags=["responsaveis"])
 SessionDep = Annotated[Session, Depends(get_session)]
 ResponsaveisContextoDep = Annotated[ContextoCondominio, Depends(contexto_responsaveis)]
-
-
-def ip_do_cliente(request: Request) -> str | None:
-    host = request.client.host if request.client else None
-    try:
-        return str(ipaddress.ip_address(host)) if host else None
-    except ValueError:
-        return None
 
 
 def get_service(session: SessionDep, contexto: ContextoDep) -> FuncionariosService:

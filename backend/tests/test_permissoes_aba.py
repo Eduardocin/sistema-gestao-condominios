@@ -272,14 +272,14 @@ def test_aba_sem_linha_no_banco_nega_por_padrao(client, cenario, session):
 
 
 def test_falha_na_auditoria_reverte_as_permissoes(client, cenario, session, monkeypatch):
-    from app.modules.permissoes_aba.repository import RepositorioAuditoria
+    from app.modules.auditoria import service as auditoria
 
     p, _, alvo, _ = cenario
 
     def falhar(*args, **kwargs):
         raise RuntimeError("Falha de teste na auditoria")
 
-    monkeypatch.setattr(RepositorioAuditoria, "registrar", falhar)
+    monkeypatch.setattr(auditoria, "registrar_acao", falhar)
     assert alterar(client, p, alvo, {"visitantes": True}).status_code == 500
     permissao = session.get(PermissaoAba, (alvo.id, "visitantes"))
     assert permissao is not None and permissao.com_acesso is False

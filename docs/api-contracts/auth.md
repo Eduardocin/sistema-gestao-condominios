@@ -63,7 +63,12 @@ Claims: `sub` (usuário), `cid` (condomínio, ausente antes de escolher um), `sv
 }
 ```
 
-`unidades` só para o Morador. Permissões por aba entram na TASK-21. Token sem Bearer ou inválido: 401 com `WWW-Authenticate: Bearer`. Vínculo retirado depois do login: 403 `forbidden`.
+`unidades` só para o Morador. Desde a TASK-30, inclui todas as unidades ativas do condomínio
+selecionado, associadas por `moradores_unidade`, sem ler a coluna legada do vínculo global.
+As abas não filtram esse seletor; a listagem `/minhas-unidades` respeita a aba Unidades.
+Permissões por aba usam a TASK-21. Token sem Bearer ou inválido: 401 com
+`WWW-Authenticate: Bearer`. Vínculo global retirado depois do login: 403 `forbidden`;
+associação à unidade retirada deixa de aparecer na próxima consulta.
 
 ## Limitações conhecidas
 

@@ -47,7 +47,8 @@ exigem DDD e 10 ou 11 dígitos, sem máscara. Listas vazias e telefone/foto nulo
 A foto é referência a imagem já enviada pelo próprio usuário para `fotos` no mesmo condomínio,
 validada por `RepositorioFotos`; não se aceita URL/base64 nem se cria serviço de upload.
 A política de download reconhece a associação ao proprietário e permite Administração do
-condomínio. Não concede acesso a outros perfis nem ao ADM. A leitura para Morador é futura.
+condomínio. Na TASK-30, a leitura da foto para Morador passa pelo próprio vínculo ativo e aba
+Unidades, conforme o [módulo de vínculos](../vinculos/README.md). O ADM continua sem acesso.
 
 `proprietario.editar` registra presença anterior/posterior e documento com máscara central;
 não inclui contatos ou imagem. Eventos `chave.gerar`, `chave.regenerar` e `chave.revogar`
@@ -58,7 +59,7 @@ responsável ativo do próprio condomínio, IP e data/hora do mecanismo central.
 
 - Adota a chave **por unidade** do contrato, sem expiração e sem uso único. Vários moradores
   poderão usá-la até revogação/regeneração. Não cria campos para os comportamentos divergentes
-  do card da TASK-29. A validação/consumo da chave é TASK-30.
+  do card da TASK-29. A validação para vínculo foi implementada na TASK-30, sem consumir a chave.
 - O texto do contrato fala em 32 símbolos e exclui `0 O 1 I L`; as exclusões deixam **31**
   símbolos alfanuméricos. Usa-se explicitamente `23456789ABCDEFGHJKMNPQRSTUVWXYZ`, com
   dez posições (aproximadamente 49,54 bits), preservando as exclusões sem inventar símbolos.

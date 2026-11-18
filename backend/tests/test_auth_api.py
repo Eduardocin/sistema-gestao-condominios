@@ -13,7 +13,7 @@ from app.main import create_app
 from app.modules.auth.rate_limit import get_login_rate_limiter
 from app.modules.auth.security import hash_senha
 from app.modules.condominios.models import Condominio, VinculoCondominio
-from app.modules.unidades.models import Unidade
+from app.modules.unidades.models import MoradorUnidade, Unidade
 from app.modules.usuarios.models import Usuario
 
 pytestmark = pytest.mark.postgres
@@ -79,6 +79,17 @@ def vincular(session, usuario, condominio, perfil="morador", unidade=None, ativo
     )
     session.add(vinculo)
     session.flush()
+    if perfil == "morador" and unidade is not None and ativo:
+        session.add(
+            MoradorUnidade(
+                usuario_id=usuario.id,
+                condominio_id=condominio.id,
+                unidade_id=unidade.id,
+                origem="cadastro",
+                status="ativo",
+            )
+        )
+        session.flush()
     return vinculo
 
 

@@ -66,12 +66,33 @@ def listar_unidades_do_morador(
     unidade na requisição seguinte (R6). A coluna antiga `vinculos_condominio.unidade_id` não é
     mais consultada aqui.
     """
-    consulta = select(MoradorUnidade.unidade_id).where(
-        MoradorUnidade.usuario_id == usuario_id,
-        MoradorUnidade.condominio_id == condominio_id,
-        MoradorUnidade.status == "ativo",
+    return {
+        unidade.id
+        for unidade in listar_unidades_ativas_do_morador(
+            session, usuario_id=usuario_id, condominio_id=condominio_id
+        )
+    }
+
+
+def listar_unidades_ativas_do_morador(
+    session: Session, *, usuario_id: uuid.UUID, condominio_id: uuid.UUID
+) -> list[Unidade]:
+    consulta = (
+        select(Unidade)
+        .join(
+            MoradorUnidade,
+            (MoradorUnidade.unidade_id == Unidade.id)
+            & (MoradorUnidade.condominio_id == Unidade.condominio_id),
+        )
+        .where(
+            MoradorUnidade.usuario_id == usuario_id,
+            MoradorUnidade.condominio_id == condominio_id,
+            MoradorUnidade.status == "ativo",
+            Unidade.ativo.is_(True),
+        )
+        .order_by(Unidade.identificacao, Unidade.id)
     )
-    return set(session.scalars(consulta))
+    return list(session.scalars(consulta))
 
 
 def morador_tem_acesso_a_aba(

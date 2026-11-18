@@ -72,7 +72,7 @@ trazem `id` e `identificacao`, com o vínculo disponível no banco atual.
 
 **Campos futuros não são garantidos pela TASK-80:** `usuario.tipo_cadastro`
 é persistido pelo cadastro de contas, mas ainda não é exposto na sessão; permissões por aba dependem da
-TASK-21; múltiplas unidades dependem da tabela morador–unidade. Os exemplos
+TASK-21; múltiplas unidades no seletor foram integradas pela TASK-30 usando `moradores_unidade`. Os exemplos
 das demais seções deste contrato continuam propostas para esses fluxos.
 
 A dependência `get_usuario_autenticado` valida a identidade e a sessão. As
@@ -437,6 +437,12 @@ Regras:
 
 ## 7. Vínculo do morador com a unidade
 
+**Implementado na TASK-30:** vínculo imediato por chave (seção 7.1), próprias unidades e
+proprietário sem documento (7.2), com tentativas persistentes, concorrência e integração de
+`/auth/me` com `moradores_unidade`. Sem fila/aprovação administrativa, responsável principal
+ou e-mail. Convites/desvinculação (7.3–7.4) continuam fora desta entrega.
+Precisões e diferenças do card: [vínculos](../../backend/app/modules/vinculos/README.md).
+
 ### 7.1 Vincular-se com a chave (US-301, Must, Sprint 1)
 
 `POST /vinculos/chave` — conta autenticada, sem `cid` exigido.
@@ -461,7 +467,13 @@ Resposta 201: `{"unidade": {"id": "UUID", "identificacao": "Bloco A / 101"}, "co
 | Excedeu as tentativas | **429 `too_many_attempts`**, com `Retry-After` |
 | Formato inválido (menos de 10 caracteres úteis) | 422 |
 
-**Limite de tentativas** (proposta): cada tentativa grava uma linha em `tentativas_chave_acesso` (`usuario_id`, `sucesso`, `criado_em`). **5 tentativas erradas seguidas em 15 minutos** bloqueiam novas tentativas dessa conta por 15 minutos, contando a partir da última; um acerto zera a contagem. Uma tentativa bloqueada não consulta a chave. Cada erro gera `seguranca.chave_invalida` na auditoria.
+**Limite de tentativas** (implementado na TASK-30): cada avaliação e pedido bloqueado grava uma
+linha em `tentativas_chave_acesso` (`usuario_id`, `sucesso`, `criado_em`). **5 tentativas erradas
+seguidas em 15 minutos** bloqueiam novas tentativas dessa conta por 15 minutos, contando da
+quinta. Os cinco erros respondem 404; pedidos já bloqueados respondem 429, sem consultar a
+chave nem estender o prazo. Sucesso reinicia a sequência. Formato inválido (422) e conflitos
+(409) não contam como erro de chave. Falhas 404/429 são confirmadas antes do erro HTTP;
+cada uma usa `seguranca.chave_invalida` na auditoria de segurança central.
 
 Um morador pode se vincular a **mais de uma unidade** (US-301), do mesmo condomínio ou de outros. O vínculo dá acesso **só àquela unidade** (R10).
 

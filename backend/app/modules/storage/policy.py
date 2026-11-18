@@ -105,14 +105,13 @@ def autorizar_download(
         is not None
     )
     foto_usuario = session.scalar(select(Usuario.id).where(Usuario.foto_arquivo_id == id))
-    foto_proprietario = (
-        session.scalar(
-            select(ProprietarioUnidade.id).where(
+    foto_proprietario = list(
+        session.scalars(
+            select(ProprietarioUnidade.unidade_id).where(
                 ProprietarioUnidade.foto_arquivo_id == id,
                 ProprietarioUnidade.condominio_id == condominio,
             )
         )
-        is not None
     )
     areas = list(
         session.scalars(
@@ -142,7 +141,11 @@ def autorizar_download(
                 pass
             else:
                 return
-        for unidades, aba in ((encomendas, "encomendas"), (ocorrencias, "ocorrencias")):
+        for unidades, aba in (
+            (encomendas, "encomendas"),
+            (ocorrencias, "ocorrencias"),
+            (foto_proprietario, "unidades"),
+        ):
             for unidade_id in unidades:
                 try:
                     conferir_unidade(session, ctx, unidade_id, aba)

@@ -358,8 +358,8 @@ def montar_me(session: Session, *, usuario: Usuario, condominio_id: uuid.UUID | 
         raise ApiError(403, "forbidden", "Este condomínio não está disponível no momento.")
 
     unidades: list[Unidade] = []
-    if vinculo.perfil == "morador" and vinculo.unidade_id is not None:
-        unidade = repository.obter_unidade(session, vinculo.unidade_id, condominio.id)
-        if unidade is not None:
-            unidades.append(unidade)
+    if vinculo.perfil == "morador":
+        unidades = repository.listar_unidades_ativas_do_morador(
+            session, usuario_id=usuario.id, condominio_id=condominio.id
+        )
     return DadosMe(usuario=usuario, acesso=acesso, unidades=unidades)

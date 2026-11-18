@@ -379,7 +379,7 @@ Aprovar ou rejeitar algo que não esteja `pendente` retorna 409. O ADM é uma co
 
 **Implementado na TASK-29:** as sete rotas das seções 6.1–6.2. Escritas de proprietário e
 chaves exigem `responsavel_id` conforme as convenções de contas compartilhadas. As exclusões
-do alfabeto deixam 31 símbolos, apesar da contagem 32 proposta no texto. A notificação da
+do alfabeto deixam os 31 símbolos descritos na seção 6.2. A notificação da
 aprovação é somente enfileirada; envio efetivo fica na Sprint 3. Detalhes e divergências:
 [unidades](../../backend/app/modules/unidades/README.md).
 
@@ -422,13 +422,13 @@ aprovação é somente enfileirada; envio efetivo fica na Sprint 3. Detalhes e d
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /unidades/{id}/chave` | Administração | — | 200, `{"codigo", "criada_em"}`; 404 se não há chave vigente |
-| `POST /unidades/{id}/chave` | Administração | `{}` | 201, chave nova; 409 se já há uma vigente |
-| `POST /unidades/{id}/chave/regeneracao` | Administração | `{}` | 200, chave nova; a anterior fica **inválida na hora** |
-| `POST /unidades/{id}/chave/revogacao` | Administração | `{}` | 200, `{"revogada_em": "..."}`; a unidade fica sem chave |
+| `POST /unidades/{id}/chave` | Administração | `{"responsavel_id": "UUID"}` | 201, chave nova; 409 se já há uma vigente |
+| `POST /unidades/{id}/chave/regeneracao` | Administração | `{"responsavel_id": "UUID"}` | 200, chave nova; a anterior fica **inválida na hora** |
+| `POST /unidades/{id}/chave/revogacao` | Administração | `{"responsavel_id": "UUID"}` | 200, `{"revogada_em": "..."}`; a unidade fica sem chave |
 
 Regras:
 
-- **Formato:** 10 caracteres de um alfabeto de 32 símbolos sem ambiguidade (sem `0 O 1 I L`), gerado com `secrets` e exibido em dois grupos (`K7M2P-9QXW4`). São 50 bits, suficientes porque o limite de tentativas (seção 7.1) impede força bruta. Na entrada, o servidor ignora hífen, espaço e caixa.
+- **Formato:** 10 caracteres do alfabeto de 31 símbolos `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (sem `0 O 1 I L`), gerado com `secrets` e exibido em dois grupos (`K7M2P-9QXW4`). São aproximadamente 49,54 bits de entropia; o limite de tentativas é descrito na seção 7.1. Na entrada, o servidor ignora hífen, espaço e caixa.
 - **Unicidade:** `UNIQUE (codigo)` (regra 4 do DER). Se o sorteio colidir, sorteia de novo; o service tenta até 5 vezes.
 - **Uma vigente por unidade** (regra 5): `UNIQUE (unidade_id) WHERE revogada_em IS NULL`. Regenerar grava `revogada_em` na anterior e cria a nova **na mesma transação**, e a anterior para de valer imediatamente (US-207).
 - Unidade desativada não tem chave (a desativação revoga a vigente, [plataforma.md](plataforma.md) seção 7).

@@ -60,12 +60,12 @@ responsável ativo do próprio condomínio, IP e data/hora do mecanismo central.
 - Adota a chave **por unidade** do contrato, sem expiração e sem uso único. Vários moradores
   poderão usá-la até revogação/regeneração. Não cria campos para os comportamentos divergentes
   do card da TASK-29. A validação para vínculo foi implementada na TASK-30, sem consumir a chave.
-- O texto do contrato fala em 32 símbolos e exclui `0 O 1 I L`; as exclusões deixam **31**
-  símbolos alfanuméricos. Usa-se explicitamente `23456789ABCDEFGHJKMNPQRSTUVWXYZ`, com
+- O contrato e a implementação usam **31** símbolos alfanuméricos, excluindo `0 O 1 I L`.
+  Usa-se explicitamente `23456789ABCDEFGHJKMNPQRSTUVWXYZ`, com
   dez posições (aproximadamente 49,54 bits), preservando as exclusões sem inventar símbolos.
-- Os corpos de ações de chave aparecem como `{}` no quadro da seção 6.2. A convenção geral
-  de contas compartilhadas e a auditoria já exigem `responsavel_id`; ele é obrigatório também
-  nas chaves e no proprietário. Responsável ausente: 422; alheio/inativo: 404. Não há outro
+- Os corpos das ações de chave da seção 6.2 exigem `responsavel_id`, conforme a convenção
+  geral de contas compartilhadas e a auditoria. Ele é obrigatório nas chaves e no proprietário.
+  Responsável ausente: 422; alheio/inativo: 404. Não há outro
   mecanismo de autenticação ou exceção à identificação do responsável.
 - A confirmação por e-mail da US-203 é registrada na outbox existente na transação de
   aprovação. Entrega efetiva, SMTP e processamento ficam na Sprint 3.

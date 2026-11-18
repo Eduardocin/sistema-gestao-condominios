@@ -80,8 +80,12 @@ superusuário, DDL ou desativação de triggers; o papel privilegiado usado na l
 exclusivo de banco descartável. Eventos de segurança são best effort conforme o contrato: falha
 no banco é observável no log, mas não substitui o erro HTTP original.
 
-Ocorrências aguardam a TASK-40; aprovação, chaves e vínculos aguardam as respectivas tasks.
-Avisos não fazem parte deste módulo; a consulta HTTP abaixo é a entrega da TASK-49.
+Aprovação/rejeição de condomínios, chaves e proprietários já usam o serviço central pela
+TASK-29; vínculos imediatos e tentativas de chave foram integrados pela TASK-30. A TASK-48
+integra publicação, edição e encerramento de avisos, incluindo o aviso de cancelamento
+administrativo de reserva. Cada módulo mantém suas operações de negócio e chama esta trilha.
+Ocorrências continuam dependendo da implementação operacional da TASK-40; sua integração
+não foi antecipada. A consulta HTTP abaixo é a entrega da TASK-49.
 
 ## Consulta da plataforma — TASK-49 / US-903
 

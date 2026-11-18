@@ -91,10 +91,14 @@ class RepositorioPermissoes(RepositorioDoCondominio[PermissaoAba]):
 
     def dos_moradores(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, bool]]:
         """{morador_unidade_id: {aba: com_acesso}} de vários moradores numa só consulta."""
-        consulta = self.consulta().where(PermissaoAba.morador_unidade_id.in_(ids))
+        # Colunas escalares evitam reutilizar instâncias antigas do identity map, inclusive
+        # depois do UPSERT de definir() ou de uma espera pela tranca da unidade.
+        consulta = select(
+            PermissaoAba.morador_unidade_id, PermissaoAba.aba, PermissaoAba.com_acesso
+        ).where(self._do_condominio(), PermissaoAba.morador_unidade_id.in_(ids))
         resultado: dict[uuid.UUID, dict[str, bool]] = {id_: {} for id_ in ids}
-        for permissao in self.session.scalars(consulta):
-            resultado[permissao.morador_unidade_id][permissao.aba] = permissao.com_acesso
+        for morador_id, aba, com_acesso in self.session.execute(consulta):
+            resultado[morador_id][aba] = com_acesso
         return resultado
 
     def do_morador(self, morador_unidade_id: uuid.UUID) -> dict[str, bool]:

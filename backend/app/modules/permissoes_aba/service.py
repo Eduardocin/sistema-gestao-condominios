@@ -1,8 +1,8 @@
 """Regras das permissões por aba: listar os moradores da unidade e mudar o acesso de cada um.
 
 Quem chama já passou por `require_permission` (perfil) e `require_aba("usuarios")` (unidade e
-aba): ver o router. Aqui ficam o passo 6 da matriz, a regra de negócio: a trava do último
-morador com a aba Usuários, a auditoria e o commit.
+aba): ver o router. A escrita revalida a aba após trancar a unidade, antes da regra do
+último morador com a aba Usuários, da auditoria e do commit.
 """
 
 import uuid
@@ -16,6 +16,7 @@ from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError
 from app.modules.auditoria import service as auditoria
 from app.modules.auditoria.schemas import ContextoAuditoria
+from app.modules.auth.autorizacao import garantir_aba_da_unidade
 from app.modules.permissoes_aba.repository import (
     RepositorioMoradores,
     RepositorioPermissoes,
@@ -93,31 +94,36 @@ class PermissoesAbaService:
         Tudo-ou-nada: a trava, a gravação e o evento de auditoria acontecem na mesma transação,
         com um único commit no fim. Se qualquer passo falhar, nada fica gravado.
         """
-        # 1) Uma alteração por vez em cada unidade: a trava do último usuário depende de
-        # contar quem tem a aba, e essa conta não pode mudar no meio do caminho.
-        self.unidades.bloquear(unidade_id)
+        try:
+            # Todas as alterações/revogações de abas usam esta mesma tranca. Em READ COMMITTED,
+            # a consulta seguinte vê as revogações confirmadas enquanto este pedido aguardava.
+            self.unidades.bloquear(unidade_id)
+            garantir_aba_da_unidade(self.session, self.contexto, unidade_id, "usuarios")
 
-        # 2) O morador precisa ser ativo NESTA unidade; outra unidade ou outro condomínio é 404.
-        morador, nome = self.moradores.obter_da_unidade(unidade_id, morador_unidade_id)
-        atuais = self.permissoes.do_morador(morador.id)
+            # O alvo precisa continuar ativo NESTA unidade; outro escopo é 404.
+            morador, nome = self.moradores.obter_da_unidade(unidade_id, morador_unidade_id)
+            atuais = self.permissoes.do_morador(morador.id)
 
-        # 3) Só o que de fato muda: repetir o mesmo valor não gera gravação nem auditoria.
-        mudancas = {aba: novo for aba, novo in abas.items() if atuais.get(aba, False) != novo}
-        if mudancas:
-            self._conferir_trava_do_ultimo(unidade_id, morador.id, atuais, mudancas)
-            self.permissoes.definir(morador.id, mudancas, alterado_por=self.contexto.usuario_id)
-            auditoria.registrar_acao(
-                self.session,
-                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
-                acao=ACAO_AUDITORIA,
-                recurso_tipo="morador_unidade",
-                recurso_id=morador.id,
-                antes={aba: atuais.get(aba, False) for aba in mudancas},
-                depois=dict(mudancas),
-            )
-        self.session.commit()  # também solta a tranca da unidade
-
-        return self._montar(morador, nome, self.permissoes.do_morador(morador.id))
+            # Repetir o mesmo valor não gera gravação nem auditoria.
+            mudancas = {aba: novo for aba, novo in abas.items() if atuais.get(aba, False) != novo}
+            if mudancas:
+                self._conferir_trava_do_ultimo(unidade_id, morador.id, atuais, mudancas)
+                self.permissoes.definir(morador.id, mudancas, alterado_por=self.contexto.usuario_id)
+                auditoria.registrar_acao(
+                    self.session,
+                    ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+                    acao=ACAO_AUDITORIA,
+                    recurso_tipo="morador_unidade",
+                    recurso_id=morador.id,
+                    antes={aba: atuais.get(aba, False) for aba in mudancas},
+                    depois=dict(mudancas),
+                )
+            saida = self._montar(morador, nome, self.permissoes.do_morador(morador.id))
+            self.session.commit()  # também solta a tranca da unidade
+            return saida
+        except Exception:
+            self.session.rollback()
+            raise
 
     def _conferir_trava_do_ultimo(
         self,

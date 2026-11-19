@@ -8,6 +8,7 @@ from app.api.v1.router import router
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.db.session import get_engine
+from app.modules.auditoria.contexto import auditar_requisicao
 
 
 @asynccontextmanager
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
     )
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
     register_error_handlers(app)
+    app.middleware("http")(auditar_requisicao)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

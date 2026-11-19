@@ -63,11 +63,16 @@ Claims: `sub` (usuário), `cid` (condomínio, ausente antes de escolher um), `sv
 }
 ```
 
-`unidades` só para o Morador. Permissões por aba entram na TASK-21. Token sem Bearer ou inválido: 401 com `WWW-Authenticate: Bearer`. Vínculo retirado depois do login: 403 `forbidden`.
+`unidades` só para o Morador. Desde a TASK-30, inclui todas as unidades ativas do condomínio
+selecionado, associadas por `moradores_unidade`, sem ler a coluna legada do vínculo global.
+As abas não filtram esse seletor; a listagem `/minhas-unidades` respeita a aba Unidades.
+Permissões por aba usam a TASK-21. Token sem Bearer ou inválido: 401 com
+`WWW-Authenticate: Bearer`. Vínculo global retirado depois do login: 403 `forbidden`;
+associação à unidade retirada deixa de aparecer na próxima consulta.
 
 ## Limitações conhecidas
 
 - O contador de tentativas fica na memória do processo (vale para um único servidor).
 - O status do condomínio é provisório: `ativo` ou `desativado`, a partir de `condominios.ativo`.
 - Não há rotação nem revogação individual de refresh token; para derrubar sessões, aumentar `sessao_versao`.
-- Falha de login ainda só vai para o log; vira evento de auditoria quando a US-1004 existir.
+- TASK-82 / US-1004: login confirmado registra `seguranca.login` na mesma transação do eventual rehash. Falhas e bloqueios registram `seguranca.login_falho` e `seguranca.login_bloqueado` em transação independente, sem senha, token ou e-mail digitado. Falha de auditoria de segurança não altera o 401/429 original.

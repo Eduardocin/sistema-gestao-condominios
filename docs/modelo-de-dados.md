@@ -569,7 +569,7 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 ## 7. Pontos em aberto
 
 - ~~**Destinatários dos comunicados**~~: resolvido na TASK-81 com `comunicado_destinatarios` (seção 9).
-- **Solicitação e aprovação de vínculo:** `moradores_unidade` apresenta somente `ativo`/`desvinculado`, enquanto a matriz prevê solicitar, aprovar e rejeitar. Definir estados adicionais ou entidade de solicitação antes da implementação, sem conceder acesso a solicitações pendentes.
+- **Solicitação e aprovação de vínculo:** a TASK-30 adota vínculo imediato por chave válida, conforme a US-301 e o contrato do núcleo. Mantém somente `ativo`/`desvinculado`, sem entidade/estado de solicitação ou fila administrativa. A divergência do card fica documentada no [módulo de vínculos](../backend/app/modules/vinculos/README.md).
 
 - ~~**Conflito entre a TASK-81 e as stories**~~ (resolvido: as migrações seguem as stories): a task de migrations fala em "constraint única de reserva: (área, data) por condomínio", o que deixaria uma única reserva por área por dia no prédio inteiro. A US-603 e a US-1006 dizem **uma por unidade, área e dia**, com grade de horários. Este DER segue as stories (regras 1 e 2). Ajustar o texto da TASK-81.
 - **Login da conta compartilhada de Funcionários** (US-210 fala em "usuário e senha"): é um e-mail/telefone como as outras contas, ou um nome de usuário próprio? Este DER assume e-mail.
@@ -600,6 +600,8 @@ Três migrações, na ordem em que os módulos dependem uns dos outros:
 
 São 36 tabelas no total. As regras marcadas com ★ na seção 4, o isolamento por FK composta e as principais da portaria têm teste em `backend/tests/test_banco_constraints.py`.
 
+A `20261116_0006_indices_consultas` completa os índices das listagens dos contratos que filtram por condomínio, status e data: `GET /reservas` (Administração por status e período; Morador por unidade), `GET /ocorrencias` do Morador e `GET /visitas` (histórico e visitas em aberto). Dois testes de catálogo garantem que toda tabela de negócio tem `condominio_id` com FK para `condominios` e índice começando pela coluna; as tabelas globais por desenho (`usuarios`, `condominios`, `comunicados`, `tokens_recuperacao_senha`, `tentativas_chave_acesso`) ficam listadas no teste.
+
 **Dados que já existiam.** `condominios.ativo` vira `status`: verdadeiro passa a `ativo` e falso a `desativado`; o `downgrade` faz o caminho inverso. Unidades criadas antes da 0003 ficam sem andar (`andar_id` nulo) e continuam únicas por condomínio, por um índice parcial. O `cnpj` também é opcional no banco pelo mesmo motivo; o service do cadastro (US-202) o exige.
 
 **Propostas dos contratos adotadas aqui** (eram pendências endereçadas ao Davi):
@@ -615,7 +617,7 @@ São 36 tabelas no total. As regras marcadas com ★ na seção 4, o isolamento 
 
 **O que ficou para depois:**
 
-- `vinculos_condominio.unidade_id` continua no banco porque o login (TASK-80) ainda lê a unidade dali. Sai numa migração própria quando o login passar a usar `moradores_unidade` (TASK-30).
+- `vinculos_condominio.unidade_id` permanece no banco, mas a TASK-30 retirou sua leitura da autenticação: as associações vêm de `moradores_unidade`. O novo vínculo por chave não preenche a coluna legada; sua remoção física fica para uma migração futura.
 - Sem coluna de fuso: `America/Sao_Paulo` fixo no MVP (convencoes.md, seção 1).
 - Sem `D` em comunicados e sem tabela para contatos da portaria sem entrada (seção 7).
 

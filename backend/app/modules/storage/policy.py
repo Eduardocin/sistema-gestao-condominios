@@ -8,14 +8,16 @@ from sqlalchemy.orm import Session
 from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.modules.auth import repository
-from app.modules.auth.autorizacao import garantir_acesso_a_unidade
+from app.modules.auth.autorizacao import garantir_aba_no_condominio, garantir_acesso_a_unidade
 from app.modules.condominios.models import CondominioDocumento
 from app.modules.encomendas.models import Encomenda
 from app.modules.funcionarios.models import Funcionario
 from app.modules.ocorrencias.models import Ocorrencia, OcorrenciaAnexo
+from app.modules.reservas.models import AreaComum
 from app.modules.storage.models import Arquivo
 from app.modules.storage.types import Module
 from app.modules.suporte.models import ChamadoAnexo
+from app.modules.unidades.models import ProprietarioUnidade
 from app.modules.usuarios.models import Usuario
 
 
@@ -103,6 +105,22 @@ def autorizar_download(
         is not None
     )
     foto_usuario = session.scalar(select(Usuario.id).where(Usuario.foto_arquivo_id == id))
+    foto_proprietario = list(
+        session.scalars(
+            select(ProprietarioUnidade.unidade_id).where(
+                ProprietarioUnidade.foto_arquivo_id == id,
+                ProprietarioUnidade.condominio_id == condominio,
+            )
+        )
+    )
+    areas = list(
+        session.scalars(
+            select(AreaComum.ativa).where(
+                AreaComum.foto_arquivo_id == id,
+                AreaComum.condominio_id == condominio,
+            )
+        )
+    )
     if usuario.administrador_plataforma:
         if suporte or documento:
             return
@@ -110,13 +128,24 @@ def autorizar_download(
     if ctx is None or condominio != ctx.condominio_id:
         raise RecursoNaoEncontrado
     if ctx.perfil == "administracao" and (
-        encomendas or ocorrencias or suporte or documento or foto
+        encomendas or ocorrencias or suporte or documento or foto or foto_proprietario or areas
     ):
         return
     if ctx.perfil == "funcionario" and encomendas:
         return
     if ctx.perfil == "morador":
-        for unidades, aba in ((encomendas, "encomendas"), (ocorrencias, "ocorrencias")):
+        if any(areas):
+            try:
+                garantir_aba_no_condominio(session, ctx, "reservas")
+            except ApiError:
+                pass
+            else:
+                return
+        for unidades, aba in (
+            (encomendas, "encomendas"),
+            (ocorrencias, "ocorrencias"),
+            (foto_proprietario, "unidades"),
+        ):
             for unidade_id in unidades:
                 try:
                     conferir_unidade(session, ctx, unidade_id, aba)
@@ -125,7 +154,16 @@ def autorizar_download(
                 return
     # Um upload ainda sem associação só pode ser lido pelo autor. Após o vínculo,
     # a política do recurso substitui esta permissão provisória, inclusive para o autor.
-    vinculado = bool(encomendas or ocorrencias or suporte or documento or foto or foto_usuario)
+    vinculado = bool(
+        encomendas
+        or ocorrencias
+        or suporte
+        or documento
+        or foto
+        or foto_usuario
+        or foto_proprietario
+        or areas
+    )
     if not vinculado and arquivo.enviado_por_usuario_id == usuario.id:
         return
     if foto_usuario == usuario.id:

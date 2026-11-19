@@ -16,7 +16,7 @@ Nome do campo de isolamento: **`condominio_id`** (é o nome usado nos models do 
 
 | Perfil | Como é representado hoje | Tipo de conta |
 | --- | --- | --- |
-| Morador | `vinculos_condominio.perfil = 'morador'`, com `unidade_id` | Individual |
+| Morador | `vinculos_condominio.perfil = 'morador'`, com unidades em `moradores_unidade` | Individual |
 | Funcionário | `vinculos_condominio.perfil = 'funcionario'` | **Uma conta compartilhada por condomínio** |
 | Administração | `vinculos_condominio.perfil = 'administracao'` | **Uma conta compartilhada por condomínio** |
 | ADM (plataforma) | `usuarios.administrador_plataforma = true`, **sem** vínculo | Individual |

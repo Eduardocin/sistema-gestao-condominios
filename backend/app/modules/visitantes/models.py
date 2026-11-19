@@ -93,6 +93,15 @@ class RegistroVisita(Base):
             unique=True,
             postgresql_where=text("saida_em IS NULL"),
         ),
+        # GET /visitas: histórico do condomínio por data e, no status "em aberto", só quem
+        # ainda está no prédio.
+        Index("ix_registros_visita_condominio_entrada", "condominio_id", "entrada_em"),
+        Index(
+            "ix_registros_visita_condominio_em_aberto",
+            "condominio_id",
+            "entrada_em",
+            postgresql_where=text("saida_em IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

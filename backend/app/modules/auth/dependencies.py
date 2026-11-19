@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError
 from app.db.session import get_session
+from app.modules.auditoria.contexto import identificar_conta, identificar_contexto
 from app.modules.auth import service
 from app.modules.usuarios.models import Usuario
 
@@ -46,6 +47,7 @@ def get_usuario_autenticado(
     usuario, condominio_id = service.autenticar_access_token(
         session, token=credenciais.credentials, settings=settings
     )
+    identificar_conta(usuario.id, plataforma=usuario.administrador_plataforma)
     return UsuarioAutenticado(usuario=usuario, condominio_id=condominio_id)
 
 
@@ -74,12 +76,14 @@ def get_current_context(
     vinculo, _ = service.verificar_acesso_ao_condominio(
         session, usuario=autenticado.usuario, condominio_id=autenticado.condominio_id
     )
-    return ContextoCondominio(
+    contexto = ContextoCondominio(
         usuario_id=autenticado.usuario.id,
         condominio_id=vinculo.condominio_id,
         perfil=vinculo.perfil,
         vinculo_id=vinculo.id,
     )
+    identificar_contexto(contexto)
+    return contexto
 
 
 ContextoDep = Annotated[ContextoCondominio, Depends(get_current_context)]

@@ -144,6 +144,28 @@ def test_404_de_unidade_alheia_e_inexistente_sao_iguais_e_auditados(client, cena
     )
 
 
+def test_selecao_de_condominio_sem_vinculo_e_auditada_sem_registrar_o_destino(client, cenario):
+    headers = cenario.a.cabecalho_de("morador")
+    respostas = [
+        client.post(
+            "/api/v1/auth/selecionar-condominio", headers=headers, json={"condominio_id": str(alvo)}
+        )
+        for alvo in (cenario.b.condominio.id, uuid.uuid4())
+    ]
+    assert [r.status_code for r in respostas] == [404, 404]
+    assert respostas[0].json() == respostas[1].json()
+    registros = eventos(cenario, "seguranca.acesso_cross_tenant", usuario_id=cenario.a.morador.id)
+    assert len(registros) == 2
+    assert all(e.condominio_id is None and e.recurso_id is None for e in registros)
+    for evento in registros:
+        assert evento.depois == {
+            "status_http": 404,
+            "rota": "/auth/selecionar-condominio",
+            "metodo": "POST",
+            "motivo": "recurso_fora_do_escopo_ou_inexistente",
+        }
+
+
 def test_rota_desconhecida_nao_e_tratada_como_acesso_cross_tenant(client, cenario):
     assert (
         client.get(

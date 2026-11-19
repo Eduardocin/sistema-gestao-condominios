@@ -54,7 +54,8 @@ sem SQL, parâmetros ou traceback potencialmente sensíveis. A fábrica pode ser
 - `seguranca.acesso_cross_tenant` identifica 404 de recurso em rota com contexto de condomínio
   validado. A descrição é deliberadamente `recurso_fora_do_escopo_ou_inexistente`: não consulta outro
   tenant nem afirma que o recurso exista. URL desconhecida não gera esse evento. Não registra
-  parâmetros de URL/query, corpo ou cabeçalhos de autenticação.
+  parâmetros de URL/query, corpo ou cabeçalhos de autenticação. Uma seleção de condomínio
+  recusada com 404 também gera esse evento, com a conta autenticada e sem registrar o destino.
 
 O IP vem da conexão ASGI e é validado como IPv4/IPv6; cabeçalhos Forwarded/X-Forwarded-For não são
 interpretados pela auditoria. Uma instalação com proxy deve configurar quais proxies o servidor

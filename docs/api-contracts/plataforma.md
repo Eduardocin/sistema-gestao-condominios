@@ -205,7 +205,8 @@ Regras de uso:
 **Comportamento de segurança implementado.** O middleware registra uma única negação autenticada
 por resposta 403. Em 404 de recurso sob contexto validado, `seguranca.acesso_cross_tenant` representa
 a tentativa `recurso_fora_do_escopo_ou_inexistente`, sem comprovar a existência do ID nem consultar
-outro condomínio; URLs desconhecidas ficam fora desse evento. IP vem da conexão ASGI; a rota
+outro condomínio. Uma seleção de condomínio recusada com 404 também é auditada, sem registrar o
+destino informado. URLs desconhecidas ficam fora desse evento. IP vem da conexão ASGI; a rota
 registrada é o modelo estático, sem parâmetros, query, corpo ou cabeçalhos sensíveis. A sessão
 independente usa limites locais de espera por lock/comando e log fixo em falhas, sem traceback
 ou parâmetros SQL. Referências ainda não confirmadas ou inexistentes ficam nulas.

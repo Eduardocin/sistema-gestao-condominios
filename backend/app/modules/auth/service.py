@@ -230,6 +230,7 @@ def selecionar_condominio(
     usuario: Usuario,
     condominio_id: uuid.UUID,
     settings: Settings,
+    ip: str | None = None,
 ) -> SessaoEmitida:
     """Emite um novo token já com o condomínio escolhido (`cid`)."""
     # Sem vínculo ativo é 404: não confirmamos nem que o condomínio existe (R4).
@@ -238,6 +239,18 @@ def selecionar_condominio(
     if not usuario.administrador_plataforma:
         linha = repository.obter_vinculo_ativo(session, usuario.id, condominio_id)
     if linha is None:
+        auditoria.registrar_evento_seguranca(
+            acao="seguranca.acesso_cross_tenant",
+            usuario_id=usuario.id,
+            condominio_id=None,
+            ip=ip,
+            detalhe={
+                "status_http": 404,
+                "rota": "/auth/selecionar-condominio",
+                "metodo": "POST",
+                "motivo": "recurso_fora_do_escopo_ou_inexistente",
+            },
+        )
         raise ApiError(404, "not_found", "Condomínio não encontrado.")
 
     escolhido = _montar_acesso(*linha)

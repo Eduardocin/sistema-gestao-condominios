@@ -2,10 +2,15 @@
 
 import os
 import uuid
+from datetime import UTC, datetime
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
@@ -13,7 +18,7 @@ from app.main import create_app
 from app.modules.auth.rate_limit import get_login_rate_limiter
 from app.modules.auth.security import hash_senha
 from app.modules.condominios.models import Condominio, VinculoCondominio
-from app.modules.unidades.models import MoradorUnidade, Unidade
+from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
 
 pytestmark = pytest.mark.postgres
@@ -298,6 +303,54 @@ def test_me_do_morador_lista_a_unidade_do_condominio(client, session):
 
     assert corpo["usuario"]["id"] == str(usuario.id)
     assert corpo["unidades"] == [{"id": str(unidade.id), "identificacao": "Bloco A / 101"}]
+
+
+@pytest.mark.parametrize("desvinculado", [False, True])
+def test_migracao_preserva_vinculo_legado_sem_reativar_desvinculo(client, session, desvinculado):
+    usuario, condominio = criar_usuario(session), criar_condominio(session)
+    unidade = Unidade(condominio_id=condominio.id, identificacao="101")
+    session.add(unidade)
+    session.flush()
+    # Simula uma conta criada antes de MoradorUnidade ser a fonte das unidades da sessão.
+    vinculo = vincular(session, usuario, condominio)
+    vinculo.unidade_id = unidade.id
+    if desvinculado:
+        session.add(
+            MoradorUnidade(
+                usuario_id=usuario.id,
+                condominio_id=condominio.id,
+                unidade_id=unidade.id,
+                origem="cadastro",
+                status="desvinculado",
+                desvinculado_em=datetime.now(UTC),
+            )
+        )
+    session.flush()
+    caminho = (
+        Path(__file__).resolve().parents[1] / "alembic/versions/20261119_0007_vinculos_legados.py"
+    )
+    spec = spec_from_file_location("migracao_vinculos_legados", caminho)
+    assert spec is not None and spec.loader is not None
+    migracao = module_from_spec(spec)
+    spec.loader.exec_module(migracao)
+    with Operations.context(MigrationContext.configure(session.connection())):
+        migracao.upgrade()
+        migracao.upgrade()  # repetir não duplica associações
+
+    token = entrar(client, usuario).json()["access_token"]
+    resposta = client.get("/api/v1/auth/me", headers=bearer(token))
+    assert resposta.status_code == 200
+    assert resposta.json()["unidades"] == (
+        [] if desvinculado else [{"id": str(unidade.id), "identificacao": "101"}]
+    )
+    assert (
+        session.scalar(
+            select(PermissaoAba.aba)
+            .join(MoradorUnidade, MoradorUnidade.id == PermissaoAba.morador_unidade_id)
+            .where(MoradorUnidade.usuario_id == usuario.id)
+        )
+        is None
+    )
 
 
 def test_perfil_do_me_vem_do_banco_e_nao_do_token(client, session):

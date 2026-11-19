@@ -70,6 +70,7 @@ def login(
     },
 )
 def selecionar_condominio(
+    request: Request,
     dados: SelecionarCondominioRequest,
     autenticado: UsuarioDep,
     session: SessionDep,
@@ -80,6 +81,7 @@ def selecionar_condominio(
         usuario=autenticado.usuario,
         condominio_id=dados.condominio_id,
         settings=settings,
+        ip=ip_do_cliente(request),
     )
     return resposta_de_sessao(sessao)
 

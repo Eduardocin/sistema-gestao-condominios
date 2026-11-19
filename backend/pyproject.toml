@@ -16,6 +16,7 @@ dependencies = [
   "uvicorn>=0.34,<1",
   "psycopg[binary]>=3.2,<4",
   "minio>=7.2.20,<8",
+  "python-multipart>=0.0.20,<1",
   "Pillow>=13,<14",
 
   "argon2-cffi>=25,<26",

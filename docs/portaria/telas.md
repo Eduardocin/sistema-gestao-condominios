@@ -1,10 +1,12 @@
 # Portaria — telas navegáveis da TASK-12
 
-Status: primeira versão para revisão visual e funcional. Substituição dos wireframes estáticos por uma prévia em React proposta pelo responsável da tarefa. A aceitação formal da entrega depende da equipe.
+Status: documento da prévia da TASK-12 para revisão visual e funcional. A TASK-36 também disponibiliza telas autenticadas de encomendas, integradas à API; os fluxos de visitantes continuam em protótipo até a implementação da TASK-37.
 
 ## Acesso e limites
 
 Com o frontend em execução, abra `/prototipos/portaria`. Os atalhos laterais alternam entre Encomendas, Visitantes e Prévia do morador. Não há autenticação simulada nem chamadas de negócio ao backend: todos os registros são exemplos, mantidos em memória nesta aba. Recarregar, sair da rota ou reiniciar a demonstração descarta alterações e fotos. Não usar dados reais.
+
+Os fluxos reais de encomendas exigem uma sessão autenticada: a portaria usa `/app/portaria/encomendas` e o morador usa `/app/morador/encomendas`. Essas rotas usam a API e o storage privado descritos em [portaria.md](../api-contracts/portaria.md). A seção Visitantes desta prévia continua sem integração.
 
 O seletor de morador é um controle exclusivo da demonstração, não uma troca de perfil autenticado. Na integração, a identidade e as permissões virão da autorização central. Os testes locais não comprovam isolamento multi-tenant da API.
 
@@ -53,6 +55,6 @@ Usa o design system existente e adiciona `OperationsLayout`, `MetricCard`, `Noti
 - Responsividade conferida com viewport de 390 × 844: página e formulário sem transbordamento horizontal; tabelas preservam sua rolagem interna. [Captura em tela estreita](telas/encomendas-mobile.jpg).
 - Testes de transições locais: `npm test` em `frontend/` (Node compatível com o `engines` do projeto).
 - Verificações existentes: `npm run typecheck`, `npm run lint`, `npm run build`.
-- Conferência manual: seguir o roteiro acima. A integração e os testes de API continuam nas respectivas tarefas.
+- Conferência manual da demonstração: seguir o roteiro acima. A API e as telas autenticadas de encomendas foram entregues pela TASK-36; a integração dos visitantes continua na TASK-37.
 
 Veja [fluxos](fluxos.md), [contrato REST proposto](../api-contracts/portaria.md) e [pendências de revisão](decisoes-pendentes.md).

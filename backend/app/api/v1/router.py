@@ -9,6 +9,8 @@ from app.modules.avisos.router import router as avisos_router
 from app.modules.condominios.router import cadastro_router, plataforma_router
 from app.modules.condominios.router import router as condominios_router
 from app.modules.contas.router import router as contas_router
+from app.modules.encomendas.router import portaria_router as portaria_encomendas_router
+from app.modules.encomendas.router import router as encomendas_router
 from app.modules.funcionarios.router import responsaveis_router
 from app.modules.funcionarios.router import router as funcionarios_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
@@ -27,6 +29,8 @@ router.include_router(cadastro_router)
 router.include_router(unidades_router)
 router.include_router(vinculos_router)
 router.include_router(contas_router)
+router.include_router(encomendas_router)
+router.include_router(portaria_encomendas_router)
 router.include_router(funcionarios_router)
 router.include_router(responsaveis_router)
 router.include_router(permissoes_aba_router)

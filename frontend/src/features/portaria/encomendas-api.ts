@@ -34,6 +34,8 @@ export interface PackagePage {
 export interface UnitOption {
   id: string
   identificacao: string
+  bloco: string | null
+  andar: string | null
 }
 
 export interface ResidentOption {

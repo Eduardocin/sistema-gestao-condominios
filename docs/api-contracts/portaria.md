@@ -29,6 +29,8 @@ Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pel
 
 Funcionário: `GET /portaria/unidades?busca=101`, `GET /portaria/unidades/{id}/moradores` e `GET /funcionarios?ativo=true`. Para a lista de quem pode confirmar uma entrega, passar `somente_confirmaveis=true` aos moradores; o backend retorna somente vínculos ativos com a aba Encomendas ativa. A consulta de visitantes segue planejada, ainda não implementada.
 
+As opções de unidade retornam `id`, `identificacao`, `bloco` e `andar`. Os nomes do bloco e do andar distinguem unidades com a mesma identificação. Unidades antigas sem andar retornam `null` nesses dois campos.
+
 Retornar apenas `id` e identificação/nome necessários ao formulário, com paginação comum; listar somente unidades, vínculos e nomes ativos do condomínio. Documento pessoal e outros dados de cadastro não integram essas respostas. O servidor valida novamente todas as referências na escrita.
 
 ## Encomendas

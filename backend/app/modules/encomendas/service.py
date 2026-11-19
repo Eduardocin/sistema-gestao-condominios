@@ -357,8 +357,10 @@ class EncomendasService:
         )
         return PaginaUnidades(
             items=[
-                UnidadeOpcao(id=unidade.id, identificacao=unidade.identificacao)
-                for unidade in unidades
+                UnidadeOpcao(
+                    id=unidade.id, identificacao=unidade.identificacao, bloco=bloco, andar=andar
+                )
+                for unidade, bloco, andar in unidades
             ],
             page=page,
             page_size=page_size,

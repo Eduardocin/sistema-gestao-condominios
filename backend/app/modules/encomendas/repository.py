@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, aliased
 from app.core.contexto import ContextoCondominio
 from app.modules.encomendas.models import Encomenda
 from app.modules.funcionarios.models import Funcionario
-from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
+from app.modules.unidades.models import Andar, Bloco, MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
 
 _DestinatarioLink = aliased(MoradorUnidade)
@@ -244,14 +244,20 @@ def listar_unidades(
     busca: str | None,
     page: int,
     page_size: int,
-) -> tuple[list[Unidade], int]:
+) -> tuple[list[tuple[Unidade, str | None, str | None]], int]:
     filtros = [Unidade.condominio_id == condominio_id, Unidade.ativo.is_(True)]
     termo = busca.strip() if busca else ""
     if termo:
         filtros.append(Unidade.identificacao.ilike(f"%{termo}%"))
-    consulta = select(Unidade).where(*filtros).order_by(Unidade.identificacao, Unidade.id)
+    consulta = (
+        select(Unidade, Bloco.nome, Andar.nome)
+        .outerjoin(Andar, and_(Andar.id == Unidade.andar_id, Andar.condominio_id == condominio_id))
+        .outerjoin(Bloco, and_(Bloco.id == Andar.bloco_id, Bloco.condominio_id == condominio_id))
+        .where(*filtros)
+        .order_by(Unidade.identificacao, Bloco.nome, Andar.ordem, Andar.nome, Unidade.id)
+    )
     total = session.scalar(select(func.count(Unidade.id)).where(*filtros)) or 0
-    unidades = session.scalars(consulta.offset((page - 1) * page_size).limit(page_size)).all()
+    unidades = session.execute(consulta.offset((page - 1) * page_size).limit(page_size)).tuples()
     return list(unidades), total
 
 

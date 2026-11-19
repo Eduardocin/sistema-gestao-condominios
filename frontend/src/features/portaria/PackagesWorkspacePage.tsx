@@ -105,6 +105,8 @@ function PackagesWorkspace({ name }: { name: string }) {
   const [lookupRevision, setLookupRevision] = useState(0)
   const [residentsRevision, setResidentsRevision] = useState(0)
   const [lookupError, setLookupError] = useState<string | null>(null)
+  const [residentsError, setResidentsError] = useState<string | null>(null)
+  const optionsError = lookupError ?? residentsError
   const [unitId, setUnitId] = useState('')
   const [residentId, setResidentId] = useState('')
   const [employeeId, setEmployeeId] = useState('')
@@ -172,7 +174,7 @@ function PackagesWorkspace({ name }: { name: string }) {
         if (current) setResidents(result)
       })
       .catch((error: unknown) => {
-        if (current) setLookupError(apiError(error))
+        if (current) setResidentsError(apiError(error))
       })
       .finally(() => {
         if (current) setResidentsLoading(false)
@@ -223,14 +225,14 @@ function PackagesWorkspace({ name }: { name: string }) {
     setPhotoError(null)
     setResidents([])
     setResidentsLoading(false)
-    setLookupError(null)
+    setResidentsError(null)
     setRegisterOpen(true)
   }
 
   function closeRegister() {
     if (pending) return
     setRegisterOpen(false)
-    setLookupError(null)
+    setResidentsError(null)
     setResidents([])
     setResidentsLoading(false)
   }
@@ -240,11 +242,12 @@ function PackagesWorkspace({ name }: { name: string }) {
     setResidentId('')
     setResidents([])
     setResidentsLoading(Boolean(value))
-    setLookupError(null)
+    setResidentsError(null)
   }
 
   function retryLookups() {
     setLookupError(null)
+    setResidentsError(null)
     setLookupsLoading(true)
     setLookupRevision((value) => value + 1)
     if (residentsUnitId) {
@@ -261,7 +264,7 @@ function PackagesWorkspace({ name }: { name: string }) {
     setDeliveryChecked(false)
     setResidents([])
     setResidentsLoading(item.status === 'aguardando_retirada')
-    setLookupError(null)
+    setResidentsError(null)
     setSelected(item)
   }
 
@@ -270,7 +273,7 @@ function PackagesWorkspace({ name }: { name: string }) {
     setSelected(null)
     setResidents([])
     setResidentsLoading(false)
-    setLookupError(null)
+    setResidentsError(null)
   }
 
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -562,9 +565,9 @@ function PackagesWorkspace({ name }: { name: string }) {
           <Text tone="secondary">
             Informe a unidade e o destinatário. A foto é armazenada de forma protegida.
           </Text>
-          {lookupError && (
+          {optionsError && (
             <Notice tone="alert" role="alert">
-              {lookupError}
+              {optionsError}
               <div className={styles.retry}>
                 <Button
                   variant="secondary"
@@ -586,9 +589,16 @@ function PackagesWorkspace({ name }: { name: string }) {
                 required
                 value={unitId}
                 onChange={(event) => changeUnit(event.target.value)}
-                options={units.map((unit) => ({ value: unit.id, label: unit.identificacao }))}
+                options={units.map((unit) => ({
+                  value: unit.id,
+                  label: [unit.bloco, unit.andar, unit.identificacao].filter(Boolean).join(' / '),
+                }))}
                 disabled={pending}
-                hint={!units.length ? 'Nenhuma unidade ativa foi encontrada.' : undefined}
+                hint={
+                  !units.length && !lookupsLoading && !lookupError
+                    ? 'Nenhuma unidade ativa foi encontrada.'
+                    : undefined
+                }
               />
               <Select
                 label="Destinatário"
@@ -663,7 +673,7 @@ function PackagesWorkspace({ name }: { name: string }) {
               type="submit"
               loading={pending}
               disabled={
-                lookupsLoading || !!lookupError || residents.length === 0 || employees.length === 0
+                lookupsLoading || !!optionsError || residents.length === 0 || employees.length === 0
               }
             >
               Salvar recebimento
@@ -736,9 +746,9 @@ function PackagesWorkspace({ name }: { name: string }) {
                   void submitDelivery(event)
                 }}
               >
-                {lookupError && (
+                {optionsError && (
                   <Notice tone="alert" role="alert">
-                    {lookupError}
+                    {optionsError}
                     <div className={styles.retry}>
                       <Button
                         variant="secondary"
@@ -793,7 +803,7 @@ function PackagesWorkspace({ name }: { name: string }) {
                   <Button
                     type="submit"
                     loading={pending}
-                    disabled={!deliveryReceiver || !deliveryEmployee || !!lookupError}
+                    disabled={!deliveryReceiver || !deliveryEmployee || lookupsLoading || !!optionsError}
                   >
                     Registrar entrega
                   </Button>

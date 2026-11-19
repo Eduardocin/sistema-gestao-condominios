@@ -60,8 +60,8 @@ async function startApi() {
       result = {
         items: [
           page === 1
-            ? { id: 'unit-a', identificacao: 'Bloco A / 101' }
-            : { id: 'unit-b', identificacao: 'Bloco B / 202' },
+            ? { id: 'unit-a', identificacao: '101', bloco: 'Bloco A', andar: '1º andar' }
+            : { id: 'unit-b', identificacao: '101', bloco: 'Bloco B', andar: '1º andar' },
         ],
         page,
         page_size: 100,

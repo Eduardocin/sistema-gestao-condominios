@@ -17,7 +17,7 @@ from app.modules.encomendas.models import Encomenda
 from app.modules.funcionarios.models import Funcionario
 from app.modules.notificacoes.models import EnvioEmail
 from app.modules.storage.models import Arquivo
-from app.modules.unidades.models import MoradorUnidade, PermissaoAba
+from app.modules.unidades.models import Andar, Bloco, MoradorUnidade, PermissaoAba
 from app.modules.usuarios.models import Usuario
 from tests.autorizacao.cenario import montar_predio
 from tests.autorizacao.conftest import session as session
@@ -361,6 +361,42 @@ def test_opcoes_da_portaria_omitem_unidade_e_moradores_inativos(client, session)
     assert [item["id"] for item in unidades.json()["items"]] == [str(predio.unidade_101.id)]
     assert [item["id"] for item in moradores.json()["items"]] == [str(predio.morador_unidade.id)]
     assert proibido_ao_morador.status_code == 403
+
+
+def test_opcoes_diferenciam_unidades_de_blocos_distintos(client, session):
+    predio = montar_predio(session)
+    condominio_id = predio.condominio.id
+    for unidade, nome in [(predio.unidade_101, "Bloco A"), (predio.unidade_102, "Bloco B")]:
+        bloco = Bloco(condominio_id=condominio_id, nome=nome)
+        session.add(bloco)
+        session.flush()
+        andar = Andar(condominio_id=condominio_id, bloco_id=bloco.id, nome="1º andar", ordem=1)
+        session.add(andar)
+        session.flush()
+        unidade.andar_id = andar.id
+        unidade.identificacao = "101"
+
+    resposta = client.get(
+        "/api/v1/portaria/unidades",
+        params={"busca": "101"},
+        headers=predio.cabecalho_de("funcionario"),
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["total"] == 2
+    assert resposta.json()["items"] == [
+        {
+            "id": str(predio.unidade_101.id),
+            "identificacao": "101",
+            "bloco": "Bloco A",
+            "andar": "1º andar",
+        },
+        {
+            "id": str(predio.unidade_102.id),
+            "identificacao": "101",
+            "bloco": "Bloco B",
+            "andar": "1º andar",
+        },
+    ]
 
 
 def test_entrega_exige_recebedor_com_aba_encomendas_ativa(client, session):

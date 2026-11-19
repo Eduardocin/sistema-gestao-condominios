@@ -87,6 +87,8 @@ class EncomendaSaida(BaseModel):
 class UnidadeOpcao(BaseModel):
     id: uuid.UUID
     identificacao: str
+    bloco: str | None
+    andar: str | None
 
 
 class MoradorOpcao(BaseModel):

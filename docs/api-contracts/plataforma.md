@@ -1,6 +1,6 @@
 # Plataforma — proposta de contrato REST e serviços transversais (TASK-11)
 
-Status: rascunho para revisão no portão dos leads. Endpoints e funções abaixo **não estão implementados**. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
+Status: rascunho para revisão no portão dos leads. O serviço central de auditoria da seção 4.1 está implementado na TASK-82; a consulta HTTP da seção 4.3 está implementada na TASK-49. As demais seções devem ser confrontadas com os módulos e routers para distinguir entregas e propostas. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seções 3.2 e 3.5. Permissões: [matriz](../permissoes-e-multitenant.md), seções 7, 9 e 10.
 
@@ -20,9 +20,13 @@ Histórias cobertas: US-801 a US-804, US-901 a US-903, US-1004, US-209, US-210, 
 
 ## 1. Avisos do condomínio (US-801, US-802)
 
+**Implementado na TASK-48**, com prefixo `/api/v1`, usando o esquema existente sem nova
+migration. Detalhes e testes: [módulo de avisos](../../backend/app/modules/avisos/README.md).
+
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /avisos` | Morador e Funcionário: só vigentes. Administração: todos | `situacao` (só Administração: `vigentes`, `agendados`, `encerrados`, `todos`; padrão `vigentes`), paginação | 200, lista |
+| `GET /avisos/vigentes` | Mesmo escopo | paginação; sempre vigentes | 200, lista (alias do mesmo serviço) |
 | `GET /avisos/{id}` | Mesmo escopo | — | 200, objeto |
 | `POST /avisos` | Administração | JSON abaixo | 201, objeto |
 | `PUT /avisos/{id}` | Administração | JSON abaixo | 200, objeto |
@@ -60,6 +64,15 @@ Objeto de aviso:
 
 `situacao` é derivada, nesta precedência: `encerrado` (tem `encerrado_em`), `expirado` (`fim_em` já passou), `agendado` (`inicio_em` no futuro) e `vigente`. `publicado_por` só aparece para a Administração.
 
+Na listagem, `situacao=encerrados` inclui tanto os expirados (`fim_em <= agora`) quanto
+os encerrados antecipadamente. Morador e Funcionário têm `situacao` forçada a `vigentes`,
+mesmo se pedirem outro filtro válido. A consulta por ID aplica a mesma visibilidade (404
+genérico para aviso fora do escopo). Listas seguem `{"items": [], "page": 1, "page_size": 20,
+"total": 0}`; `page >= 1`, `page_size` entre 1 e 100. Desempate por `id DESC`.
+`importante` tem padrão `false`; título/texto são aparados nas extremidades e não aceitam
+apenas espaços. Timestamps sem fuso e campos desconhecidos retornam 422. Criação inclui
+`Location: /api/v1/avisos/{id}`.
+
 Regras:
 
 - **Vigente** é `inicio_em <= agora < fim_em` e `encerrado_em` nulo. Aviso expirado "some sozinho" porque a consulta filtra por data, sem nenhum job.
@@ -67,18 +80,26 @@ Regras:
 - **Avisos por unidade.** O DER tem `avisos.unidade_id` para avisar uma unidade de reserva cancelada (US-605, US-602). Esses avisos **são criados só pelo servidor**, pela função interna abaixo, e o corpo de `POST /avisos` rejeita `unidade_id`. O Morador vê os avisos gerais e os das **suas** unidades; o Funcionário só os gerais. A Administração vê todos, com o campo `unidade` preenchido nos automáticos; esses não podem ser editados (`PUT` retorna 409, `reason: "aviso_automatico"`).
 - `PUT` e `encerramento` só valem para aviso não encerrado e não expirado (senão 409, `reason: "aviso_encerrado"`). Encerrar não apaga: grava `encerrado_em`.
 - Auditoria: `aviso.publicar`, `aviso.editar` e `aviso.encerrar`.
+- O autor da publicação é preservado nas edições; `responsavel_id` de `PUT` e encerramento
+  identifica quem executou a ação na auditoria. Responsável ausente retorna 422; inativo,
+  inexistente ou de outro condomínio retorna 404. `unidade` tem `{id, identificacao}` nos
+  automáticos. As operações usam a mesma transação da auditoria central e nunca apagam o aviso.
 
 **Função interna** usada por [convivencia.md](convivencia.md) (cancelamento de reserva e bloqueio de data):
 
 ```python
 def publicar_para_unidade(
-    session: Session, *, ctx: ContextoRequisicao, unidade_id: UUID,
+    session: Session, *, ctx: ContextoCondominio, unidade_id: UUID,
     titulo: str, texto: str, responsavel_id: UUID, importante: bool = True,
-    dias_de_exibicao: int = 7,
+    dias_de_exibicao: int = 7, ip: str | None = None, relogio: Relogio = agora,
 ) -> UUID: ...
 ```
 
-Cria o aviso na **mesma transação** do chamador (sem `commit`). Vigência: do momento atual até `dias_de_exibicao` dias depois (proposta: 7).
+Cria e audita o aviso na **mesma transação** do chamador (sem `commit`). Exige contexto da
+Administração, responsável ativo e unidade do mesmo condomínio; `dias_de_exibicao` é inteiro
+positivo. Vigência: do momento atual até `dias_de_exibicao` dias depois (padrão: 7).
+O cancelamento administrativo de reserva já usa essa função. Cadastro de bloqueios e e-mail
+assíncrono não estão incluídos na TASK-48.
 
 ## 2. Comunicados da plataforma (US-804, Should, Sprint 3)
 
@@ -144,7 +165,7 @@ Mensagem em chamado `encerrado` retorna 409 (`reason: "chamado_encerrado"`); a A
 
 ### 4.1 O serviço único que os módulos chamam
 
-A US-1004 exige "um mecanismo único que os outros módulos chamam". Interface proposta, no módulo `auditoria`:
+A US-1004 exige "um mecanismo único que os outros módulos chamam". Interface implementada no módulo `auditoria` (TASK-82); detalhes e integrações em [auditoria](../../backend/app/modules/auditoria/README.md):
 
 ```python
 @dataclass(frozen=True)
@@ -155,7 +176,7 @@ class ResponsavelRef:
 def registrar_acao(
     session: Session,
     *,
-    ctx: ContextoRequisicao,            # usuario_id, condominio_id, perfil, ip: vêm da autorização central
+    ctx: ContextoAuditoria,            # usuario_id, condominio_id, perfil, ip: vêm da autorização central
     acao: str,                          # "grupo.verbo", do catálogo da seção 4.2
     recurso_tipo: str,                  # "reserva", "condominio", "unidade"...
     recurso_id: UUID | None,
@@ -166,7 +187,7 @@ def registrar_acao(
 
 def registrar_evento_seguranca(
     *, acao: str, usuario_id: UUID | None, condominio_id: UUID | None,
-    ip: str | None, recurso_tipo: str | None = None, recurso_id: UUID | None = None,
+    ip: str | None, perfil: str | None = None, recurso_tipo: str | None = None, recurso_id: UUID | None = None,
     detalhe: Mapping[str, Any] | None = None,
 ) -> None: ...
 ```
@@ -175,11 +196,20 @@ Regras de uso:
 
 1. **Mesma transação.** `registrar_acao` faz `session.add` + `flush`, **sem `commit`** (quem commita é o service, como em `architecture.md`). A ação e o evento são gravados juntos ou nenhum dos dois. Esquecer a chamada é o erro mais provável, por isso o checklist da matriz (seção 13) já pede a chamada em toda ação crítica.
 2. **Eventos de segurança em transação própria.** `login falho`, `acesso negado (403)` e `404 cross-tenant` acontecem **em requisições que falham** e fazem rollback; se usassem a sessão da requisição, o evento sumiria junto. `registrar_evento_seguranca` abre uma sessão curta e independente, faz o commit dela e nunca propaga erro para a requisição (falha de auditoria de segurança vai para o log, não derruba a resposta de 403).
-3. **Responsável.** Nas ações da Administração, `responsavel` é obrigatório e o serviço **valida** que o ID pertence ao condomínio do contexto e está ativo, copiando o **nome** para `responsavel_nome` (o nome fica gravado mesmo que a lista mude depois). Para ações do Funcionário, `ResponsavelRef(tipo="funcionario")`. A conta autenticada (`usuario_id`) é gravada sempre.
+3. **Responsável.** Nas ações da Administração, `responsavel` é obrigatório e o serviço **valida** que o ID pertence ao condomínio do contexto e está ativo, copiando o **nome** para `responsavel_nome` (o nome fica gravado mesmo que a lista mude depois). Para ações do Funcionário, `ResponsavelRef(tipo="funcionario")`. A conta autenticada (`usuario_id`) é gravada sempre. A gestão da própria lista de responsáveis preserva a exceção da seção 5.2; login identifica a conta antes da seleção de pessoa.
 4. **`antes` e `depois` guardam só o que mudou**, como dicionários simples. O serviço **remove ou mascara** campos sensíveis antes de gravar: `senha`, `senha_hash`, `token`, `token_hash`, `codigo` (chave de acesso; grava-se o ID da chave, nunca o código) e `documento` (CPF/CNPJ aparece mascarado, `***.456.789-**`). A lista de campos sensíveis é uma constante testada.
 5. `ip` e `criado_em` vêm do servidor. Nada disso é aceito do cliente.
 6. **Um evento por ação lógica.** Aprovar um condomínio gera **um** evento `condominio.aprovar` (com `depois: {"chaves_geradas": 38}`), não 38. Em operações em lote, como o bloqueio de data que cancela reservas, cada reserva cancelada tem o seu `reserva.cancelar` mais o `area.bloquear`; isso está dito em [convivencia.md](convivencia.md).
 7. A tabela é só de inserção: não existe `UPDATE` nem `DELETE` nem rota para eles, e o trigger do DER (regra 21) recusa os dois no banco.
+
+**Comportamento de segurança implementado.** O middleware registra uma única negação autenticada
+por resposta 403. Em 404 de recurso sob contexto validado, `seguranca.acesso_cross_tenant` representa
+a tentativa `recurso_fora_do_escopo_ou_inexistente`, sem comprovar a existência do ID nem consultar
+outro condomínio. Uma seleção de condomínio recusada com 404 também é auditada, sem registrar o
+destino informado. URLs desconhecidas ficam fora desse evento. IP vem da conexão ASGI; a rota
+registrada é o modelo estático, sem parâmetros, query, corpo ou cabeçalhos sensíveis. A sessão
+independente usa limites locais de espera por lock/comando e log fixo em falhas, sem traceback
+ou parâmetros SQL. Referências ainda não confirmadas ou inexistentes ficam nulas.
 
 ### 4.2 Catálogo de ações e quem chama
 
@@ -187,7 +217,8 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 
 | Dono | Ações |
 | --- | --- |
-| Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login_falho`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
+| Contas (TASK-27) | `conta.criar`, `conta.editar` — operações globais de conta própria; [contrato](nucleo.md#33-perfil-recorte-task-27-e-demais-rotas-de-conta-us-103-gabriel-sprint-3) |
+| Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login`, `seguranca.login_falho`, `seguranca.login_bloqueado`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
 | Paulo (condomínio, chaves, vínculos) | `condominio.enviar` *(proposta: cadastro inicial)*, `condominio.reenviar`, `condominio.aprovar`, `condominio.rejeitar` (com motivo), `condominio.desativar`, `condominio.reativar`, `condominio.editar`, `chave.gerar`, `chave.regenerar`, `chave.revogar`, `seguranca.chave_invalida` *(proposta: tentativas erradas, US-301)*, `vinculo.aprovar`, `vinculo.rejeitar`, `vinculo.desfazer`, `proprietario.editar` |
 | Vitor (convivência) | `reserva.cancelar`, `area.bloquear`, `ocorrencia.resolver`, `ocorrencia.reabrir` |
 | Eduardo (portaria) | `encomenda.entregar`, `encomenda.confirmar` |
@@ -199,7 +230,7 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `GET /plataforma/auditoria` | ADM | `condominio_id`, `de`, `ate` (datas, fuso do condomínio), `acao` (valor exato ou prefixo `reserva.`), `usuario_id`, `recurso_tipo`, `recurso_id`, paginação | 200, lista |
+| `GET /plataforma/auditoria` | ADM | `condominio_id`, `de`, `ate` (datas inclusivas no fuso do condomínio), `acao` (valor exato ou prefixo `reserva.`), `usuario_id`, `recurso_tipo`, `recurso_id`, `cursor`, `page_size` | 200, página por cursor |
 
 ```json
 {
@@ -218,7 +249,29 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 }
 ```
 
-Ordem: `id` decrescente (o `id` é `bigint` de inserção). **A rota é só de leitura**: sem `PUT`, `PATCH` nem `DELETE`. Nenhum outro perfil acessa a auditoria (matriz); a única exceção proposta é o histórico de funcionários (seção 5). Registros sem condomínio (plataforma, login falho) têm `condominio: null`.
+Ordem implementada na TASK-49: `criado_em DESC, id DESC`, com desempate estável. **A rota é só de leitura**: sem `PUT`, `PATCH` nem `DELETE`. Nenhum outro perfil acessa a auditoria (matriz); a única exceção proposta é o histórico de funcionários (seção 5). Registros sem condomínio (plataforma, login falho) têm `condominio: null`.
+
+**Paginação implementada.** Prefixo completo `/api/v1/plataforma/auditoria`. Resposta
+`{"items": [...], "page_size": 20, "next_cursor": "..."}`; o objeto acima representa um item.
+`page_size` vai de 1 a 100 (padrão 20). Não há `page` nem `total` nesta rota: é a exceção de cursor
+à paginação geral. `next_cursor=null` indica o fim.
+
+O cursor é base64url sem padding do JSON `{"criado_em":"2026-11-17T12:00:00Z","id":1021}`.
+É uma posição, não uma credencial; toda requisição verifica novamente `auditoria:ver` pela
+autorização central da plataforma. A consulta seguinte usa comparação composta estritamente
+menor e os mesmos filtros. Não há assinatura ou promessa de snapshot entre pedidos.
+Cursor inválido retorna 422 `validation_error`; a mensagem não devolve o conteúdo recebido.
+
+`de`/`ate` são datas `AAAA-MM-DD` inclusivas no fuso do projeto; internamente usa-se início do
+primeiro dia e limite exclusivo no início do dia seguinte ao último. `de > ate` retorna 422.
+O limite máximo de `ate` é 9999-12-30. Ação aceita `grupo.verbo` ou prefixo `grupo.` literal.
+Sem filtro de condomínio, eventos de todos os condomínios e os globais são incluídos. Usuário
+ou condomínio inexistente no filtro resulta em lista vazia, sem alterar a autorização.
+As referências expõem somente ID/nome; dados anteriores/posteriores são sanitizados também na
+leitura, incluindo registros legados e máscaras já existentes.
+
+Índices existentes foram mantidos após teste com 100 mil eventos e EXPLAIN. Condições, tempos e
+comando reproduzível: [evidência da TASK-49](../../backend/app/modules/auditoria/README.md#evidência-de-desempenho).
 
 ## 5. Funcionários, responsáveis e conta compartilhada (US-209, US-210)
 

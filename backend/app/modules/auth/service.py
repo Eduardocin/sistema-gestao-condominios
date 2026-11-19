@@ -4,7 +4,6 @@ Ordem de verificação (a mesma da matriz de permissões, seção 5):
 identidade (401) → condomínio (403/404) → perfil. Aqui cuidamos das duas primeiras.
 """
 
-import logging
 import uuid
 from dataclasses import dataclass
 
@@ -12,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import ApiError
+from app.modules.auditoria import service as auditoria
+from app.modules.auditoria.schemas import ContextoAuditoria
 from app.modules.auth import repository
 from app.modules.auth.rate_limit import LoginRateLimiter
 from app.modules.auth.security import (
@@ -28,8 +29,6 @@ from app.modules.auth.security import (
 from app.modules.condominios.models import Condominio, VinculoCondominio
 from app.modules.unidades.models import Unidade
 from app.modules.usuarios.models import Usuario
-
-logger = logging.getLogger(__name__)
 
 # Mensagem única para qualquer falha de credencial: não revelamos se o e-mail existe,
 # se a senha está errada ou se a conta está inativa.
@@ -154,12 +153,15 @@ def login(
     senha: str,
     limiter: LoginRateLimiter,
     settings: Settings,
+    ip: str | None = None,
 ) -> SessaoEmitida:
     """Valida e-mail e senha e devolve a sessão (tokens + condomínios disponíveis)."""
     # 1) Já está bloqueado? Respondemos antes de gastar CPU com argon2.
     segundos = limiter.bloqueio_restante(email)
     if segundos > 0:
-        logger.warning("seguranca.login_bloqueado")
+        auditoria.registrar_evento_seguranca(
+            acao="seguranca.login_bloqueado", usuario_id=None, condominio_id=None, ip=ip
+        )
         raise ApiError(
             429,
             "too_many_attempts",
@@ -180,8 +182,12 @@ def login(
         # A falha é contada por e-mail digitado, exista a conta ou não (senão o 429
         # denunciaria quais e-mails têm conta).
         limiter.registrar_falha(email)
-        # Quando a auditoria (US-1004) existir, este log vira o evento `seguranca.login_falho`.
-        logger.warning("seguranca.login_falho")
+        auditoria.registrar_evento_seguranca(
+            acao="seguranca.login_falho",
+            usuario_id=usuario.id if usuario else None,
+            condominio_id=None,
+            ip=ip,
+        )
         raise _credencial_invalida()
 
     limiter.limpar(email)
@@ -190,10 +196,32 @@ def login(
     assert usuario.senha_hash is not None  # garantido acima; ajuda o mypy
     if precisa_rehash(usuario.senha_hash):
         usuario.senha_hash = hash_senha(senha)
-        session.commit()
 
-    # 4) Descobre em qual condomínio o token já nasce.
-    return emitir_sessao_do_usuario(session, usuario=usuario, settings=settings)
+    # 4) Sessão, eventual rehash e um único evento de login são confirmados juntos.
+    try:
+        sessao = emitir_sessao_do_usuario(session, usuario=usuario, settings=settings)
+        selecionado = sessao.selecionado
+        auditoria.registrar_acao(
+            session,
+            ctx=ContextoAuditoria(
+                usuario.id,
+                selecionado.condominio_id if selecionado else None,
+                PERFIL_PLATAFORMA
+                if usuario.administrador_plataforma
+                else selecionado.perfil
+                if selecionado
+                else None,
+                ip,
+            ),
+            acao="seguranca.login",
+            recurso_tipo="usuario",
+            recurso_id=usuario.id,
+        )
+        session.commit()
+        return sessao
+    except Exception:
+        session.rollback()
+        raise
 
 
 def selecionar_condominio(
@@ -202,6 +230,7 @@ def selecionar_condominio(
     usuario: Usuario,
     condominio_id: uuid.UUID,
     settings: Settings,
+    ip: str | None = None,
 ) -> SessaoEmitida:
     """Emite um novo token já com o condomínio escolhido (`cid`)."""
     # Sem vínculo ativo é 404: não confirmamos nem que o condomínio existe (R4).
@@ -210,6 +239,18 @@ def selecionar_condominio(
     if not usuario.administrador_plataforma:
         linha = repository.obter_vinculo_ativo(session, usuario.id, condominio_id)
     if linha is None:
+        auditoria.registrar_evento_seguranca(
+            acao="seguranca.acesso_cross_tenant",
+            usuario_id=usuario.id,
+            condominio_id=None,
+            ip=ip,
+            detalhe={
+                "status_http": 404,
+                "rota": "/auth/selecionar-condominio",
+                "metodo": "POST",
+                "motivo": "recurso_fora_do_escopo_ou_inexistente",
+            },
+        )
         raise ApiError(404, "not_found", "Condomínio não encontrado.")
 
     escolhido = _montar_acesso(*linha)
@@ -330,8 +371,8 @@ def montar_me(session: Session, *, usuario: Usuario, condominio_id: uuid.UUID | 
         raise ApiError(403, "forbidden", "Este condomínio não está disponível no momento.")
 
     unidades: list[Unidade] = []
-    if vinculo.perfil == "morador" and vinculo.unidade_id is not None:
-        unidade = repository.obter_unidade(session, vinculo.unidade_id, condominio.id)
-        if unidade is not None:
-            unidades.append(unidade)
+    if vinculo.perfil == "morador":
+        unidades = repository.listar_unidades_ativas_do_morador(
+            session, usuario_id=usuario.id, condominio_id=condominio.id
+        )
     return DadosMe(usuario=usuario, acesso=acesso, unidades=unidades)

@@ -569,7 +569,7 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 ## 7. Pontos em aberto
 
 - ~~**Destinatários dos comunicados**~~: resolvido na TASK-81 com `comunicado_destinatarios` (seção 9).
-- **Solicitação e aprovação de vínculo:** `moradores_unidade` apresenta somente `ativo`/`desvinculado`, enquanto a matriz prevê solicitar, aprovar e rejeitar. Definir estados adicionais ou entidade de solicitação antes da implementação, sem conceder acesso a solicitações pendentes.
+- **Solicitação e aprovação de vínculo:** a TASK-30 adota vínculo imediato por chave válida, conforme a US-301 e o contrato do núcleo. Mantém somente `ativo`/`desvinculado`, sem entidade/estado de solicitação ou fila administrativa. A divergência do card fica documentada no [módulo de vínculos](../backend/app/modules/vinculos/README.md).
 
 - ~~**Conflito entre a TASK-81 e as stories**~~ (resolvido: as migrações seguem as stories): a task de migrations fala em "constraint única de reserva: (área, data) por condomínio", o que deixaria uma única reserva por área por dia no prédio inteiro. A US-603 e a US-1006 dizem **uma por unidade, área e dia**, com grade de horários. Este DER segue as stories (regras 1 e 2). Ajustar o texto da TASK-81.
 - **Login da conta compartilhada de Funcionários** (US-210 fala em "usuário e senha"): é um e-mail/telefone como as outras contas, ou um nome de usuário próprio? Este DER assume e-mail.
@@ -617,7 +617,7 @@ A `20261116_0006_indices_consultas` completa os índices das listagens dos contr
 
 **O que ficou para depois:**
 
-- `vinculos_condominio.unidade_id` continua no banco porque o login (TASK-80) ainda lê a unidade dali. Sai numa migração própria quando o login passar a usar `moradores_unidade` (TASK-30).
+- `vinculos_condominio.unidade_id` permanece no banco, mas a TASK-30 retirou sua leitura da autenticação: as associações vêm de `moradores_unidade`. O novo vínculo por chave não preenche a coluna legada; sua remoção física fica para uma migração futura.
 - Sem coluna de fuso: `America/Sao_Paulo` fixo no MVP (convencoes.md, seção 1).
 - Sem `D` em comunicados e sem tabela para contatos da portaria sem entrada (seção 7).
 

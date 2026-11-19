@@ -17,6 +17,7 @@ from app.modules.reservas.models import AreaComum
 from app.modules.storage.models import Arquivo
 from app.modules.storage.types import Module
 from app.modules.suporte.models import ChamadoAnexo
+from app.modules.unidades.models import ProprietarioUnidade
 from app.modules.usuarios.models import Usuario
 
 
@@ -104,6 +105,14 @@ def autorizar_download(
         is not None
     )
     foto_usuario = session.scalar(select(Usuario.id).where(Usuario.foto_arquivo_id == id))
+    foto_proprietario = list(
+        session.scalars(
+            select(ProprietarioUnidade.unidade_id).where(
+                ProprietarioUnidade.foto_arquivo_id == id,
+                ProprietarioUnidade.condominio_id == condominio,
+            )
+        )
+    )
     areas = list(
         session.scalars(
             select(AreaComum.ativa).where(
@@ -119,7 +128,7 @@ def autorizar_download(
     if ctx is None or condominio != ctx.condominio_id:
         raise RecursoNaoEncontrado
     if ctx.perfil == "administracao" and (
-        encomendas or ocorrencias or suporte or documento or foto or areas
+        encomendas or ocorrencias or suporte or documento or foto or foto_proprietario or areas
     ):
         return
     if ctx.perfil == "funcionario" and encomendas:
@@ -132,7 +141,11 @@ def autorizar_download(
                 pass
             else:
                 return
-        for unidades, aba in ((encomendas, "encomendas"), (ocorrencias, "ocorrencias")):
+        for unidades, aba in (
+            (encomendas, "encomendas"),
+            (ocorrencias, "ocorrencias"),
+            (foto_proprietario, "unidades"),
+        ):
             for unidade_id in unidades:
                 try:
                     conferir_unidade(session, ctx, unidade_id, aba)
@@ -142,7 +155,14 @@ def autorizar_download(
     # Um upload ainda sem associação só pode ser lido pelo autor. Após o vínculo,
     # a política do recurso substitui esta permissão provisória, inclusive para o autor.
     vinculado = bool(
-        encomendas or ocorrencias or suporte or documento or foto or foto_usuario or areas
+        encomendas
+        or ocorrencias
+        or suporte
+        or documento
+        or foto
+        or foto_usuario
+        or foto_proprietario
+        or areas
     )
     if not vinculado and arquivo.enviado_por_usuario_id == usuario.id:
         return

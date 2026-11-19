@@ -10,6 +10,7 @@ from app.core import permissoes
 from app.core.contexto import ContextoCondominio, ContextoPlataforma
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.db.session import get_session
+from app.modules.auditoria.contexto import identificar_negacao
 from app.modules.auth import repository
 from app.modules.auth.dependencies import (
     ContextoDep,
@@ -33,10 +34,10 @@ def registrar_negacao(
 ) -> None:
     """Deixa registrado que alguém foi barrado (evento de segurança da matriz, seção 10).
 
-    Por enquanto vai para o log. Quando a trilha de auditoria (TASK-24) existir, é só trocar o
-    corpo desta função para gravar lá: nenhuma rota precisa mudar. Só entram IDs, nunca token,
-    senha ou dados pessoais.
+    O middleware central persiste um único evento após a resposta negada. Aqui preservamos
+    o log operacional e identificamos a permissão, sem token, senha ou dados pessoais.
     """
+    identificar_negacao(permissao)
     logger.warning(
         "seguranca.acesso_negado usuario=%s condominio=%s perfil=%s permissao=%s",
         usuario_id,

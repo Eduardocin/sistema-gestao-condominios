@@ -13,7 +13,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
-from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
 
@@ -92,10 +91,14 @@ class RepositorioPermissoes(RepositorioDoCondominio[PermissaoAba]):
 
     def dos_moradores(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, bool]]:
         """{morador_unidade_id: {aba: com_acesso}} de vários moradores numa só consulta."""
-        consulta = self.consulta().where(PermissaoAba.morador_unidade_id.in_(ids))
+        # Colunas escalares evitam reutilizar instâncias antigas do identity map, inclusive
+        # depois do UPSERT de definir() ou de uma espera pela tranca da unidade.
+        consulta = select(
+            PermissaoAba.morador_unidade_id, PermissaoAba.aba, PermissaoAba.com_acesso
+        ).where(self._do_condominio(), PermissaoAba.morador_unidade_id.in_(ids))
         resultado: dict[uuid.UUID, dict[str, bool]] = {id_: {} for id_ in ids}
-        for permissao in self.session.scalars(consulta):
-            resultado[permissao.morador_unidade_id][permissao.aba] = permissao.com_acesso
+        for morador_id, aba, com_acesso in self.session.execute(consulta):
+            resultado[morador_id][aba] = com_acesso
         return resultado
 
     def do_morador(self, morador_unidade_id: uuid.UUID) -> dict[str, bool]:
@@ -151,37 +154,4 @@ class RepositorioPermissoes(RepositorioDoCondominio[PermissaoAba]):
                     "alterado_em": func.now(),
                 },
             )
-        )
-
-
-class RepositorioAuditoria(RepositorioDoCondominio[RegistroAuditoria]):
-    """Grava eventos na trilha. PROVISÓRIO: quando a TASK-24 (US-1004) criar o serviço de
-    auditoria, troque `registrar` por ele. A tabela só aceita INSERT (trigger do banco)."""
-
-    modelo = RegistroAuditoria
-
-    def registrar(
-        self,
-        *,
-        acao: str,
-        recurso_tipo: str,
-        recurso_id: uuid.UUID,
-        antes: dict[str, Any],
-        depois: dict[str, Any],
-        ip: str | None,
-        responsavel_nome: str | None = None,
-    ) -> None:
-        self.criar(
-            {
-                "usuario_id": self.contexto.usuario_id,
-                "perfil": self.contexto.perfil,
-                # Conta compartilhada: o nome escolhido na lista (plataforma.md, seção 4.1).
-                "responsavel_nome": responsavel_nome,
-                "acao": acao,
-                "recurso_tipo": recurso_tipo,
-                "recurso_id": recurso_id,
-                "antes": antes,
-                "depois": depois,
-                "ip": ip,
-            }
         )

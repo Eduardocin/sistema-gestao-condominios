@@ -176,7 +176,13 @@ def test_funcionario_cadastra_desliga_e_preserva_auditoria(client, session):
         ).status_code
         == 409
     )
-    eventos = list(session.scalars(select(RegistroAuditoria).order_by(RegistroAuditoria.id)))
+    eventos = list(
+        session.scalars(
+            select(RegistroAuditoria)
+            .where(RegistroAuditoria.condominio_id == predio.condominio.id)
+            .order_by(RegistroAuditoria.id)
+        )
+    )
     assert [e.acao for e in eventos] == [
         "responsaveis.alterar",
         "funcionario.cadastrar",

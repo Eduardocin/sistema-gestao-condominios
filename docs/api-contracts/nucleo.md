@@ -72,7 +72,7 @@ trazem `id` e `identificacao`, com o vínculo disponível no banco atual.
 
 **Campos futuros não são garantidos pela TASK-80:** `usuario.tipo_cadastro`
 é persistido pelo cadastro de contas, mas ainda não é exposto na sessão; permissões por aba dependem da
-TASK-21; múltiplas unidades dependem da tabela morador–unidade. Os exemplos
+TASK-21; múltiplas unidades no seletor foram integradas pela TASK-30 usando `moradores_unidade`. Os exemplos
 das demais seções deste contrato continuam propostas para esses fluxos.
 
 A dependência `get_usuario_autenticado` valida a identidade e a sessão. As
@@ -118,15 +118,59 @@ Erros: 409 `conflict` com `reason` = `email_ja_cadastrado` ou `telefone_ja_cadas
 
 `tipo_cadastro` já existe na tabela `usuarios` e é preenchido por estas rotas. A criação de conta não implementa o assistente de cadastro do prédio nem cria vínculos automaticamente.
 
-### 3.3 Demais rotas de conta (Gabriel, Sprint 3, só resumo)
+### 3.3 Perfil (recorte TASK-27) e demais rotas de conta (US-103, Gabriel, Sprint 3)
 
 | Método e rota | Quem | O que faz | História |
 | --- | --- | --- | --- |
 | `GET /contas/me` | Qualquer conta | Dados da conta | US-103 |
-| `PUT /contas/me` | Qualquer conta | Edita nome, telefone, e-mail e `foto_arquivo_id` | US-103 |
+| `PUT /contas/me` | Cadastro global de Morador/Administração | Edita nome, telefone e e-mail; foto depende de storage global | US-103 (recorte TASK-27) |
 | `PUT /contas/me/senha` | Qualquer conta | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve um token novo | US-103, US-210 |
 | `POST /contas/recuperacao-senha` | Público | `{"email"}`; **sempre 202**, exista ou não a conta; enfileira o e-mail `recuperacao_senha` | US-102 |
 | `POST /contas/redefinicao-senha` | Público | `{"token", "senha_nova"}`; token de uso único (`UPDATE ... WHERE usado_em IS NULL`) e com validade; incrementa `sessao_versao` | US-102 |
+
+**Implementado na TASK-27:** somente `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
+das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103; as rotas de senha
+da tabela continuam propostas. Os cadastros existentes e seu `LoginResponse` são preservados.
+
+`GET` exige Bearer válido, inclusive sem `cid`, e retorna os dados da identidade autenticada:
+
+```json
+{
+  "id": "UUID", "nome": "Ana Martins", "email": "ana@exemplo.com",
+  "telefone": "11987654321", "tipo_cadastro": "morador", "documento": null,
+  "foto_arquivo_id": null
+}
+```
+
+Documento e referência à foto, quando existentes, são retornados somente para o próprio
+usuário; telefone e tipo também podem ser nulos em contas legadas. Nunca retorna senha,
+hash, tokens internos ou privilégios. Não há usuário de destino na URL ou no corpo.
+
+`PUT` exige `{"nome": "Ana Martins", "telefone": "11987654321", "email": "ana@exemplo.com"}`
+e retorna 200 com o mesmo formato de `GET`. Os três campos são obrigatórios e seguem as
+validações do cadastro (nome completo para Morador, normalização de espaços/e-mail e telefone
+com 10 ou 11 dígitos). Campos extras retornam 422, inclusive `documento`, `foto_arquivo_id`,
+`senha`, `tipo_cadastro`, privilégios, estado e IDs. Duplicidade de e-mail/telefone em outra
+conta retorna 409 com `email_ja_cadastrado`/`telefone_ja_cadastrado`; manter o próprio dado
+é permitido. Edição não troca senha, versão de sessão, documento, privilégios nem vínculos.
+Sem sessão válida ou com conta inativa: 401. Contas sem tipo de cadastro e ADM podem ler,
+mas recebem 403 na edição neste recorte; gestão de acesso compartilhado continua na US-210.
+
+A foto opcional da US-104 permanece dependente do upload global de conta, não implementado
+no [storage atual](../storage.md). A referência existente é legível, mas não pode ser
+associada por esta escrita. Documento comprobatório continua ligado ao condomínio (3.2).
+
+Auditoria: `conta.criar` e `conta.editar`, recurso `usuario` e ID da conta, via serviço
+central na mesma transação. O contexto é global (`condominio_id`, `perfil` e responsável
+nulos), mesmo se houver `cid` no JWT: tipo de cadastro não é um perfil local validado.
+Criação usa somente campos públicos; edição usa somente alterações, sem senha/hash/tokens;
+documento passa pela máscara central. Contas compartilhadas não usam esta escrita para
+contornar a identificação de responsável ou a revogação exigida na US-210.
+
+**Divergência documental:** o card TASK-27 menciona conta pendente. Mantém-se autenticação
+imediata, conforme US-104 e o contrato já implementado; a conta não ganha condomínio nem
+unidade. Aprovação de condomínio é TASK-29 e vínculo por unidade é TASK-30. Não se adiciona
+estado de conta nem se altera `usuarios.ativo` para representar essa pendência.
 
 ## 4. Condomínio (cadastro, estados e dados)
 
@@ -156,6 +200,10 @@ Qualquer outra transição retorna 409 (`reason: "transicao_invalida"`). Não ex
 
 ### 4.2 Cadastrar o prédio — o assistente envia tudo de uma vez (US-202, Must, Sprint 1)
 
+**Implementado na TASK-28**, junto à listagem mínima `GET /condominios/meus` da seção 4.3.
+Reutiliza os modelos e constraints existentes, sem migration. Detalhes e limites:
+[módulo de condomínios](../../backend/app/modules/condominios/README.md).
+
 `POST /condominios` — conta com `tipo_cadastro = 'administracao'`, sem `cid`. A mesma conta pode cadastrar vários prédios (cada chamada cria um condomínio).
 
 O assistente do front pergunta nome, blocos, quantidade de andares, apartamentos por andar e o nome de cada apartamento, e mostra a árvore para conferência (**tudo isso é do front**). O que chega à API é a **árvore explícita**, sem "quantidades": o front expande 3 andares × 4 apartamentos nos 12 nomes. Um único pedido, validado e gravado **numa transação só**: ou entra tudo, ou nada.
@@ -163,11 +211,11 @@ O assistente do front pergunta nome, blocos, quantidade de andares, apartamentos
 ```json
 {
   "nome": "Residencial Aurora",
-  "cnpj": "12345678000199",
+  "cnpj": "11222333000181",
   "endereco": {"cep": "50030230", "logradouro": "Rua da Aurora", "numero": "100", "complemento": null,
                "bairro": "Boa Vista", "cidade": "Recife", "uf": "PE"},
   "logo_arquivo_id": null,
-  "documentos": ["UUID"],
+  "documentos": [],
   "blocos": [
     {
       "nome": "Bloco A",
@@ -194,13 +242,39 @@ O assistente do front pergunta nome, blocos, quantidade de andares, apartamentos
 Resposta 201, com o cabeçalho `Location: /api/v1/condominios/meus` (ver nota):
 
 ```json
-{"id": "UUID", "nome": "Residencial Aurora", "cnpj": "12345678000199", "status": "pendente",
+{"id": "UUID", "nome": "Residencial Aurora", "cnpj": "11222333000181", "status": "pendente",
  "enviado_em": "2026-11-10T14:03:00Z", "estrutura": {"blocos": 1, "andares": 2, "unidades": 6}}
 ```
 
 Nota: como o recurso do dia a dia é `GET /condominio` (singular, do token), a resposta traz o `id` e o `Location` aponta para `/api/v1/condominios/meus`; para trabalhar nesse prédio, o front chama `POST /auth/selecionar-condominio`.
 
 Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andares[1].unidades[2]`, [convencoes.md](convencoes.md) seção 4); 409 `conflict` com `reason = "cnpj_ja_cadastrado"`. **Efeitos na mesma transação:** `condominios` (`pendente`, `enviado_em`, `criado_por_usuario_id`), `blocos`, `andares`, `unidades` (todas `ativo`), `condominio_documentos`, um `vinculos_condominio` ativo de perfil `administracao` para o criador, o evento `enviado` e a auditoria `condominio.enviar`. **Não gera chaves de acesso**: isso é na aprovação (US-203).
+
+**Precisões da entrega TASK-28:**
+
+- A autorização usa identidade e tipo de cadastro lidos do banco, sem exigir `cid`. ADM da
+  plataforma, Morador e contas sem `tipo_cadastro=administracao` recebem 403. A conta existente
+  é reutilizada; cada pedido gera um novo condomínio e seu vínculo. Não há IDs de criador,
+  condomínio, bloco ou andar aceitos do cliente.
+- Os limites da tabela são aplicados. Nomes e identificações são aparados nas extremidades;
+  unicidade respeita a igualdade das constraints existentes. UF é normalizada em maiúsculas.
+  Ordem exige inteiro (sem coerção de texto/booleano). Campos extras em qualquer nível são 422.
+  Os detalhes do 422 de schema incluem somente caminhos e mensagens, sem valores recebidos;
+  a extensão não altera as respostas de validação dos demais módulos.
+- O índice único de CNPJ protege pedidos concorrentes. Uma única transação confirma toda a
+  árvore, vínculo, histórico e evento; falhas revertem todos. A auditoria registra conta, IP,
+  novo condomínio e contagens, sem CNPJ/endereço/documentos. Perfil local e responsável são
+  nulos neste cadastro global, anterior à seleção do novo condomínio e à lista de responsáveis.
+- **Dependência de arquivos:** o storage atual exige condomínio existente e não oferece upload
+  para este cadastro inicial. Por isso, aceita `logo_arquivo_id` nulo/omitido e `documentos`
+  vazio/omitido. Referências não vazias retornam 422 com `reason=arquivos_indisponiveis_no_cadastro`;
+  não se vinculam arquivos de outro condomínio nem se altera seu escopo. Até existir esse upload,
+  não há linhas em `condominio_documentos` produzidas pelo cadastro inicial.
+- **Divergências do card:** rascunho persistido, retomada e endpoints por etapa não foram
+  implementados. O frontend controla etapas, expansão em massa e conferência da árvore antes
+  do envio único. Áreas comuns permanecem no módulo existente de reservas, fora deste payload.
+  A lista de responsáveis usa o fluxo existente após selecionar o condomínio; não é recriada
+  pelo assistente. Aprovação e chaves continuam na TASK-29; vínculo de Morador, na TASK-30.
 
 ### 4.3 Dados do condomínio e histórico (US-204, US-206)
 
@@ -212,6 +286,13 @@ Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andar
 | `POST /condominio/reenvio` | Administração | `{}` | 200, objeto com `status = 'pendente'` |
 | `GET /condominio/documentos` | Administração | — | 200, lista de documentos |
 | `POST /condominio/documentos` | Administração | `{"arquivo_id": "UUID"}` | 201, documento |
+
+`GET /api/v1/condominios/meus` está implementado na TASK-28: lista direta, sem paginação,
+ordenada por nome e ID, limitada aos vínculos ativos de perfil Administração da conta.
+Inclui todos os estados do condomínio; revogar o vínculo o remove da próxima consulta.
+`GET /condominio` para Administração foi implementado na TASK-29. As escritas restantes
+da tabela continuam fora dessas entregas. Selecionar um condomínio pendente
+não libera suas operações do dia a dia, que continuam sob a autorização central.
 
 `GET /condominio` para a Administração:
 
@@ -255,6 +336,10 @@ Para a Administração, cada unidade traz também `tem_proprietario` e `moradore
 
 ## 5. Aprovação pelo ADM (US-203, Must, Sprint 1) e gestão de condomínios ativos (US-208)
 
+**Implementado na TASK-29:** fila/detalhe e ações de aprovação/rejeição, mais a leitura
+administrativa de `GET /condominio`. Sem desativação, reativação ou reenvio.
+Precisões, atomicidade e limites: [condomínios](../../backend/app/modules/condominios/README.md#aprovação-e-rejeição--task-29--us-203).
+
 Rotas sob `/plataforma/...`, só para `administrador_plataforma` (R9). O ADM **não** vê o dia a dia de nenhum condomínio (R8).
 
 | Método e rota | Permissão | Entrada | Sucesso |
@@ -291,6 +376,12 @@ A fila vem do **mais antigo para o mais recente** (`enviado_em` crescente), para
 Aprovar ou rejeitar algo que não esteja `pendente` retorna 409. O ADM é uma conta individual, por isso estas rotas **não recebem `responsavel_id`**: a auditoria já registra quem agiu. Para o ADM abrir os **documentos** do cadastro, a leitura de arquivos da TASK-26 precisa liberar o ADM nos arquivos de `condominio_documentos`, exceção estreita à R8 (pendências).
 
 ## 6. Proprietário e chaves de acesso (US-207, Must, Sprint 1)
+
+**Implementado na TASK-29:** as sete rotas das seções 6.1–6.2. Escritas de proprietário e
+chaves exigem `responsavel_id` conforme as convenções de contas compartilhadas. As exclusões
+do alfabeto deixam os 31 símbolos descritos na seção 6.2. A notificação da
+aprovação é somente enfileirada; envio efetivo fica na Sprint 3. Detalhes e divergências:
+[unidades](../../backend/app/modules/unidades/README.md).
 
 ### 6.1 Unidades e proprietário (Administração)
 
@@ -331,13 +422,13 @@ Aprovar ou rejeitar algo que não esteja `pendente` retorna 409. O ADM é uma co
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /unidades/{id}/chave` | Administração | — | 200, `{"codigo", "criada_em"}`; 404 se não há chave vigente |
-| `POST /unidades/{id}/chave` | Administração | `{}` | 201, chave nova; 409 se já há uma vigente |
-| `POST /unidades/{id}/chave/regeneracao` | Administração | `{}` | 200, chave nova; a anterior fica **inválida na hora** |
-| `POST /unidades/{id}/chave/revogacao` | Administração | `{}` | 200, `{"revogada_em": "..."}`; a unidade fica sem chave |
+| `POST /unidades/{id}/chave` | Administração | `{"responsavel_id": "UUID"}` | 201, chave nova; 409 se já há uma vigente |
+| `POST /unidades/{id}/chave/regeneracao` | Administração | `{"responsavel_id": "UUID"}` | 200, chave nova; a anterior fica **inválida na hora** |
+| `POST /unidades/{id}/chave/revogacao` | Administração | `{"responsavel_id": "UUID"}` | 200, `{"revogada_em": "..."}`; a unidade fica sem chave |
 
 Regras:
 
-- **Formato:** 10 caracteres de um alfabeto de 32 símbolos sem ambiguidade (sem `0 O 1 I L`), gerado com `secrets` e exibido em dois grupos (`K7M2P-9QXW4`). São 50 bits, suficientes porque o limite de tentativas (seção 7.1) impede força bruta. Na entrada, o servidor ignora hífen, espaço e caixa.
+- **Formato:** 10 caracteres do alfabeto de 31 símbolos `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (sem `0 O 1 I L`), gerado com `secrets` e exibido em dois grupos (`K7M2P-9QXW4`). São aproximadamente 49,54 bits de entropia; o limite de tentativas é descrito na seção 7.1. Na entrada, o servidor ignora hífen, espaço e caixa.
 - **Unicidade:** `UNIQUE (codigo)` (regra 4 do DER). Se o sorteio colidir, sorteia de novo; o service tenta até 5 vezes.
 - **Uma vigente por unidade** (regra 5): `UNIQUE (unidade_id) WHERE revogada_em IS NULL`. Regenerar grava `revogada_em` na anterior e cria a nova **na mesma transação**, e a anterior para de valer imediatamente (US-207).
 - Unidade desativada não tem chave (a desativação revoga a vigente, [plataforma.md](plataforma.md) seção 7).
@@ -345,6 +436,12 @@ Regras:
 - Vincular com chave já usada por outro morador **não** invalida a chave: a mesma chave serve a todos os moradores da unidade até a Administração regenerá-la (US-305, "a Administração pode regenerar a chave em seguida").
 
 ## 7. Vínculo do morador com a unidade
+
+**Implementado na TASK-30:** vínculo imediato por chave (seção 7.1), próprias unidades e
+proprietário sem documento (7.2), com tentativas persistentes, concorrência e integração de
+`/auth/me` com `moradores_unidade`. Sem fila/aprovação administrativa, responsável principal
+ou e-mail. Convites/desvinculação (7.3–7.4) continuam fora desta entrega.
+Precisões e diferenças do card: [vínculos](../../backend/app/modules/vinculos/README.md).
 
 ### 7.1 Vincular-se com a chave (US-301, Must, Sprint 1)
 
@@ -370,7 +467,13 @@ Resposta 201: `{"unidade": {"id": "UUID", "identificacao": "Bloco A / 101"}, "co
 | Excedeu as tentativas | **429 `too_many_attempts`**, com `Retry-After` |
 | Formato inválido (menos de 10 caracteres úteis) | 422 |
 
-**Limite de tentativas** (proposta): cada tentativa grava uma linha em `tentativas_chave_acesso` (`usuario_id`, `sucesso`, `criado_em`). **5 tentativas erradas seguidas em 15 minutos** bloqueiam novas tentativas dessa conta por 15 minutos, contando a partir da última; um acerto zera a contagem. Uma tentativa bloqueada não consulta a chave. Cada erro gera `seguranca.chave_invalida` na auditoria.
+**Limite de tentativas** (implementado na TASK-30): cada avaliação e pedido bloqueado grava uma
+linha em `tentativas_chave_acesso` (`usuario_id`, `sucesso`, `criado_em`). **5 tentativas erradas
+seguidas em 15 minutos** bloqueiam novas tentativas dessa conta por 15 minutos, contando da
+quinta. Os cinco erros respondem 404; pedidos já bloqueados respondem 429, sem consultar a
+chave nem estender o prazo. Sucesso reinicia a sequência. Formato inválido (422) e conflitos
+(409) não contam como erro de chave. Falhas 404/429 são confirmadas antes do erro HTTP;
+cada uma usa `seguranca.chave_invalida` na auditoria de segurança central.
 
 Um morador pode se vincular a **mais de uma unidade** (US-301), do mesmo condomínio ou de outros. O vínculo dá acesso **só àquela unidade** (R10).
 

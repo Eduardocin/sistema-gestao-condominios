@@ -267,13 +267,13 @@ def test_reservar_cancelar_e_reservar_de_novo(client, session, predio, morador, 
 
 
 def test_falha_na_auditoria_desfaz_a_reserva(client, session, predio, morador, area, monkeypatch):
-    from app.modules.permissoes_aba.repository import RepositorioAuditoria
+    from app.modules.auditoria import service as auditoria
 
     def quebrar(*args, **kwargs):
         raise RuntimeError("auditoria fora do ar")
 
     session.commit()  # fixa o cenário: o rollback abaixo só desfaz o que a requisição gravou
-    monkeypatch.setattr(RepositorioAuditoria, "registrar", quebrar)
+    monkeypatch.setattr(auditoria, "registrar_acao", quebrar)
     resposta = client.post(URL, headers=morador, json=pedido(area, predio.unidade_101))
     assert resposta.status_code == 500
     session.rollback()  # o que o get_session real faz quando a requisição estoura

@@ -20,9 +20,11 @@ from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.core.permissoes import Perfil
 from app.core.tempo import Relogio, agora, inicio_do_slot, no_fuso
+from app.modules.auditoria import service as auditoria
+from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.auth.autorizacao import garantir_aba_da_unidade, garantir_aba_no_condominio
+from app.modules.avisos import service as avisos
 from app.modules.funcionarios.repository import RepositorioResponsaveis
-from app.modules.permissoes_aba.repository import RepositorioAuditoria
 from app.modules.reservas.models import AreaComum, Reserva
 from app.modules.reservas.repository import (
     FiltrosAdministracao,
@@ -230,8 +232,6 @@ class ReservasService:
         self.reservas = RepositorioReservas(session, contexto)
         self.bloqueios = RepositorioBloqueios(session, contexto)
         self.responsaveis = RepositorioResponsaveis(session, contexto)
-        # TODO: trocar por registrar_acao (TASK-82)
-        self.auditoria = RepositorioAuditoria(session, contexto)
 
     @property
     def _e_morador(self) -> bool:
@@ -372,7 +372,9 @@ class ReservasService:
                 ),
             },
         )
-        self.auditoria.registrar(
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
             acao="reserva.criar",
             recurso_tipo="reserva",
             recurso_id=reserva.id,
@@ -383,7 +385,6 @@ class ReservasService:
                 "data": dados.data.isoformat(),
                 "hora_inicio": hora.strftime("%H:%M"),
             },
-            ip=ip,
         )
         self.session.commit()  # reserva e auditoria juntas, ou nenhuma das duas
         return self._saida(reserva.id)
@@ -479,11 +480,20 @@ class ReservasService:
         self.reservas.atualizar(reserva.id, valores)
 
         if responsavel is not None:
-            # TODO(TASK-48): na mesma transação, antes do commit, entram aqui (1) o aviso para a
-            # unidade com o motivo (`publicar_para_unidade`, plataforma.md seção 1) e (2) o
-            # e-mail `reserva_cancelada` ao morador que reservou (plataforma.md seção 6).
-            # O cancelamento pelo Morador não gera aviso nem e-mail.
-            pass
+            avisos.publicar_para_unidade(
+                self.session,
+                ctx=self.contexto,
+                unidade_id=reserva.unidade_id,
+                titulo="Reserva cancelada pela Administração",
+                texto=(
+                    f"A reserva de {reserva.data:%d/%m/%Y} às {reserva.hora_inicio:%H:%M} "
+                    f"foi cancelada pela Administração. Motivo: {dados.motivo}"
+                ),
+                responsavel_id=responsavel.id,
+                ip=ip,
+                relogio=self.relogio,
+            )
+            # O enfileiramento de e-mail depende do serviço de e-mail (fora da TASK-48).
 
         depois: dict[str, Any] = {
             "status": "cancelada",
@@ -492,14 +502,17 @@ class ReservasService:
         if responsavel is not None:
             depois["responsavel_id"] = str(responsavel.id)
             depois["motivo"] = dados.motivo
-        self.auditoria.registrar(
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
             acao="reserva.cancelar",
             recurso_tipo="reserva",
             recurso_id=reserva.id,
             antes={"status": "ativa"},
             depois=depois,
-            ip=ip,
-            responsavel_nome=responsavel.nome if responsavel is not None else None,
+            responsavel=(
+                ResponsavelRef("administracao", responsavel.id) if responsavel is not None else None
+            ),
         )
         self.session.commit()
         return self._saida(reserva.id)

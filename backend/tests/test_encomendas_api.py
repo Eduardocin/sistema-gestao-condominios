@@ -783,8 +783,6 @@ def test_funcionario_nao_pode_confirmar(client, session):
         descricao="Confirmação do morador",
         status="entregue_aguardando_confirmacao",
     )
-    auditorias_antes = contar(session, RegistroAuditoria)
-
     resposta = client.post(
         f"/api/v1/encomendas/{encomenda.id}/confirmacao",
         headers=predio.cabecalho_de("funcionario"),
@@ -792,7 +790,14 @@ def test_funcionario_nao_pode_confirmar(client, session):
     )
 
     assert resposta.status_code == 403
-    assert contar(session, RegistroAuditoria) == auditorias_antes
+    # O middleware audita a negação, mas a ação de negócio não pode ser gravada.
+    evento_confirmacao = session.scalar(
+        select(RegistroAuditoria.id).where(
+            RegistroAuditoria.recurso_id == encomenda.id,
+            RegistroAuditoria.acao == "encomenda.confirmar",
+        )
+    )
+    assert evento_confirmacao is None
     session.refresh(encomenda)
     assert encomenda.status == "entregue_aguardando_confirmacao"
 

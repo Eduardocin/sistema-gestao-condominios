@@ -4,6 +4,7 @@ Este arquivo não conhece banco nem HTTP, só recebe valores e devolve valores. 
 fácil de testar e reaproveitar (por exemplo, na autorização central da TASK-19).
 """
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -54,6 +55,15 @@ def gastar_tempo_de_verificacao(senha: str) -> None:
     e dava para descobrir quais e-mails têm conta só medindo o tempo.
     """
     verificar_senha(senha, _HASH_FICTICIO)
+
+
+def hash_do_token(token: str) -> str:
+    """SHA-256 em hexadecimal (64 caracteres) de um token opaco de uso único.
+
+    É o que vai para `tokens_recuperacao_senha.token_hash`: o banco nunca vê o token em texto.
+    Sem salt de propósito: o token já é aleatório e longo, e precisamos achá-lo pelo hash.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------

@@ -57,7 +57,31 @@ mas o upload global de conta ainda não está disponível no [storage](../../../
 Não se reutilizam arquivos de condomínio para contornar essa limitação. O documento
 comprobatório permanece no cadastro do condomínio. Nenhuma migration ou dependência nova.
 
+## Senha (TASK-53, parte A)
+
+- `PUT /api/v1/contas/me/senha`: autenticado (sem exigir `cid`), `{"senha_atual", "senha_nova"}`.
+  Só cadastro global (conta compartilhada e ADM: 403, como no `PUT /contas/me`). A conta fica
+  travada (`FOR UPDATE`) durante a troca. Senha atual errada: 422 `senha_atual_incorreta`, contada
+  no `LoginRateLimiter` com a chave `senha:{usuario_id}`; no limite, 429 com `Retry-After`, como no
+  login; acerto zera o contador. Igual à atual: 422 `senha_nova_igual_atual`. Sucesso: hash novo,
+  `sessao_versao + 1` e o mesmo `LoginResponse` do login, com tokens novos (os antigos caem).
+- `POST /api/v1/contas/redefinicao-senha`: público, `{"token", "senha_nova"}`, 204 sem sessão. O
+  banco guarda só `hash_do_token(token)` (SHA-256 hexadecimal, em `auth/security.py`; a parte B usa
+  a mesma função). Numa transação: `UPDATE` condicional que consome o token, senha nova,
+  `sessao_versao + 1`, demais tokens pendentes da conta inutilizados e auditoria. Qualquer falha
+  (inclusive senha igual ao e-mail) desfaz tudo e o token continua valendo. Inexistente, expirado,
+  usado ou de conta inativa/sem cadastro próprio: o mesmo 422 `token_invalido`.
+- A regra da senha nova é a do cadastro, numa só função (`conferir_senha` em `schemas.py`). A
+  comparação com o e-mail é feita no service, que é quem conhece a conta.
+- Auditoria: `conta.senha_alterar` e `conta.senha_redefinir`, com só `sessao_versao` em
+  `antes`/`depois`. Na rota pública, a identidade auditada é a dona do token, como em `conta.criar`.
+- Pendente (parte B): `POST /contas/recuperacao-senha`, que gera o token e envia o e-mail
+  (depende da TASK-50).
+- **Divergência documental:** o card do Notion cita `/auth/esqueci-senha` e
+  `/auth/redefinir-senha`. Vale o contrato (`nucleo.md`, seção 3.3): as rotas ficam em `/contas`.
+
 Testes: [cadastros existentes](../../../tests/test_contas_funcionarios_api.py) e
-[TASK-27](../../../tests/test_contas_perfil_api.py), contra PostgreSQL exclusivo migrado
+[TASK-27](../../../tests/test_contas_perfil_api.py), [senha](../../../tests/test_contas_senha_api.py) e
+[concorrência do token](../../../tests/test_contas_senha_concorrencia.py), contra PostgreSQL exclusivo migrado
 (`TEST_DATABASE_URL`), com login real, isolamento de identidade, campos protegidos,
 unicidade inclusive no banco, auditoria e falhas transacionais simuladas.

@@ -284,7 +284,7 @@ comando reproduzível: [evidência da TASK-49](../../backend/app/modules/auditor
 | `POST /funcionarios` | Administração | JSON abaixo | 201, objeto |
 | `PUT /funcionarios/{id}` | Administração | JSON abaixo | 200, objeto |
 | `POST /funcionarios/{id}/desligamento` | Administração | `{"responsavel_id": "UUID"}` | 200, objeto com `ativo = false` |
-| `GET /funcionarios/{id}/historico` | Administração | paginação | 200, eventos de cadastro e alteração |
+| `GET /funcionarios/{id}/historico` | Administração | paginação | 200, eventos de cadastro, edição e desligamento |
 
 ```json
 {
@@ -301,8 +301,30 @@ Obrigatórios: `nome` (1 a 120), `funcao` (`porteiro` ou `seguranca`, CHECK do D
 
 - **Desligado** deixa de aparecer em `GET /funcionarios` do Funcionário e da lista padrão da Administração (`ativo=true`), mas continua nos registros antigos (encomendas, visitas, auditoria). Grava `ativo = false` e `desligado_em`. Desligar de novo retorna 409.
 - Os formulários da portaria (`portaria.md`) já consomem `GET /portaria/funcionarios`; esta rota é a origem da mesma lista. Eduardo e Tude decidem se `/portaria/funcionarios` vira apelido de `/funcionarios` ou se uma das duas some.
-- **Histórico.** A US-209 pede "histórico de quem cadastrou ou alterou". O histórico vem de `registros_auditoria` (`funcionario.cadastrar`, `.editar`, `.desativar`) filtrado por `recurso_id`, devolvendo só `acao`, `criado_em`, `responsavel_nome` e `usuario` (sem `antes`/`depois`). Como a matriz nega a auditoria à Administração, esta rota é **uma exceção explícita** a aprovar pelo Gabriel (pendências).
+- **Histórico implementado nos complementos da US-209.** A consulta usa `registros_auditoria`, filtrando o próprio condomínio, `recurso_tipo=funcionario`, o ID consultado e somente `funcionario.cadastrar`, `funcionario.editar` e `funcionario.desativar`. Antes de consultar eventos, confirma a existência do funcionário no condomínio. Devolve só `acao`, `criado_em`, `responsavel_nome` e `usuario` (`{id,nome}`, ou nulo em registros legados sem autor). Não carrega nem expõe `antes`, `depois`, IP, perfil ou demais metadados. Como a matriz nega auditoria geral à Administração, esta rota permanece **uma exceção de acesso sujeita à revisão por Gabriel**; nenhuma aprovação foi presumida e a permissão global de auditoria não foi alterada.
 - Auditoria: `funcionario.cadastrar`, `funcionario.editar`, `funcionario.desativar`.
+
+**Consulta e edição implementadas nos complementos da US-209.** As três novas rotas exigem
+Administração com vínculo ativo e condomínio ativo. A Portaria mantém somente a listagem
+de nomes ativos; não consulta detalhe nem histórico. Funcionário inexistente ou de outro
+condomínio retorna 404 genérico, inclusive no histórico. Funcionários desligados podem ser
+consultados e ter seus dados corrigidos; `ativo`, `desligado_em`, ID e referências históricas
+são preservados, sem reativação.
+
+`PUT` recebe os mesmos campos e validações do cadastro: nome, função, telefone, e-mail e
+`responsavel_id` obrigatórios; foto opcional. Foto nula ou omitida remove a referência.
+Não há atualização parcial: campos obrigatórios ausentes retornam 422. Campos extras,
+inclusive estado, ID e condomínio, também são rejeitados. O responsável deve estar ativo
+no próprio condomínio; a foto passa pela validação existente de imagem, autor e módulo
+`fotos`. Referências inválidas retornam 404. Atualização e evento central
+`funcionario.editar` são confirmados juntos ou revertidos juntos; antes/depois contêm
+apenas os campos efetivamente alterados. Repetir os mesmos valores normalizados não gera
+outro evento de alteração.
+
+O histórico usa `{items,page,page_size,total}`, com `page>=1`, `page_size` de 1 a 100
+(padrão 20) e ordem `criado_em DESC, id DESC`. O ID da auditoria serve apenas ao desempate
+e não é exposto. Um funcionário existente sem eventos retorna lista vazia. Não há filtros
+livres de condomínio, recurso ou ação nem acesso a eventos de outros recursos.
 
 ### 5.2 Responsáveis pela Administração (US-210, Should, Sprint 3)
 

@@ -1,12 +1,15 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Select, func, select
 
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
+from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.condominios.models import Condominio
 from app.modules.funcionarios.models import Funcionario, ResponsavelAdministracao
 from app.modules.storage.models import Arquivo
+from app.modules.usuarios.models import Usuario
 
 
 class RepositorioFuncionarios(RepositorioDoCondominio[Funcionario]):
@@ -37,6 +40,39 @@ class RepositorioFuncionarios(RepositorioDoCondominio[Funcionario]):
         if item is None:
             raise RecursoNaoEncontrado
         return item
+
+    def historico(
+        self, id_: uuid.UUID, *, page: int, page_size: int
+    ) -> tuple[list[tuple[str, datetime, str | None, uuid.UUID | None, str | None]], int]:
+        # Exceção restrita da US-209: não carrega antes/depois, IP ou outros metadados.
+        consulta = (
+            select(
+                RegistroAuditoria.acao,
+                RegistroAuditoria.criado_em,
+                RegistroAuditoria.responsavel_nome,
+                Usuario.id,
+                Usuario.nome,
+            )
+            .outerjoin(Usuario, Usuario.id == RegistroAuditoria.usuario_id)
+            .where(
+                RegistroAuditoria.condominio_id == self.contexto.condominio_id,
+                RegistroAuditoria.recurso_tipo == "funcionario",
+                RegistroAuditoria.recurso_id == id_,
+                RegistroAuditoria.acao.in_(
+                    ["funcionario.cadastrar", "funcionario.editar", "funcionario.desativar"]
+                ),
+            )
+        )
+        total = self.session.scalar(select(func.count()).select_from(consulta.subquery())) or 0
+        linhas = self.session.execute(
+            consulta.order_by(RegistroAuditoria.criado_em.desc(), RegistroAuditoria.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+        return [
+            (acao, criado_em, responsavel_nome, usuario_id, usuario_nome)
+            for acao, criado_em, responsavel_nome, usuario_id, usuario_nome in linhas
+        ], total
 
 
 class RepositorioResponsaveis(RepositorioDoCondominio[ResponsavelAdministracao]):

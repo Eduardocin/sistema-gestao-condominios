@@ -16,6 +16,7 @@ from app.modules.funcionarios.schemas import (
     FuncionarioNome,
     FuncionarioSaida,
     PaginaFuncionarios,
+    PaginaHistoricoFuncionario,
     ResponsavelEntrada,
     ResponsavelSaida,
 )
@@ -77,6 +78,46 @@ def desligar(
     return FuncionarioSaida.model_validate(
         service.desligar(funcionario_id, dados.responsavel_id, ip=ip_do_cliente(request))
     )
+
+
+@router.get(
+    "/{funcionario_id}",
+    response_model=FuncionarioSaida,
+    dependencies=[Depends(require_permission("funcionarios:ver"))],
+)
+def detalhe(funcionario_id: uuid.UUID, service: ServiceDep) -> FuncionarioSaida:
+    return FuncionarioSaida.model_validate(service.obter(funcionario_id))
+
+
+@router.put(
+    "/{funcionario_id}",
+    response_model=FuncionarioSaida,
+    dependencies=[Depends(require_permission("funcionarios:editar"))],
+)
+def editar(
+    funcionario_id: uuid.UUID,
+    dados: FuncionarioEntrada,
+    service: ServiceDep,
+    request: Request,
+) -> FuncionarioSaida:
+    return FuncionarioSaida.model_validate(
+        service.editar(funcionario_id, dados, ip=ip_do_cliente(request))
+    )
+
+
+@router.get(
+    "/{funcionario_id}/historico",
+    response_model=PaginaHistoricoFuncionario,
+    dependencies=[Depends(require_permission("funcionarios:ver"))],
+)
+def historico(
+    funcionario_id: uuid.UUID,
+    service: ServiceDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PaginaHistoricoFuncionario:
+    items, total = service.historico(funcionario_id, page=page, page_size=page_size)
+    return PaginaHistoricoFuncionario(items=items, page=page, page_size=page_size, total=total)
 
 
 @responsaveis_router.get("", response_model=list[ResponsavelSaida])

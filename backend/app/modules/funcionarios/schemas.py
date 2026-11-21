@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.validation import normalizar_email, validar_telefone
+from app.modules.auditoria.schemas import ReferenciaAuditoria
 
 
 class NomeEntrada(BaseModel):
@@ -65,3 +66,17 @@ class ResponsavelEntrada(NomeEntrada):
 
 class ResponsavelSaida(FuncionarioNome):
     ativo: bool
+
+
+class EventoHistoricoFuncionario(BaseModel):
+    acao: str
+    criado_em: datetime
+    responsavel_nome: str | None
+    usuario: ReferenciaAuditoria | None
+
+
+class PaginaHistoricoFuncionario(BaseModel):
+    items: list[EventoHistoricoFuncionario]
+    page: int
+    page_size: int
+    total: int

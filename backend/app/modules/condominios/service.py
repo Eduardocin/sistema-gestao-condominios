@@ -4,11 +4,11 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.core.contexto import ContextoPlataforma
+from app.core.contexto import ContextoCondominio, ContextoPlataforma
 from app.core.errors import ApiError
 from app.core.tempo import Relogio, agora
 from app.modules.auditoria import service as auditoria
-from app.modules.auditoria.schemas import ContextoAuditoria
+from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.condominios import repository, schemas
 from app.modules.condominios.models import Condominio
 from app.modules.condominios.schemas import (
@@ -16,6 +16,9 @@ from app.modules.condominios.schemas import (
     CadastroCondominioSaida,
     CondominioResumo,
 )
+from app.modules.funcionarios.repository import RepositorioResponsaveis
+from app.modules.unidades.models import Andar, Bloco, Unidade
+from app.modules.unidades.repository import RepositorioUnidades
 from app.modules.unidades.service import gerar_chave
 from app.modules.usuarios.models import Usuario
 
@@ -163,31 +166,7 @@ def detalhe_plataforma(session: Session, id_: uuid.UUID) -> schemas.DetalhePlata
     return schemas.DetalhePlataforma(
         **dados_condominio(session, condominio).model_dump(),
         **dados,
-        blocos=[
-            schemas.BlocoAnalise(
-                id=b.id,
-                nome=b.nome,
-                ativo=b.ativo,
-                andares=[
-                    schemas.AndarAnalise(
-                        id=a.id,
-                        nome=a.nome,
-                        ordem=a.ordem,
-                        ativo=a.ativo,
-                        unidades=[
-                            schemas.UnidadeAnalise(
-                                id=u.id, identificacao=u.identificacao, ativo=u.ativo
-                            )
-                            for u in unidades
-                            if u.andar_id == a.id
-                        ],
-                    )
-                    for a in andares
-                    if a.bloco_id == b.id
-                ],
-            )
-            for b in blocos
-        ],
+        blocos=_arvore_estrutura(blocos, andares, unidades),
     )
 
 
@@ -247,3 +226,242 @@ def decidir(
     except Exception:
         session.rollback()
         raise
+
+
+def _arvore_estrutura(
+    blocos: list[Bloco], andares: list[Andar], unidades: list[Unidade]
+) -> list[schemas.BlocoAnalise]:
+    return [
+        schemas.BlocoAnalise(
+            id=b.id,
+            nome=b.nome,
+            ativo=b.ativo,
+            andares=[
+                schemas.AndarAnalise(
+                    id=a.id,
+                    nome=a.nome,
+                    ordem=a.ordem,
+                    ativo=a.ativo,
+                    unidades=[
+                        schemas.UnidadeAnalise(
+                            id=u.id, identificacao=u.identificacao, ativo=u.ativo
+                        )
+                        for u in unidades
+                        if u.andar_id == a.id
+                    ],
+                )
+                for a in andares
+                if a.bloco_id == b.id
+            ],
+        )
+        for b in blocos
+    ]
+
+
+def estrutura_do_cadastro(session: Session, contexto: ContextoCondominio) -> schemas.EstruturaSaida:
+    repository.obter_do_cadastro(session, contexto)
+    return schemas.EstruturaSaida(
+        blocos=_arvore_estrutura(*repository.estrutura_da_analise(session, contexto.condominio_id))
+    )
+
+
+def erro_de_correcao(erro: IntegrityError) -> ApiError:
+    constraint = getattr(getattr(erro.orig, "diag", None), "constraint_name", None)
+    if constraint == "uq_condominios_cnpj":
+        return ApiError(
+            409, "conflict", "Já existe um condomínio com este CNPJ.", reason="cnpj_ja_cadastrado"
+        )
+    if constraint in {
+        "uq_blocos_condominio_nome",
+        "uq_andares_bloco_nome",
+        "uq_unidades_andar_identificacao",
+        "uq_unidades_condominio_identificacao_sem_andar",
+    }:
+        return ApiError(
+            409, "conflict", "Já existe um item com este nome.", reason="nome_duplicado"
+        )
+    return ApiError(500, "internal_error", "Não foi possível corrigir o cadastro.")
+
+
+class CorrecaoCadastroService:
+    def __init__(self, session: Session, contexto: ContextoCondominio) -> None:
+        self.session = session
+        self.contexto = contexto
+
+    def _bloquear_rejeitado(self, responsavel_id: uuid.UUID) -> Condominio:
+        if self.contexto.perfil != "administracao":
+            raise ApiError(403, "forbidden", "Você não tem permissão para realizar esta ação.")
+        # Mesma trava da decisão do ADM. Revalidar o estado depois de esperar por ela.
+        condominio = repository.obter_do_cadastro(self.session, self.contexto, bloquear=True)
+        if condominio.status != "rejeitado":
+            raise ApiError(409, "conflict", "Transição inválida.", reason="transicao_invalida")
+        RepositorioResponsaveis(self.session, self.contexto).obter_ativo(responsavel_id)
+        return condominio
+
+    def editar_dados(
+        self, dados: schemas.EdicaoCondominio, *, ip: str | None
+    ) -> schemas.CondominioSaida:
+        try:
+            condominio = self._bloquear_rejeitado(dados.responsavel_id)
+            campos = {"nome": dados.nome, "cnpj": dados.cnpj, **dados.endereco.model_dump()}
+            antes = {
+                campo: getattr(condominio, campo)
+                for campo, valor in campos.items()
+                if getattr(condominio, campo) != valor
+            }
+            for campo, valor in campos.items():
+                setattr(condominio, campo, valor)
+            self.session.flush()
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+                acao="condominio.editar",
+                recurso_tipo="condominio",
+                recurso_id=condominio.id,
+                responsavel=ResponsavelRef("administracao", dados.responsavel_id),
+                antes=antes,
+                depois={campo: campos[campo] for campo in antes},
+            )
+            saida = dados_condominio(self.session, condominio)
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def editar_bloco(
+        self, id_: uuid.UUID, dados: schemas.EdicaoBloco, *, ip: str | None
+    ) -> schemas.BlocoCorrecaoSaida:
+        try:
+            self._bloquear_rejeitado(dados.responsavel_id)
+            bloco = repository.RepositorioBlocos(self.session, self.contexto).obter(id_)
+            antes = {"nome": bloco.nome} if bloco.nome != dados.nome else {}
+            bloco.nome = dados.nome
+            self.session.flush()
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+                acao="estrutura.editar",
+                recurso_tipo="bloco",
+                recurso_id=bloco.id,
+                responsavel=ResponsavelRef("administracao", dados.responsavel_id),
+                antes=antes,
+                depois={"nome": bloco.nome} if antes else {},
+            )
+            saida = schemas.BlocoCorrecaoSaida.model_validate(bloco)
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def editar_andar(
+        self, id_: uuid.UUID, dados: schemas.EdicaoAndar, *, ip: str | None
+    ) -> schemas.AndarCorrecaoSaida:
+        try:
+            self._bloquear_rejeitado(dados.responsavel_id)
+            andar = repository.RepositorioAndares(self.session, self.contexto).obter(id_)
+            campos = {"nome": dados.nome, "ordem": dados.ordem}
+            antes = {
+                campo: getattr(andar, campo)
+                for campo, valor in campos.items()
+                if getattr(andar, campo) != valor
+            }
+            andar.nome, andar.ordem = dados.nome, dados.ordem
+            self.session.flush()
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+                acao="estrutura.editar",
+                recurso_tipo="andar",
+                recurso_id=andar.id,
+                responsavel=ResponsavelRef("administracao", dados.responsavel_id),
+                antes=antes,
+                depois={campo: campos[campo] for campo in antes},
+            )
+            saida = schemas.AndarCorrecaoSaida.model_validate(andar)
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def editar_unidade(
+        self, id_: uuid.UUID, dados: schemas.EdicaoUnidade, *, ip: str | None
+    ) -> schemas.UnidadeAnalise:
+        try:
+            self._bloquear_rejeitado(dados.responsavel_id)
+            unidade = RepositorioUnidades(self.session, self.contexto).bloquear(id_)
+            antes = (
+                {"identificacao": unidade.identificacao}
+                if unidade.identificacao != dados.identificacao
+                else {}
+            )
+            unidade.identificacao = dados.identificacao
+            self.session.flush()
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+                acao="estrutura.editar",
+                recurso_tipo="unidade",
+                recurso_id=unidade.id,
+                responsavel=ResponsavelRef("administracao", dados.responsavel_id),
+                antes=antes,
+                depois={"identificacao": unidade.identificacao} if antes else {},
+            )
+            saida = schemas.UnidadeAnalise(
+                id=unidade.id, identificacao=unidade.identificacao, ativo=unidade.ativo
+            )
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def reenviar(
+        self, dados: schemas.AcaoCorrecao, *, ip: str | None, relogio: Relogio = agora
+    ) -> schemas.ReenvioSaida:
+        try:
+            condominio = self._bloquear_rejeitado(dados.responsavel_id)
+            momento = relogio()
+            condominio.status = "pendente"
+            condominio.enviado_em = momento
+            condominio.motivo_rejeicao = None
+            repository.registrar_decisao(
+                self.session,
+                condominio_id=condominio.id,
+                usuario_id=self.contexto.usuario_id,
+                evento="reenviado",
+                motivo=None,
+                momento=momento,
+            )
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+                acao="condominio.reenviar",
+                recurso_tipo="condominio",
+                recurso_id=condominio.id,
+                responsavel=ResponsavelRef("administracao", dados.responsavel_id),
+                antes={"status": "rejeitado"},
+                depois={"status": "pendente", "enviado_em": momento},
+            )
+            saida = schemas.ReenvioSaida(
+                **dados_condominio(self.session, condominio).model_dump(), enviado_em=momento
+            )
+            self.session.commit()
+            return saida
+        except Exception:
+            self.session.rollback()
+            raise

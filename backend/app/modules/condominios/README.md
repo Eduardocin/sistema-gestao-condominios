@@ -108,3 +108,47 @@ Não implementa reenvio, desativação, reativação nem qualquer vínculo de mo
 Testes: [aprovação](../../../tests/task29/test_aprovacao.py) e
 [concorrência com sessões reais](../../../tests/task29/test_concorrencia.py).
 Tratamento das chaves, proprietários e divergências: [unidades](../unidades/README.md).
+
+
+## Correção e reenvio — TASK-57 / US-204
+
+As novas rotas usam o prefixo `/api/v1`:
+
+| Rota | Comportamento |
+| --- | --- |
+| `GET /condominio` (existente) | Administração lê cadastro, motivo e análises |
+| `GET /condominio/estrutura` | Administração lê a árvore existente, inclusive itens inativos, sem dados pessoais ou chaves |
+| `PUT /condominio` | Corrige nome, CNPJ e endereço |
+| `PUT /estrutura/blocos/{id}` | Corrige nome |
+| `PUT /estrutura/andares/{id}` | Corrige nome e ordem |
+| `PUT /estrutura/unidades/{id}` | Corrige identificação |
+| `POST /condominio/reenvio` | Retorna o cadastro rejeitado à análise |
+
+As cinco escritas exigem estado `rejeitado` e `responsavel_id` ativo do próprio
+condomínio; qualquer outro estado retorna 409 `transicao_invalida`. A leitura
+administrativa continua disponível nos quatro estados. Identidade e vínculo vêm dos
+mecanismos existentes, pelo contexto específico do cadastro; a autorização operacional
+não foi flexibilizada. Sem identidade: 401; sem vínculo/perfil/cid: 403; referências
+inexistentes ou de outro condomínio: 404. Corpo inválido ou campos extras: 422.
+
+Reenvio recebe `{"responsavel_id":"UUID"}` (precisão do antigo exemplo `{}`, para respeitar
+a auditoria central). Na mesma transação: bloqueia a linha do condomínio, revalida o
+estado, muda para `pendente`, atualiza `enviado_em`, limpa o motivo corrente, acrescenta
+`reenviado` em `condominio_analises` e registra `condominio.reenviar`. A resposta inclui
+`enviado_em`. Rejeições anteriores continuam legíveis em `analises`.
+
+Correções usam a mesma trava da decisão do ADM e não recriam registros. IDs, pais,
+proprietários, moradores e demais referências permanecem. Auditoria central:
+`condominio.editar` e `estrutura.editar`, com a conta, responsável, IP e campos alterados.
+CNPJ passa pela máscara central. Constraints existentes protegem a unicidade
+(`cnpj_ja_cadastrado` ou `nome_duplicado`); falhas de auditoria/persistência revertem tudo.
+
+Limites deste recorte: sem inclusão, movimentação, remoção, desativação ou reativação de
+elementos; sem edição em outros estados, rascunhos, uploads, troca de logo, e-mail ou
+alteração de frontend. Logo/documentos existentes são preservados. Essas restrições não
+impedem a correção mínima de dados e identificações da TASK-57. Não há nova migration.
+
+Testes focados: [test_condominios_reenvio.py](../../../tests/test_condominios_reenvio.py).
+Cobrem correções, IDs/vínculos preservados, histórico de rejeições, estados, perfis,
+isolamento, responsáveis, unicidade, rollback após auditoria e disputas de reenvio com
+outro reenvio, edição e aprovação em sessões PostgreSQL independentes.

@@ -388,6 +388,17 @@ Variáveis no `.env.example`: `EMAIL_BACKEND` (`smtp` ou `console`), `SMTP_HOST`
 
 A **leitura** da árvore (`GET /condominio/estrutura`) e o cadastro inicial pelo assistente estão no [núcleo](nucleo.md). Aqui, a edição depois do cadastro:
 
+**Recorte implementado pela TASK-57:** apenas os três `PUT` abaixo, para Administração
+de condomínio **rejeitado**, com responsável ativo obrigatório. Outros estados retornam
+409 `transicao_invalida`. Bloco e unidade são renomeados; andar admite nome e ordem.
+As respostas são `{id,nome,ativo}`, `{id,nome,ordem,ativo}` e
+`{id,identificacao,ativo}`, respectivamente. Campos extras e referências a pais são
+rejeitados; IDs, vínculos e histórico permanecem. Unicidade usa as constraints existentes
+(409 `nome_duplicado`). Cada escrita e um evento central `estrutura.editar` são
+transacionais, sob a mesma trava do reenvio e decisão do ADM. O responsável é validado antes
+da alteração. As demais rotas e a ampliação para outros estados continuam **propostas**,
+fora da TASK-57. Não há API genérica de edição em lote nem nova migration.
+
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `POST /estrutura/blocos` | Administração | `{"nome": "Bloco C", "responsavel_id": "UUID"}` | 201, bloco |

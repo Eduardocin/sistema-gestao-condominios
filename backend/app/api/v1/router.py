@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.modules.auditoria.router import router as auditoria_router
 from app.modules.auth.router import router as auth_router
 from app.modules.avisos.router import router as avisos_router
-from app.modules.condominios.router import cadastro_router, plataforma_router
+from app.modules.condominios.router import cadastro_router, estrutura_router, plataforma_router
 from app.modules.condominios.router import router as condominios_router
 from app.modules.contas.router import router as contas_router
 from app.modules.encomendas.router import portaria_router as portaria_encomendas_router
@@ -26,6 +26,7 @@ router.include_router(avisos_router)
 router.include_router(condominios_router)
 router.include_router(plataforma_router)
 router.include_router(cadastro_router)
+router.include_router(estrutura_router)
 router.include_router(unidades_router)
 router.include_router(vinculos_router)
 router.include_router(contas_router)

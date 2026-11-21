@@ -219,3 +219,56 @@ class DetalhePlataforma(CondominioSaida):
     estrutura: ContagemEstrutura
     possivel_duplicidade: list[DuplicidadeSaida]
     blocos: list[BlocoAnalise]
+
+
+class AcaoCorrecao(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    responsavel_id: uuid.UUID
+
+
+class EdicaoCondominio(AcaoCorrecao):
+    nome: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)]
+    cnpj: str = Field(pattern=r"^[0-9]{14}$")
+    endereco: EnderecoEntrada
+
+    _cnpj = field_validator("cnpj")(validar_documento)
+
+
+class EdicaoBloco(AcaoCorrecao):
+    nome: NomeEstrutura
+
+
+class EdicaoAndar(EdicaoBloco):
+    ordem: Annotated[StrictInt, Field(ge=0, le=200)]
+
+
+class EdicaoUnidade(AcaoCorrecao):
+    identificacao: IdentificacaoUnidade
+
+    @field_validator("identificacao")
+    @classmethod
+    def validar_identificacao(cls, valor: str) -> str:
+        if not all(c.isalpha() or c in "0123456789 -/" for c in valor):
+            raise ValueError("Unidades aceitam somente letras, dígitos, espaço, hífen e barra.")
+        return valor
+
+
+class BlocoCorrecaoSaida(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nome: str
+    ativo: bool
+
+
+class AndarCorrecaoSaida(BlocoCorrecaoSaida):
+    ordem: int
+
+
+class EstruturaSaida(BaseModel):
+    blocos: list[BlocoAnalise]
+
+
+class ReenvioSaida(CondominioSaida):
+    enviado_em: datetime

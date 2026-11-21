@@ -11,7 +11,9 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
+from app.db.repositorio import RepositorioDoCondominio
 from app.modules.condominios.models import (
     Condominio,
     CondominioAnalise,
@@ -274,3 +276,35 @@ def enfileirar_aprovacao(session: Session, condominio: Condominio, momento: date
         )
     )
     session.flush()
+
+
+def obter_do_cadastro(
+    session: Session, contexto: ContextoCondominio, *, bloquear: bool = False
+) -> Condominio:
+    # Cadastro administrativo: o próprio condomínio usa id, não condominio_id.
+    # Reconfere o vínculo e nunca permite uma consulta administrativa global por ID.
+    consulta = (
+        select(Condominio)
+        .join(VinculoCondominio, VinculoCondominio.condominio_id == Condominio.id)
+        .where(
+            Condominio.id == contexto.condominio_id,
+            VinculoCondominio.id == contexto.vinculo_id,
+            VinculoCondominio.usuario_id == contexto.usuario_id,
+            VinculoCondominio.perfil == "administracao",
+            VinculoCondominio.ativo.is_(True),
+        )
+    )
+    if bloquear:
+        consulta = consulta.with_for_update(of=Condominio)
+    item = session.scalar(consulta.execution_options(populate_existing=True))
+    if item is None:
+        raise RecursoNaoEncontrado
+    return item
+
+
+class RepositorioBlocos(RepositorioDoCondominio[Bloco]):
+    modelo = Bloco
+
+
+class RepositorioAndares(RepositorioDoCondominio[Andar]):
+    modelo = Andar

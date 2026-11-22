@@ -1,6 +1,6 @@
 # Portaria — contrato REST (TASK-12)
 
-Status: o fluxo de encomendas foi implementado na TASK-36 e está descrito conforme a API atual. As seções de visitantes permanecem como contrato planejado, ainda não implementado. A prévia `/prototipos/portaria` não chama a API; IDs curtos e fotos em memória usados nela não são payloads de produção.
+Status: encomendas (TASK-36) e entrada e saída de visitantes (TASK-37) têm API e telas autenticadas. A prévia `/prototipos/portaria` continua usando dados locais. Cadastro avulso e consulta de veículos na portaria ficam na TASK-64.
 
 Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pelo servidor. Na interface, datas são apresentadas no fuso do condomínio. Atualizações de status usam ações explícitas, sem `PATCH status` genérico.
 
@@ -27,7 +27,7 @@ Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pel
 
 ## Consultas para formulários
 
-Funcionário: `GET /portaria/unidades?busca=101`, `GET /portaria/unidades/{id}/moradores` e `GET /funcionarios?ativo=true`. Para a lista de quem pode confirmar uma entrega, passar `somente_confirmaveis=true` aos moradores; o backend retorna somente vínculos ativos com a aba Encomendas ativa. A consulta de visitantes segue planejada, ainda não implementada.
+Funcionário: `GET /portaria/unidades?busca=101`, `GET /portaria/unidades/{id}/moradores` e `GET /funcionarios?ativo=true`. Para a lista de quem pode confirmar uma entrega, passar `somente_confirmaveis=true` aos moradores; o backend retorna somente vínculos ativos com a aba Encomendas ativa. Na consulta de visitantes, usar as rotas descritas abaixo.
 
 As opções de unidade retornam `id`, `identificacao`, `bloco` e `andar`. Os nomes do bloco e do andar distinguem unidades com a mesma identificação. Unidades antigas sem andar retornam `null` nesses dois campos.
 
@@ -72,6 +72,10 @@ Para ler a foto, usar `GET /arquivos/{foto_arquivo_id}/download` com Bearer. A r
 
 ## Autorização prévia por período
 
+- `GET /portaria/visitantes?busca=&unidade_id=&page=&page_size=` busca cadastros pelo nome, com unidade opcional.
+- `POST /portaria/visitantes/busca-documento?page=&page_size=` consulta por CPF completo. O corpo contém `unidade_id` e `cpf`; o CPF não vai na URL nem no retorno.
+- Ambas retornam `items`, `total`, `page`, `page_size`. As opções incluem `id`, `nome`, `unidade_id`, `unidade` (id e nome com bloco e andar), `entrada_prevista`, `saida_prevista` e `ambigua`. Se nome, unidade e período forem iguais dentro do resultado, `ambigua=true` mesmo em páginas diferentes. A portaria deve refinar a busca ou solicitar ao morador que revise o cadastro.
+
 | Método e rota | Perfil / escopo | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /portaria/autorizacoes?visitante_id=UUID&unidade_id=UUID` | Funcionário, condomínio | Consulta do cadastro e seu período autorizado | 200, lista de autorizações vigentes projetadas do cadastro |
@@ -110,12 +114,12 @@ Entrada após contato externo:
 
 Exigir **exatamente um** entre `autorizacao_id` e `contato`. Canal: `interfone` ou `telefone`. O morador consultado deve ter vínculo ativo na unidade. Contato com `resposta` diferente de `autorizou` não cria visita (422); registrar separadamente em `/portaria/contatos`, com os mesmos dados e `resposta = negou | sem_resposta`. Retorno do contato contém `id`, referências, resposta, canal, `registrado_em` e funcionário; nunca uma visita liberada.
 
-Visita retorna `id`, `visitante` (id/nome), `unidade` (id/identificação), `status`, `entrada` (em/funcionário), `autorizacao_id` ou `contato`, e `saida` (null até encerramento; depois em/funcionário). A conta autenticada permanece na auditoria interna. Histórico deve conservar a evidência da autorização usada, mesmo após sua validade terminar.
+Visita retorna `id`, `visitante` (id/nome), `unidade` (id/nome), `status`, `entrada` (em/funcionário), `autorizacao_id` e `autorizacao` com a janela registrada ou `contato`, e `saida` (null até encerramento; depois em/funcionário). A conta autenticada permanece na auditoria interna. O histórico conserva a evidência validada na entrada. Registros anteriores à migração podem retornar os campos de evidência como `null`.
 
 Na entrada: validar visitante existente e cadastrado para a unidade selecionada; não admitir visitante avulso nesta etapa; verificar a autorização naquele momento e impedir outra visita em andamento do mesmo cadastro. A autorização não é consumida: após registrar a saída, outra visita pode usar a mesma permissão enquanto o período estiver vigente. A unicidade de visita aberta deve ser garantida também no banco; pedidos concorrentes para o mesmo cadastro só podem gerar uma visita ativa, com 409 para o perdedor. Na saída: aceitar somente `em_andamento`, preservar histórico e impedir repetição (409). Sem saída registrada, a visita permanece ativa, sem confirmação do morador ou encerramento automático. Fora do período, exigir novo contato externo autorizado antes de uma nova entrada.
 
 ## Casos obrigatórios antes de integrar
 
-Testar leitura e escrita cruzadas entre dois condomínios para todos os recursos e referências; cadastro de visitante de outra unidade; escopo de unidade do morador; ação de confirmação por identidade diferente; funcionário inativo; foto sem escopo; entrega/saída duplicada; duas entradas concorrentes para o mesmo cadastro; reentrada válida após saída e dentro do período; ausência, expiração e cancelamento da autorização; negativa e falta de resposta sem visita criada. Os testes da prévia React cobrem somente as regras locais de apresentação e transição. A representação persistente dos contatos sem entrada permanece pendente no DER.
+Testar leitura e escrita cruzadas entre dois condomínios para todos os recursos e referências; cadastro de visitante de outra unidade; escopo de unidade do morador; ação de confirmação por identidade diferente; funcionário inativo; foto sem escopo; entrega/saída duplicada; duas entradas concorrentes para o mesmo cadastro; reentrada válida após saída e dentro do período; ausência, expiração e cancelamento da autorização; negativa e falta de resposta sem visita criada. Os testes da prévia React cobrem as regras locais de apresentação e transição. A migração `20261121_0008` guarda contatos sem entrada em `contatos_portaria` e a evidência de entrada em `registros_visita`.
 
 Pendências e responsáveis: [decisoes-pendentes.md](../portaria/decisoes-pendentes.md).

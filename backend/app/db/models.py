@@ -26,9 +26,10 @@ from app.modules.unidades.models import (
     Unidade,
 )
 from app.modules.usuarios.models import TentativaChaveAcesso, TokenRecuperacaoSenha, Usuario
-from app.modules.visitantes.models import RegistroVisita, Veiculo, Visitante
+from app.modules.visitantes.models import ContatoPortaria, RegistroVisita, Veiculo, Visitante
 
 __all__ = [
+    "ContatoPortaria",
     "Andar",
     "AreaComum",
     "Arquivo",

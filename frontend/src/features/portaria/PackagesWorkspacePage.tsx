@@ -360,6 +360,7 @@ function PackagesWorkspace({ name }: { name: string }) {
   const navigation = [
     { key: 'overview', label: 'Visão geral', to: '/app/portaria', symbol: '⌂' },
     { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },
+    { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
   ]
   const selectedPhotoUrl =
     selected && photoRecord?.fileId === selected.foto_arquivo_id ? photoRecord.url : null

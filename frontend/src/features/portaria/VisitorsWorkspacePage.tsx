@@ -16,6 +16,7 @@ import {
 } from '../../components'
 import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
+import { CadastroAvulso, ConsultaVeiculos } from './PortariaComplementos'
 import type { EmployeeOption, ResidentOption, UnitOption } from './encomendas-api'
 import { createVisitantesClient } from './visitantes-api'
 import type {
@@ -470,6 +471,24 @@ function VisitorsWorkspace({ name }: { name: string }) {
             />
           )}
         </Card>
+        <CadastroAvulso
+          api={api}
+          unidades={unidadeOptions}
+          funcionarios={funcionarioOptions}
+          mensagem={mensagem}
+          onEntrada={() => {
+            setSucesso('Entrada de visitante avulso registrada.')
+            setVisao('em_andamento')
+            setHistoricoPage(1)
+            carregarHistorico()
+          }}
+        />
+        <ConsultaVeiculos
+          api={api}
+          unidades={unidadeOptions}
+          mensagem={mensagem}
+          paginacao={Paginacao}
+        />
         <Card className={styles.content}>
           <Heading level={2}>
             {visao === 'em_andamento'

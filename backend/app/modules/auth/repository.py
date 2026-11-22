@@ -48,13 +48,16 @@ def obter_vinculo_ativo(
 
 
 def obter_unidade(
-    session: Session, unidade_id: uuid.UUID, condominio_id: uuid.UUID
+    session: Session, unidade_id: uuid.UUID, condominio_id: uuid.UUID, *, bloquear: bool = False
 ) -> Unidade | None:
     # O filtro por condomínio é de propósito: mesmo vindo de um vínculo, a unidade
     # só vale se pertencer ao condomínio do token.
-    return session.scalar(
-        select(Unidade).where(Unidade.id == unidade_id, Unidade.condominio_id == condominio_id)
+    consulta = select(Unidade).where(
+        Unidade.id == unidade_id, Unidade.condominio_id == condominio_id
     )
+    if bloquear:
+        consulta = consulta.with_for_update().execution_options(populate_existing=True)
+    return session.scalar(consulta)
 
 
 def listar_unidades_do_morador(

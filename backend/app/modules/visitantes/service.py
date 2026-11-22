@@ -74,8 +74,10 @@ class VisitantesService:
             responsavel=ResponsavelRef("funcionario", funcionario_id) if funcionario_id else None,
         )
 
-    def _unidade_ativa(self, id_: uuid.UUID) -> None:
-        unidade = auth_repository.obter_unidade(self.session, id_, self.ctx.condominio_id)
+    def _unidade_ativa(self, id_: uuid.UUID, *, bloquear: bool = False) -> None:
+        unidade = auth_repository.obter_unidade(
+            self.session, id_, self.ctx.condominio_id, bloquear=bloquear
+        )
         if unidade is None or not unidade.ativo:
             raise RecursoNaoEncontrado
 
@@ -87,6 +89,7 @@ class VisitantesService:
         autor = item.cadastrado_por_usuario_id == self.ctx.usuario_id
         return s.VisitanteMorador(
             **dados_basicos(item),
+            avulso=item.avulso,
             idade=item.idade,
             cpf=item.cpf if autor else None,
             observacoes=item.observacoes if autor else None,
@@ -114,9 +117,9 @@ class VisitantesService:
 
     def _do_morador(self, id_: uuid.UUID, *, alterando: bool = False) -> Visitante:
         item = self.visitantes.bloquear(id_) if alterando else self.visitantes.obter(id_)
-        if item.avulso:
-            raise RecursoNaoEncontrado
         self._aba(item.unidade_id)
+        if alterando and item.avulso:
+            raise ApiError(403, "forbidden", "Cadastros avulsos são registrados pela portaria.")
         if alterando and item.cadastrado_por_usuario_id != self.ctx.usuario_id:
             raise ApiError(403, "forbidden", "Somente o autor pode alterar este cadastro.")
         return item
@@ -224,6 +227,7 @@ class VisitantesService:
     def _destino(
         self, visitante_id: uuid.UUID, unidade_id: uuid.UUID, *, trancar: bool = False
     ) -> Visitante:
+        self._unidade_ativa(unidade_id, bloquear=trancar)
         item = (
             self.visitantes.bloquear(visitante_id)
             if trancar
@@ -231,7 +235,6 @@ class VisitantesService:
         )
         if item.unidade_id != unidade_id or item.avulso:
             raise RecursoNaoEncontrado
-        self._unidade_ativa(unidade_id)
         return item
 
     def _autorizacao(self, item: Visitante, momento: datetime) -> s.Autorizacao | None:
@@ -280,6 +283,13 @@ class VisitantesService:
         if self.visitantes.morador_ativo(unidade, vinculo_id=morador) is None:
             raise RecursoNaoEncontrado
 
+    def moradores_para_contato(self, unidade: uuid.UUID) -> list[s.Referencia]:
+        self._unidade_ativa(unidade)
+        return [
+            s.Referencia(id=morador.id, nome=nome)
+            for morador, nome in self.visitantes.listar_moradores_ativos(unidade)
+        ]
+
     def entrar(self, dados: s.EntradaVisita, ip: str | None) -> s.VisitaSaida:
         item = self._destino(dados.visitante_id, dados.unidade_id, trancar=True)
         self._funcionario(dados.funcionario_id)
@@ -289,6 +299,8 @@ class VisitantesService:
             raise conflito(
                 "visita_em_andamento", "Já existe uma visita em andamento para este cadastro."
             )
+        if item.cpf is not None:
+            self._garantir_documento_sem_visita(item.unidade_id, item.cpf)
         momento = self.relogio()
         autorizacao = self._autorizacao(item, momento)
         evidencia: dict[str, Any]
@@ -303,13 +315,64 @@ class VisitantesService:
                     "autorizacao_invalida", "Autorização prévia indisponível. Consulte o morador."
                 )
             evidencia = {"autorizacao": autorizacao.model_dump(mode="json")}
+        return self._criar_visita(item, dados.funcionario_id, evidencia, momento, ip)
+
+    def registrar_avulso(self, dados: s.CadastroAvulso, ip: str | None) -> s.VisitaSaida:
+        self._unidade_ativa(dados.unidade_id, bloquear=True)
+        self._funcionario(dados.funcionario_id)
+        self._contato(dados.unidade_id, dados.contato.morador_id)
+        self._garantir_documento_sem_visita(dados.unidade_id, dados.cpf)
+        momento = self.relogio()
+        hoje = no_fuso(momento).date()
+        item = self.visitantes.criar(
+            {
+                "unidade_id": dados.unidade_id,
+                "nome": dados.nome,
+                "cpf": dados.cpf,
+                "entrada_prevista": hoje,
+                "saida_prevista": hoje,
+                "avulso": True,
+                "cadastrado_por_usuario_id": self.ctx.usuario_id,
+            }
+        )
+        self._auditar(
+            "visitante.cadastrar_avulso",
+            "visitante",
+            item.id,
+            ip,
+            funcionario_id=dados.funcionario_id,
+            depois={"avulso": True, "unidade_id": item.unidade_id},
+        )
+        return self._criar_visita(
+            item,
+            dados.funcionario_id,
+            {"contato": dados.contato.model_dump(mode="json")},
+            momento,
+            ip,
+        )
+
+    def _garantir_documento_sem_visita(self, unidade_id: uuid.UUID, cpf: str) -> None:
+        if self.visitas.documento_tem_visita_aberta(unidade_id, cpf):
+            raise conflito(
+                "visita_em_andamento",
+                "Já existe uma visita em andamento para este documento na unidade.",
+            )
+
+    def _criar_visita(
+        self,
+        item: Visitante,
+        funcionario_id: uuid.UUID,
+        evidencia: dict[str, Any],
+        momento: datetime,
+        ip: str | None,
+    ) -> s.VisitaSaida:
         try:
             with self.session.begin_nested():
                 visita = self.visitas.criar(
                     {
                         "visitante_id": item.id,
                         "entrada_em": momento,
-                        "entrada_por_funcionario_id": dados.funcionario_id,
+                        "entrada_por_funcionario_id": funcionario_id,
                         "evidencia": evidencia,
                     }
                 )
@@ -327,7 +390,7 @@ class VisitantesService:
             "visita",
             visita.id,
             ip,
-            funcionario_id=dados.funcionario_id,
+            funcionario_id=funcionario_id,
             depois={"visitante_id": item.id, "unidade_id": item.unidade_id, "entrada_em": momento},
         )
         saida = self.detalhe_visita(visita.id)

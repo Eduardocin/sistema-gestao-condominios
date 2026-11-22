@@ -19,6 +19,7 @@ from app.modules.storage.router import router as storage_router
 from app.modules.unidades.router import router as unidades_router
 from app.modules.vinculos.router import router as vinculos_router
 from app.modules.visitantes.router import router as visitantes_router
+from app.modules.visitantes.veiculos_router import router as veiculos_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
@@ -38,6 +39,7 @@ router.include_router(permissoes_aba_router)
 router.include_router(reservas_router)
 router.include_router(storage_router)
 router.include_router(visitantes_router)
+router.include_router(veiculos_router)
 
 
 class HealthResponse(BaseModel):

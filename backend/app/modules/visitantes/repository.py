@@ -41,9 +41,7 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
         page: int,
         size: int,
     ) -> tuple[list[Visitante], int]:
-        consulta = self.consulta().where(
-            Visitante.unidade_id == unidade_id, Visitante.avulso.is_(False)
-        )
+        consulta = self.consulta().where(Visitante.unidade_id == unidade_id)
         if busca:
             consulta = consulta.where(Visitante.nome.icontains(busca, autoescape=True))
         if situacao == "cancelados":
@@ -129,14 +127,8 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
         ).tuples()
         return list(linhas), total
 
-    def morador_ativo(
-        self,
-        unidade_id: uuid.UUID,
-        *,
-        vinculo_id: uuid.UUID | None = None,
-        usuario_id: uuid.UUID | None = None,
-    ) -> tuple[MoradorUnidade, str] | None:
-        consulta = (
+    def _moradores_ativos(self, unidade_id: uuid.UUID) -> Select[tuple[MoradorUnidade, str]]:
+        return (
             select(MoradorUnidade, Usuario.nome)
             .join(Usuario, Usuario.id == MoradorUnidade.usuario_id)
             .join(
@@ -155,6 +147,19 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
                 Usuario.ativo.is_(True),
             )
         )
+
+    def listar_moradores_ativos(self, unidade_id: uuid.UUID) -> list[tuple[MoradorUnidade, str]]:
+        consulta = self._moradores_ativos(unidade_id).order_by(Usuario.nome, MoradorUnidade.id)
+        return list(self.session.execute(consulta).tuples())
+
+    def morador_ativo(
+        self,
+        unidade_id: uuid.UUID,
+        *,
+        vinculo_id: uuid.UUID | None = None,
+        usuario_id: uuid.UUID | None = None,
+    ) -> tuple[MoradorUnidade, str] | None:
+        consulta = self._moradores_ativos(unidade_id)
         if vinculo_id is not None:
             consulta = consulta.where(MoradorUnidade.id == vinculo_id)
         if usuario_id is not None:
@@ -164,6 +169,24 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
 
 class RepositorioVisitas(RepositorioDoCondominio[RegistroVisita]):
     modelo = RegistroVisita
+
+    def documento_tem_visita_aberta(self, unidade_id: uuid.UUID, cpf: str) -> bool:
+        consulta = (
+            self.consulta()
+            .join(
+                Visitante,
+                and_(
+                    Visitante.id == RegistroVisita.visitante_id,
+                    Visitante.condominio_id == RegistroVisita.condominio_id,
+                ),
+            )
+            .where(
+                Visitante.unidade_id == unidade_id,
+                Visitante.cpf == cpf,
+                RegistroVisita.saida_em.is_(None),
+            )
+        )
+        return bool(self.session.scalar(select(consulta.exists())))
 
     def tem_visita(self, visitante_id: uuid.UUID, *, aberta: bool = False) -> bool:
         consulta = self.consulta().where(RegistroVisita.visitante_id == visitante_id)

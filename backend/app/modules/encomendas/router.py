@@ -158,10 +158,13 @@ def listar(
     service: ServiceDep,
     busca: Annotated[str | None, Query(max_length=120)] = None,
     status: StatusEncomenda | None = None,
+    unidade_id: uuid.UUID | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PaginaEncomendas:
-    return service.listar(busca=busca, status=status, page=page, page_size=page_size)
+    return service.listar(
+        busca=busca, status=status, unidade_id=unidade_id, page=page, page_size=page_size
+    )
 
 
 @router.get(

@@ -37,7 +37,7 @@ Retornar apenas `id` e identificação/nome necessários ao formulário, com pag
 
 | Método e rota | Perfil / escopo | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `GET /encomendas` | Funcionário e Administração (condomínio); morador (suas unidades com aba ativa) | Query `busca`, `status`, `page`, `page_size` | 200, lista |
+| `GET /encomendas` | Funcionário e Administração (condomínio); morador (suas unidades com aba ativa) | Query `busca`, `status`, `unidade_id` (opcional), `page`, `page_size` | 200, lista |
 | `GET /encomendas/{id}` | Mesmo escopo de leitura | — | 200, objeto com histórico |
 | `POST /encomendas` | Funcionário ativo | `multipart/form-data`: `unidade_id`, `destinatario_morador_unidade_id`, `descricao`, `recebido_por_funcionario_id`, `foto` | 201, objeto; `Location` do recurso |
 | `POST /encomendas/{id}/entrega` | Funcionário ativo | JSON `recebedor_morador_unidade_id`, `entregue_por_funcionario_id` | 200, objeto atualizado |

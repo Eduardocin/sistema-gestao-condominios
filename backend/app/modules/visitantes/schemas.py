@@ -1,4 +1,4 @@
-"""Entrada e saída dos visitantes cadastrados pelo Morador (api-contracts/convivencia.md, §6.2)."""
+"""Entrada e saída de visitantes (§6.2) e veículos (§6.3), em api-contracts/convivencia.md."""
 
 import re
 import uuid
@@ -92,6 +92,65 @@ class VisitanteSaida(BaseModel):
 
 class PaginaDeVisitantes(BaseModel):
     items: list[VisitanteSaida]
+    page: int
+    page_size: int
+    total: int
+
+
+# --- veículos (US-502) ----------------------------------------------------------------------
+
+PLACA = re.compile(r"[A-Z]{3}[0-9][A-Z0-9][0-9]{2}")
+TextoDoVeiculo = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)
+]
+
+
+def normalizar_placa(valor: str) -> str:
+    """Maiúsculas, sem hífen nem espaço (regra 13 do DER)."""
+    return re.sub(r"[\s-]", "", valor).upper()
+
+
+class _DadosDoVeiculo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    placa: str
+    marca: TextoDoVeiculo
+    modelo: TextoDoVeiculo
+    cor: TextoDoVeiculo
+
+    @field_validator("placa")
+    @classmethod
+    def validar_placa(cls, placa: str) -> str:
+        placa = normalizar_placa(placa)
+        if not PLACA.fullmatch(placa):
+            raise ValueError("Informe uma placa no formato antigo (ABC1234) ou Mercosul (ABC1D23).")
+        return placa
+
+
+class VeiculoEntrada(_DadosDoVeiculo):
+    unidade_id: uuid.UUID
+
+
+class VeiculoAtualizacao(_DadosDoVeiculo):
+    """`PUT`: o mesmo corpo da criação. A unidade não muda; se vier, tem de ser a atual."""
+
+    unidade_id: uuid.UUID | None = None
+
+
+class VeiculoSaida(BaseModel):
+    id: uuid.UUID
+    unidade: UnidadeResumo
+    placa: str
+    marca: str
+    modelo: str
+    cor: str
+    ativo: bool
+    criado_em: datetime
+    removido_em: datetime | None
+
+
+class PaginaDeVeiculos(BaseModel):
+    items: list[VeiculoSaida]
     page: int
     page_size: int
     total: int

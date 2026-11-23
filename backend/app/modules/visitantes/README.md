@@ -19,6 +19,19 @@ Contrato: seção 6.2 de [convivencia.md](../../../../docs/api-contracts/convive
 - **Edição e cancelamento.** `PUT` só sem visita registrada (409 `visitante_ja_utilizado`); cancelamento só sem visita em andamento (409 `visita_em_andamento`). As duas ações travam a linha com `FOR UPDATE`, o que bloqueia a portaria de registrar uma entrada no mesmo instante.
 - **Situação.** Calculada pelo dia no fuso do condomínio; as datas são inclusivas.
 
-Veículos (US-502) ainda não têm rotas.
+## API de veículos (TASK-38, US-502)
+
+Contrato: seção 6.3 de [convivencia.md](../../../../docs/api-contracts/convivencia.md). Rotas em `veiculos_router` ([router.py](router.py)), regras em `VeiculosService` ([service.py](service.py)).
+
+| Método e rota | Permissão |
+| --- | --- |
+| `GET /veiculos`, `GET /veiculos/{id}` | `veiculos:ver` (Morador da unidade; Funcionário e Administração no condomínio) |
+| `POST /veiculos` | `veiculos:criar` (Morador) |
+| `PUT /veiculos/{id}` | `veiculos:editar` (Morador) |
+| `POST /veiculos/{id}/remocao` | `veiculos:desativar` (Morador) |
+
+- **Placa.** O servidor normaliza (maiúsculas, sem hífen nem espaço) e valida o formato antigo ou Mercosul; fora dele, 422. A busca normaliza do mesmo jeito.
+- **Duplicidade.** Na mesma unidade, entre ativos, o índice único parcial `uq_veiculos_unidade_placa_ativo` decide: o service captura a violação num savepoint e responde 409 `placa_ja_cadastrada_na_unidade`, sem consulta prévia (não há corrida). Em outra unidade o cadastro vale, sem revelar nada ao Morador.
+- **Remoção.** Desativa (`ativo = false`, `removido_em`); a lista só traz ativos e a placa pode voltar.
 
 Consulte o [modelo de dados](../../../../docs/modelo-de-dados.md), o [contrato da API](../../../../docs/api-contracts/portaria.md) e as [convenções de arquitetura](../../../../docs/architecture.md). Os testes das restrições do banco ficam em `backend/tests/test_banco_constraints.py`.

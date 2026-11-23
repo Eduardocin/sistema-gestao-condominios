@@ -20,13 +20,17 @@ from app.db.session import get_session
 from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO, require_permission
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.visitantes.schemas import (
+    PaginaDeVeiculos,
     PaginaDeVisitantes,
     Situacao,
+    VeiculoAtualizacao,
+    VeiculoEntrada,
+    VeiculoSaida,
     VisitanteAtualizacao,
     VisitanteEntrada,
     VisitanteSaida,
 )
-from app.modules.visitantes.service import VisitantesService
+from app.modules.visitantes.service import VeiculosService, VisitantesService
 
 router = APIRouter(prefix="/visitantes", tags=["visitantes"])
 
@@ -155,3 +159,110 @@ def atualizar_visitante(
 )
 def cancelar_visitante(visitante_id: uuid.UUID, service: ServiceDep) -> VisitanteSaida:
     return service.cancelar(visitante_id)
+
+
+# --- veículos (US-502, convivencia.md §6.3) ---------------------------------------------------
+# A matriz já separa os perfis: Morador faz tudo na própria unidade (aba Veículos), Funcionário e
+# Administração só consultam o condomínio.
+
+veiculos_router = APIRouter(prefix="/veiculos", tags=["veiculos"])
+
+
+def get_veiculos_service(
+    session: Annotated[Session, Depends(get_session)], contexto: ContextoDep
+) -> VeiculosService:
+    return VeiculosService(session, contexto)
+
+
+VeiculosServiceDep = Annotated[VeiculosService, Depends(get_veiculos_service)]
+
+_ERROS_VEICULOS: dict[int | str, dict[str, Any]] = {
+    401: {"description": "Token ausente ou inválido (`not_authenticated`)."},
+    403: {"description": "Perfil sem permissão ou aba Veículos Sem Acesso (`forbidden`)."},
+    404: {"description": "Veículo ou unidade inexistente, de outra unidade ou condomínio."},
+}
+
+
+@veiculos_router.get(
+    "",
+    response_model=PaginaDeVeiculos,
+    summary="Lista veículos ativos da unidade (Morador) ou do condomínio (portaria, Administração)",
+    dependencies=[Depends(require_permission("veiculos:ver"))],
+    responses=_ERROS_VEICULOS,
+)
+def listar_veiculos(
+    service: VeiculosServiceDep,
+    # Morador: obrigatório. Funcionário e Administração: filtro opcional.
+    unidade_id: uuid.UUID | None = None,
+    busca: Annotated[str | None, Query(max_length=40)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PaginaDeVeiculos:
+    return service.listar(unidade_id=unidade_id, busca=busca, page=page, page_size=page_size)
+
+
+@veiculos_router.get(
+    "/{veiculo_id}",
+    response_model=VeiculoSaida,
+    summary="Detalha um veículo",
+    dependencies=[Depends(require_permission("veiculos:ver"))],
+    responses=_ERROS_VEICULOS,
+)
+def obter_veiculo(veiculo_id: uuid.UUID, service: VeiculosServiceDep) -> VeiculoSaida:
+    return service.obter(veiculo_id)
+
+
+@veiculos_router.post(
+    "",
+    response_model=VeiculoSaida,
+    status_code=201,
+    summary="Cadastra um veículo (Morador)",
+    dependencies=[Depends(require_permission("veiculos:criar"))],
+    responses={
+        **_ERROS_VEICULOS,
+        409: {"description": "Placa ativa repetida na unidade (`placa_ja_cadastrada_na_unidade`)."},
+        422: {"description": "Entrada inválida (placa fora do formato, tamanhos)."},
+    },
+)
+def criar_veiculo(
+    dados: VeiculoEntrada, service: VeiculosServiceDep, request: Request, response: Response
+) -> VeiculoSaida:
+    veiculo = service.criar(dados)
+    response.headers["Location"] = request.url_for("obter_veiculo", veiculo_id=veiculo.id).path
+    return veiculo
+
+
+@veiculos_router.put(
+    "/{veiculo_id}",
+    response_model=VeiculoSaida,
+    summary="Edita um veículo ativo (Morador)",
+    dependencies=[Depends(require_permission("veiculos:editar"))],
+    responses={
+        **_ERROS_VEICULOS,
+        409: {
+            "description": (
+                "Veículo removido (`veiculo_removido`) ou placa repetida na unidade "
+                "(`placa_ja_cadastrada_na_unidade`)."
+            )
+        },
+        422: {"description": "Entrada inválida ou tentativa de trocar a unidade."},
+    },
+)
+def atualizar_veiculo(
+    veiculo_id: uuid.UUID, dados: VeiculoAtualizacao, service: VeiculosServiceDep
+) -> VeiculoSaida:
+    return service.atualizar(veiculo_id, dados)
+
+
+@veiculos_router.post(
+    "/{veiculo_id}/remocao",
+    response_model=VeiculoSaida,
+    summary="Remove (desativa) um veículo (Morador)",
+    dependencies=[Depends(require_permission("veiculos:desativar"))],
+    responses={
+        **_ERROS_VEICULOS,
+        409: {"description": "Veículo já removido (`veiculo_ja_removido`)."},
+    },
+)
+def remover_veiculo(veiculo_id: uuid.UUID, service: VeiculosServiceDep) -> VeiculoSaida:
+    return service.remover(veiculo_id)

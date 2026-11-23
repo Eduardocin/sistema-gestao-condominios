@@ -1,6 +1,6 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes do Morador (seção 6.2). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (seção 3; as reservas já respeitam os bloqueios existentes), o e-mail `reserva_cancelada` no cancelamento pela Administração (serviço de e-mail assíncrono; fora da TASK-48), comentários e reabertura de ocorrências (US-704, TASK-63) e os veículos e a leitura de encomendas do Morador (seções 6.1 e 6.3). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
+Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes (seção 6.2) e veículos (seção 6.3) do Morador. `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (seção 3; as reservas já respeitam os bloqueios existentes), o e-mail `reserva_cancelada` no cancelamento pela Administração (serviço de e-mail assíncrono; fora da TASK-48), comentários e reabertura de ocorrências (US-704, TASK-63) e a leitura de encomendas do Morador (seção 6.1). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
@@ -344,6 +344,16 @@ Todos obrigatórios. A **placa** é normalizada pelo servidor (maiúsculas, sem 
 - Placa já cadastrada em **outra** unidade: **o cadastro é aceito** (regra 14: a story só pede aviso) e o Morador **não é informado** de que existe em outra unidade, para não vazar dados de terceiros. A Administração é avisada; a forma do aviso está nas pendências.
 - `remocao` desativa (`ativo = false`, `removido_em` preenchido). A placa pode ser cadastrada de novo depois.
 - Funcionário (portaria): consulta `GET /veiculos` do condomínio inteiro para conferência no portão, só leitura (matriz: Veículos Funcionário "V (C)"). Alinhar com a US-505 (Eduardo, Sprint 3).
+
+Implementação (TASK-38):
+
+- **Perfis.** A matriz já separa: só o Morador cria, edita e remove; Funcionário e Administração só consultam (`veiculos:ver`). ADM recebe 403.
+- **Unidade e aba.** Para o Morador, unidade que não é dele: 404; aba Veículos Sem Acesso: 403; `GET /veiculos` sem `unidade_id`: 422. Funcionário e Administração não têm aba; um `unidade_id` de outro condomínio dá 404.
+- **Lista.** Traz só veículos ativos, ordenados por placa. `busca` procura em placa (normalizada como no cadastro), marca e modelo. `GET /veiculos/{id}` também devolve o veículo removido (`ativo = false`).
+- **Objeto devolvido:** `id`, `unidade {id, identificacao}`, `placa`, `marca`, `modelo`, `cor`, `ativo`, `criado_em` e `removido_em`.
+- **Placa repetida.** Na mesma unidade, entre ativos: 409 `placa_ja_cadastrada_na_unidade`, decidido pelo índice único parcial (vale também para duas requisições simultâneas e para o `PUT`). Em outra unidade o cadastro é aceito e a resposta é idêntica à de qualquer outro, sem pista de que a placa existe lá. O aviso à Administração continua nas pendências.
+- **`PUT`:** `unidade_id` é opcional; se vier e for outra, 422. Veículo removido: 409 `veiculo_removido`.
+- **`remocao`:** repetida, 409 `veiculo_ja_removido`. A linha nunca é apagada, e a placa pode ser cadastrada de novo.
 
 ## 7. Casos obrigatórios de teste
 

@@ -13,7 +13,8 @@ from sqlalchemy import ColumnElement, Select, and_, exists, func, or_, select
 
 from app.db.repositorio import RepositorioDoCondominio
 from app.modules.unidades.models import Unidade
-from app.modules.visitantes.models import RegistroVisita, Visitante
+from app.modules.visitantes.models import RegistroVisita, Veiculo, Visitante
+from app.modules.visitantes.schemas import normalizar_placa
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,89 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
         consulta = (
             self._filtrados(filtros)
             .order_by(Visitante.entrada_prevista.desc(), Visitante.criado_em.desc(), Visitante.id)
+            .limit(limite)
+            .offset(deslocamento)
+        )
+        itens = [self._montar(linha) for linha in self.session.execute(consulta)]
+        total = (
+            self.session.scalar(
+                select(func.count()).select_from(self._filtrados(filtros).subquery())
+            )
+            or 0
+        )
+        return itens, total
+
+
+# --- veículos (US-502) ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FiltrosVeiculos:
+    unidade_id: uuid.UUID | None = None
+    busca: str | None = None
+
+
+@dataclass(frozen=True)
+class VeiculoDetalhado:
+    veiculo: Veiculo
+    unidade_identificacao: str
+
+
+class RepositorioVeiculos(RepositorioDoCondominio[Veiculo]):
+    modelo = Veiculo
+
+    def _detalhado(self) -> Select[Any]:
+        """Veículo + unidade. O join amarra o condomínio."""
+        return (
+            self.consulta()
+            .add_columns(Unidade.identificacao)
+            .join(
+                Unidade,
+                and_(
+                    Unidade.id == Veiculo.unidade_id,
+                    Unidade.condominio_id == Veiculo.condominio_id,
+                ),
+            )
+        )
+
+    def _filtrados(self, filtros: FiltrosVeiculos) -> Select[Any]:
+        # A lista só traz veículos ativos; o removido continua acessível por id.
+        consulta = self._detalhado().where(Veiculo.ativo.is_(True))
+        if filtros.unidade_id is not None:
+            consulta = consulta.where(Veiculo.unidade_id == filtros.unidade_id)
+        if filtros.busca:
+            padrao = f"%{_escapar_like(filtros.busca)}%"
+            placa = f"%{_escapar_like(normalizar_placa(filtros.busca))}%"
+            consulta = consulta.where(
+                or_(
+                    Veiculo.placa.like(placa, escape="\\"),
+                    Veiculo.marca.ilike(padrao, escape="\\"),
+                    Veiculo.modelo.ilike(padrao, escape="\\"),
+                )
+            )
+        return consulta
+
+    @staticmethod
+    def _montar(linha: Any) -> VeiculoDetalhado:
+        veiculo, identificacao = linha
+        return VeiculoDetalhado(veiculo, identificacao)
+
+    def obter_detalhado(self, veiculo_id: uuid.UUID) -> VeiculoDetalhado | None:
+        linha = self.session.execute(self._detalhado().where(Veiculo.id == veiculo_id)).first()
+        return None if linha is None else self._montar(linha)
+
+    def bloquear(self, veiculo_id: uuid.UUID) -> Veiculo | None:
+        """Trava a linha até o commit: duas remoções ou edições simultâneas não passam juntas."""
+        return self.session.scalar(
+            self.consulta().where(Veiculo.id == veiculo_id).with_for_update()
+        )
+
+    def pagina(
+        self, filtros: FiltrosVeiculos, *, limite: int, deslocamento: int
+    ) -> tuple[list[VeiculoDetalhado], int]:
+        consulta = (
+            self._filtrados(filtros)
+            .order_by(Veiculo.placa, Veiculo.id)
             .limit(limite)
             .offset(deslocamento)
         )

@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core.contexto import ContextoCondominio
+from app.core.tempo import FUSO_CONDOMINIO
 from app.modules.encomendas.models import Encomenda
 from app.modules.funcionarios.models import Funcionario
 from app.modules.unidades.models import Andar, Bloco, MoradorUnidade, PermissaoAba, Unidade
@@ -56,10 +58,22 @@ def _filtros(
     busca: str | None = None,
     status: str | None = None,
     unidade_id: UUID | None = None,
+    data_de: date | None = None,
+    data_ate: date | None = None,
 ):
     filtros = [Encomenda.condominio_id == contexto.condominio_id]
     if unidade_id is not None:
         filtros.append(Encomenda.unidade_id == unidade_id)
+    # O período é de datas de negócio (inclusivas) no fuso do condomínio, não em UTC.
+    if data_de is not None:
+        filtros.append(
+            Encomenda.registrada_em >= datetime.combine(data_de, time.min, FUSO_CONDOMINIO)
+        )
+    if data_ate is not None:
+        filtros.append(
+            Encomenda.registrada_em
+            < datetime.combine(data_ate + timedelta(days=1), time.min, FUSO_CONDOMINIO)
+        )
     if contexto.perfil == "morador":
         link = aliased(MoradorUnidade)
         permissao = aliased(PermissaoAba)
@@ -174,10 +188,19 @@ def listar(
     busca: str | None,
     status: str | None,
     unidade_id: UUID | None = None,
+    data_de: date | None = None,
+    data_ate: date | None = None,
     page: int,
     page_size: int,
 ) -> tuple[list[LinhaEncomenda], int]:
-    filtros = _filtros(contexto, busca=busca, status=status, unidade_id=unidade_id)
+    filtros = _filtros(
+        contexto,
+        busca=busca,
+        status=status,
+        unidade_id=unidade_id,
+        data_de=data_de,
+        data_ate=data_ate,
+    )
     consulta = (
         _consulta_linhas(contexto)
         .where(*filtros)
@@ -206,6 +229,35 @@ def listar(
     )
     total = session.scalar(consulta_total) or 0
     return [LinhaEncomenda(*linha) for linha in linhas], total
+
+
+def contagem_por_unidade_e_status(
+    session: Session,
+    contexto: ContextoCondominio,
+    *,
+    unidade_id: UUID | None,
+    data_de: date | None,
+    data_ate: date | None,
+) -> list[tuple[UUID, str, str, int]]:
+    """(unidade, identificação, status, quantidade) das encomendas do período (US-404)."""
+    filtros = _filtros(contexto, unidade_id=unidade_id, data_de=data_de, data_ate=data_ate)
+    consulta = (
+        select(Unidade.id, Unidade.identificacao, Encomenda.status, func.count(Encomenda.id))
+        .select_from(Encomenda)
+        .join(
+            Unidade,
+            and_(
+                Unidade.id == Encomenda.unidade_id,
+                Unidade.condominio_id == Encomenda.condominio_id,
+            ),
+        )
+        .where(*filtros)
+        .group_by(Unidade.id, Unidade.identificacao, Encomenda.status)
+    )
+    return [
+        (unidade, ident, status, total)
+        for unidade, ident, status, total in session.execute(consulta)
+    ]
 
 
 def obter(session: Session, condominio_id: UUID, encomenda_id: UUID) -> Encomenda | None:

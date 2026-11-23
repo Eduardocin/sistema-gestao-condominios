@@ -62,6 +62,30 @@ class ResolucaoEntrada(BaseModel):
         return texto
 
 
+class ComentarioEntrada(BaseModel):
+    """Comentário do Morador (US-704), em qualquer estado da ocorrência."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    texto: TextoDeInteracao
+    anexos: list[uuid.UUID] = Field(default_factory=list, max_length=5)
+
+    @field_validator("anexos")
+    @classmethod
+    def sem_arquivo_repetido(cls, anexos: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(set(anexos)) != len(anexos):
+            raise ValueError("Cada anexo pode ser informado uma única vez.")
+        return anexos
+
+
+class ReaberturaEntrada(BaseModel):
+    """Reabertura pelo Morador (US-704): o que voltou a acontecer."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    texto: TextoDeInteracao
+
+
 class UnidadeResumo(BaseModel):
     id: uuid.UUID
     identificacao: str

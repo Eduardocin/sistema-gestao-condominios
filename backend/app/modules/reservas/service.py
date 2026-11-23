@@ -25,7 +25,7 @@ from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.auth.autorizacao import garantir_aba_da_unidade, garantir_aba_no_condominio
 from app.modules.avisos import service as avisos
 from app.modules.funcionarios.repository import RepositorioResponsaveis
-from app.modules.reservas.models import AreaComum, Reserva
+from app.modules.reservas.models import AreaComum, BloqueioArea, Reserva
 from app.modules.reservas.repository import (
     FiltrosAdministracao,
     RepositorioAreasComuns,
@@ -37,12 +37,18 @@ from app.modules.reservas.repository import (
 from app.modules.reservas.schemas import (
     AgendaSaida,
     AreaComumEntrada,
+    BloqueioCriadoSaida,
+    BloqueioEntrada,
+    BloqueioSaida,
     CalendarioSaida,
     CancelamentoEntrada,
     CancelamentoSaida,
     DiaDoCalendario,
+    PaginaDeBloqueios,
     PaginaDeReservas,
+    PreviaDoBloqueio,
     Referencia,
+    ReservaAfetada,
     ReservaEntrada,
     ReservaSaida,
     SlotSaida,
@@ -75,6 +81,11 @@ MENSAGEM_AREA_BLOQUEADA = "A área está bloqueada nessa data."
 MENSAGEM_JA_CANCELADA = "A reserva já está cancelada."
 MENSAGEM_ENCERRADA = "O horário da reserva já começou; ela não pode mais ser cancelada."
 MENSAGEM_UNIDADE_OBRIGATORIA = "Informe a unidade."
+MENSAGEM_PERIODO_PASSADO = "O bloqueio precisa terminar hoje ou depois."
+MENSAGEM_RESERVAS_AFETADAS = (
+    "Há reservas ativas nesse período. Confirme o cancelamento delas para bloquear as datas."
+)
+LIMITE_DE_DATAS_NO_AVISO = 20
 MENSAGEM_CANCELAMENTO_ADM = "Informe o motivo e o responsável pelo cancelamento."
 MENSAGEM_CANCELAMENTO_MORADOR = "O cancelamento pelo morador não aceita motivo nem responsável."
 
@@ -330,7 +341,11 @@ class ReservasService:
     def criar(self, dados: ReservaEntrada, *, ip: str | None) -> ReservaSaida:
         """Ordem do contrato (seção 4.2); a primeira falha encerra."""
         self._unidade(dados.unidade_id)  # 4
-        area = self._area_ativa(dados.area_id)  # 5
+        # 5. Trava compartilhada: um bloqueio de datas simultâneo espera esta reserva terminar (e a
+        # enxerga na prévia), ou então já está gravado quando verificamos o bloqueio (9).
+        area = self.areas.obter_travada(dados.area_id, compartilhada=True)
+        if not area.ativa:
+            raise RecursoNaoEncontrado
         hora = dados.hora_inicio
         if hora.minute or hora.second or hora.microsecond:  # 6
             raise ApiError(422, "validation_error", MENSAGEM_HORA_INVALIDA, reason="hora_invalida")
@@ -493,7 +508,8 @@ class ReservasService:
                 ip=ip,
                 relogio=self.relogio,
             )
-            # O enfileiramento de e-mail depende do serviço de e-mail (fora da TASK-48).
+            # E-mail `reserva_cancelada` para quem reservou, na mesma transação (outbox).
+            self.reservas.enfileirar_cancelamento(reserva)
 
         depois: dict[str, Any] = {
             "status": "cancelada",
@@ -566,3 +582,224 @@ class ReservasService:
             criada_em=reserva.criado_em,
             cancelamento=cancelamento,
         )
+
+
+class BloqueiosService:
+    """Bloqueio de datas de uma área comum (US-602), sempre pela Administração."""
+
+    def __init__(
+        self, session: Session, contexto: ContextoCondominio, relogio: Relogio = agora
+    ) -> None:
+        self.session = session
+        self.contexto = contexto
+        self.relogio = relogio
+        self.areas = RepositorioAreasComuns(session, contexto)
+        self.reservas = RepositorioReservas(session, contexto)
+        self.bloqueios = RepositorioBloqueios(session, contexto)
+        self.responsaveis = RepositorioResponsaveis(session, contexto)
+
+    def _agora(self) -> datetime:
+        return no_fuso(self.relogio())
+
+    # --- consulta -------------------------------------------------------------------------
+
+    def listar(
+        self,
+        area_id: uuid.UUID,
+        *,
+        data_de: date | None,
+        data_ate: date | None,
+        page: int,
+        page_size: int,
+    ) -> PaginaDeBloqueios:
+        self.areas.obter(area_id)  # 404 se não existir ou for de outro condomínio
+        itens, total = self.bloqueios.pagina(
+            area_id,
+            data_de=data_de,
+            data_ate=data_ate,
+            limite=page_size,
+            deslocamento=(page - 1) * page_size,
+        )
+        return PaginaDeBloqueios(
+            items=[self._saida(bloqueio, nome) for bloqueio, nome in itens],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def previa(self, area_id: uuid.UUID, inicio: date, fim: date) -> PreviaDoBloqueio:
+        """As reservas que o bloqueio cancelaria. Não grava nada."""
+        self.areas.obter(area_id)
+        afetadas = self._afetadas(area_id, inicio, fim)
+        return PreviaDoBloqueio(
+            reservas_afetadas=[
+                ReservaAfetada(
+                    id=item.reserva.id,
+                    unidade=UnidadeRef(
+                        id=item.reserva.unidade_id, identificacao=item.unidade_identificacao
+                    ),
+                    data=item.reserva.data,
+                    hora_inicio=item.reserva.hora_inicio,
+                )
+                for item in afetadas
+            ],
+            total=len(afetadas),
+        )
+
+    def _afetadas(self, area_id: uuid.UUID, inicio: date, fim: date) -> list[ReservaDetalhada]:
+        momento = self._agora()
+        return self.reservas.afetadas_por_bloqueio(
+            area_id,
+            inicio,
+            fim,
+            hoje=momento.date(),
+            hora_agora=momento.time().replace(tzinfo=None),
+        )
+
+    # --- criar ----------------------------------------------------------------------------
+
+    def criar(
+        self, area_id: uuid.UUID, dados: BloqueioEntrada, *, ip: str | None
+    ) -> BloqueioCriadoSaida:
+        """Uma única transação: bloqueio, cancelamentos, avisos, e-mails e auditoria."""
+        # Trava exclusiva: espera as reservas em andamento terminarem e impede novas até o commit.
+        area = self.areas.obter_travada(area_id, compartilhada=False)
+        if dados.data_fim < self._agora().date():
+            raise ApiError(
+                422, "validation_error", MENSAGEM_PERIODO_PASSADO, reason="periodo_passado"
+            )
+        responsavel = self.responsaveis.obter_ativo(dados.responsavel_id)  # 404 genérico
+
+        afetadas = self._afetadas(area.id, dados.data_inicio, dados.data_fim)
+        if afetadas and not dados.confirmar_cancelamentos:
+            raise ApiError(
+                409, "conflict", MENSAGEM_RESERVAS_AFETADAS, reason="reservas_afetadas"
+            )  # nada foi gravado
+
+        bloqueio = self.bloqueios.criar(
+            {
+                "area_id": area.id,
+                "data_inicio": dados.data_inicio,
+                "data_fim": dados.data_fim,
+                "motivo": dados.motivo,
+                "responsavel_id": responsavel.id,
+            }
+        )
+        ctx = ContextoAuditoria.do_condominio(self.contexto, ip=ip)
+        ref = ResponsavelRef("administracao", responsavel.id)
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ctx,
+            acao="area.bloquear",
+            recurso_tipo="area_comum",
+            recurso_id=area.id,
+            responsavel=ref,
+            antes={},
+            depois={
+                "bloqueio_id": str(bloqueio.id),
+                "data_inicio": dados.data_inicio.isoformat(),
+                "data_fim": dados.data_fim.isoformat(),
+                "motivo": dados.motivo,
+                "reservas_canceladas": len(afetadas),
+            },
+        )
+
+        canceladas = self._cancelar(afetadas, dados.motivo, responsavel.id, ctx, ref)
+        self._avisar_unidades(area, canceladas, dados, responsavel.id, ip)
+        self.session.commit()
+        return self._criado(bloqueio, responsavel.nome, len(canceladas))
+
+    def _cancelar(
+        self,
+        afetadas: list[ReservaDetalhada],
+        motivo: str,
+        responsavel_id: uuid.UUID,
+        ctx: ContextoAuditoria,
+        ref: ResponsavelRef,
+    ) -> list[ReservaDetalhada]:
+        canceladas: list[ReservaDetalhada] = []
+        for item in afetadas:
+            # Trava a linha e confere de novo: um Morador pode ter cancelado no meio do caminho.
+            reserva = self.reservas.bloquear(item.reserva.id)
+            if reserva is None or reserva.status != "ativa":
+                continue
+            self.reservas.atualizar(
+                reserva.id,
+                {
+                    "status": "cancelada",
+                    "cancelada_em": func.now(),
+                    "cancelada_por_usuario_id": self.contexto.usuario_id,
+                    "cancelada_responsavel_id": responsavel_id,
+                    "motivo_cancelamento": f"Bloqueio da área: {motivo}",
+                },
+            )
+            self.reservas.enfileirar_cancelamento(reserva)
+            auditoria.registrar_acao(
+                self.session,
+                ctx=ctx,
+                acao="reserva.cancelar",
+                recurso_tipo="reserva",
+                recurso_id=reserva.id,
+                responsavel=ref,
+                antes={"status": "ativa"},
+                depois={
+                    "status": "cancelada",
+                    "por": "administracao",
+                    "responsavel_id": str(responsavel_id),
+                    "motivo": f"Bloqueio da área: {motivo}",
+                },
+            )
+            canceladas.append(item)
+        return canceladas
+
+    def _avisar_unidades(
+        self,
+        area: AreaComum,
+        canceladas: list[ReservaDetalhada],
+        dados: BloqueioEntrada,
+        responsavel_id: uuid.UUID,
+        ip: str | None,
+    ) -> None:
+        """Um aviso por unidade afetada, com todas as reservas dela."""
+        por_unidade: dict[uuid.UUID, list[Reserva]] = {}
+        for item in canceladas:
+            por_unidade.setdefault(item.reserva.unidade_id, []).append(item.reserva)
+        for unidade_id, reservas in por_unidade.items():
+            marcadas = [f"{r.data:%d/%m/%Y} às {r.hora_inicio:%H:%M}" for r in reservas]
+            mostradas = ", ".join(marcadas[:LIMITE_DE_DATAS_NO_AVISO])
+            if len(marcadas) > LIMITE_DE_DATAS_NO_AVISO:
+                mostradas += f" e mais {len(marcadas) - LIMITE_DE_DATAS_NO_AVISO}"
+            avisos.publicar_para_unidade(
+                self.session,
+                ctx=self.contexto,
+                unidade_id=unidade_id,
+                titulo="Reservas canceladas por bloqueio da área",
+                texto=(
+                    f"A área {area.nome} foi bloqueada de {dados.data_inicio:%d/%m/%Y} "
+                    f"a {dados.data_fim:%d/%m/%Y} e as reservas da unidade foram canceladas "
+                    f"({mostradas}). Motivo: {dados.motivo}"
+                ),
+                responsavel_id=responsavel_id,
+                ip=ip,
+                relogio=self.relogio,
+            )
+
+    # --- apresentação ---------------------------------------------------------------------
+
+    @staticmethod
+    def _saida(bloqueio: BloqueioArea, responsavel_nome: str) -> BloqueioSaida:
+        return BloqueioSaida(
+            id=bloqueio.id,
+            area_id=bloqueio.area_id,
+            data_inicio=bloqueio.data_inicio,
+            data_fim=bloqueio.data_fim,
+            motivo=bloqueio.motivo,
+            responsavel=Referencia(id=bloqueio.responsavel_id, nome=responsavel_nome),
+            criado_em=bloqueio.criado_em,
+        )
+
+    def _criado(
+        self, bloqueio: BloqueioArea, responsavel_nome: str, canceladas: int
+    ) -> BloqueioCriadoSaida:
+        base = self._saida(bloqueio, responsavel_nome)
+        return BloqueioCriadoSaida(**base.model_dump(), reservas_canceladas=canceladas)

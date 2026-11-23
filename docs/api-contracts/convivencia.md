@@ -1,6 +1,6 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (seção 3; as reservas já respeitam os bloqueios existentes), o e-mail `reserva_cancelada` no cancelamento pela Administração (serviço de e-mail assíncrono; fora da TASK-48), comentários e reabertura de ocorrências (US-704, TASK-63) e as consultas e cadastros do Morador. Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
+Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes do Morador (seção 6.2). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (seção 3; as reservas já respeitam os bloqueios existentes), o e-mail `reserva_cancelada` no cancelamento pela Administração (serviço de e-mail assíncrono; fora da TASK-48), comentários e reabertura de ocorrências (US-704, TASK-63) e os veículos e a leitura de encomendas do Morador (seções 6.1 e 6.3). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
@@ -314,6 +314,15 @@ Regras de edição e cancelamento (US-501: "editado ou cancelado antes da entrad
 - `PUT`: só enquanto **nenhuma visita foi registrada** para esse cadastro (senão 409, `reason: "visitante_ja_utilizado"`). Não troca de unidade.
 - `POST .../cancelamento`: aceito enquanto não houver visita em andamento. Repetir retorna 409. A proposta de permitir cancelar **depois** da primeira entrada vai além do texto da US-501 e está nas pendências.
 - O Morador só enxerga cadastros de unidades vinculadas a ele.
+
+Implementação (TASK-38):
+
+- **Só o Morador.** Funcionário, Administração e ADM recebem 403 nestas cinco rotas, embora a matriz dê `visitantes` ao Funcionário (consulta, avulso, entrada e saída) e à Administração (ver): essas consultas pertencem ao contrato da portaria.
+- **Unidade e aba.** Unidade que não é do Morador: 404. Aba Visitantes Sem Acesso: 403. `GET /visitantes` exige `unidade_id`. A busca (`busca`) procura no nome e no CPF.
+- **Objeto devolvido:** `id`, `unidade {id, identificacao}`, `nome`, `cpf`, `idade`, `observacoes`, `entrada_prevista`, `saida_prevista`, `avulso`, `situacao` (`vigente`, `futuro`, `encerrado` ou `cancelado`, pelo dia no fuso do condomínio), `ja_utilizado` (há visita registrada: o `PUT` passa a dar 409), `criado_em` e `cancelado_em`.
+- **`PUT`:** `unidade_id` é opcional no corpo; se vier e for outra, 422. Cadastro cancelado: 409 `visitante_cancelado`. Com visita registrada: 409 `visitante_ja_utilizado`.
+- **Cancelamento:** repetido, 409 `visitante_ja_cancelado`; com a visita em andamento (sem saída), 409 `visita_em_andamento`. Depois da saída o cancelamento vale (proposta da US-501 ainda em aberto nas pendências). O cadastro nunca é apagado.
+- **Concorrência.** `PUT` e cancelamento travam a linha do visitante (`FOR UPDATE`). A FK de `registros_visita` toma `FOR KEY SHARE` no pai ao inserir, então a portaria só registra a entrada depois do commit, e a edição só passa se ainda não houver visita.
 
 ### 6.3 Veículos (US-502)
 

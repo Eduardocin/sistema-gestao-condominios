@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.session import get_session
 from app.main import create_app
 from app.modules.auth.security import hash_do_token, hash_senha, verificar_senha
+from app.modules.contas import repository
 from app.modules.usuarios.models import TokenRecuperacaoSenha, Usuario
 
 pytestmark = pytest.mark.postgres
@@ -151,3 +152,45 @@ def test_mesmo_token_em_paralelo_troca_a_senha_uma_vez(app, engine, usuario_id):
                 {"u": usuario_id},
             )
             assert eventos == rodada + 1  # um evento por troca, nenhum da requisição perdedora
+
+
+def test_tokens_diferentes_da_mesma_conta_sao_serializados(app, engine, usuario_id, monkeypatch):
+    tokens = [emitir_token(engine, usuario_id), emitir_token(engine, usuario_id)]
+    senhas = ["NovaSenhaUm1", "NovaSenhaDois2"]
+    with Session(engine) as session:
+        versao_antes = session.get(Usuario, usuario_id).sessao_versao
+    antes_do_lock = threading.Barrier(2)
+    obter_conta_travada = repository.obter_conta_travada
+
+    def sincronizar_antes_do_lock(session: Session, usuario_id_: uuid.UUID) -> Usuario | None:
+        antes_do_lock.wait(timeout=10)
+        return obter_conta_travada(session, usuario_id_)
+
+    # Força ambas as requisições a chegarem juntas ao lock da mesma conta. No fluxo antigo, cada
+    # transação já consumia seu token antes de esperar, abrindo a corrida/deadlock.
+    monkeypatch.setattr(repository, "obter_conta_travada", sincronizar_antes_do_lock)
+    respostas = disparar_juntos(
+        app,
+        [
+            {"token": token, "senha_nova": senha}
+            for token, senha in zip(tokens, senhas, strict=True)
+        ],
+    )
+
+    assert sorted(resposta.status_code for resposta in respostas) == [204, 422]
+    perdedora = next(resposta for resposta in respostas if resposta.status_code == 422)
+    assert perdedora.json()["error"]["reason"] == "token_invalido"
+    vencedora = senhas[[resposta.status_code for resposta in respostas].index(204)]
+
+    with Session(engine) as session:
+        usuario = session.get(Usuario, usuario_id)
+        assert usuario.sessao_versao == versao_antes + 1
+        assert verificar_senha(vencedora, usuario.senha_hash)
+        eventos = session.scalar(
+            text(
+                "SELECT count(*) FROM registros_auditoria "
+                "WHERE usuario_id = :u AND acao = 'conta.senha_redefinir'"
+            ),
+            {"u": usuario_id},
+        )
+        assert eventos == 1

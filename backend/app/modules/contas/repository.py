@@ -67,6 +67,17 @@ def obter_conta_travada(session: Session, usuario_id: uuid.UUID) -> Usuario | No
     )
 
 
+def obter_usuario_id_token_recuperacao(session: Session, token_hash: str) -> uuid.UUID | None:
+    """Localiza o dono do token sem consumi-lo, para travar a conta antes da linha do token."""
+    return session.scalar(
+        select(TokenRecuperacaoSenha.usuario_id).where(
+            TokenRecuperacaoSenha.token_hash == token_hash,
+            TokenRecuperacaoSenha.usado_em.is_(None),
+            TokenRecuperacaoSenha.expira_em > func.now(),
+        )
+    )
+
+
 def consumir_token_recuperacao(session: Session, token_hash: str) -> uuid.UUID | None:
     """Marca o token como usado e devolve o dono, num único UPDATE condicional.
 

@@ -222,12 +222,17 @@ def redefinir_senha(session: Session, dados: RedefinicaoSenha, *, ip: str | None
     # argon2 antes de tocar no banco, para não segurar as travas durante o cálculo.
     novo_hash = hash_senha(dados.senha_nova)
     try:
-        usuario_id = repository.consumir_token_recuperacao(session, hash_do_token(dados.token))
+        token_hash = hash_do_token(dados.token)
+        usuario_id = repository.obter_usuario_id_token_recuperacao(session, token_hash)
         if usuario_id is None:
             raise _token_invalido()
         usuario = repository.obter_conta_travada(session, usuario_id)
         if usuario is None or not usuario.ativo or not _cadastro_global(usuario):
             raise _token_invalido()  # o mesmo erro: não revelamos o estado da conta
+        # Serializa todos os tokens da mesma conta pelo lock do usuário. A requisição seguinte
+        # só chega aqui depois do commit e verá seu token invalidado pela primeira redefinição.
+        if repository.consumir_token_recuperacao(session, token_hash) != usuario.id:
+            raise _token_invalido()
         try:
             conferir_senha(dados.senha_nova, usuario.email)
         except ValueError as erro:

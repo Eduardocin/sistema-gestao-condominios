@@ -16,6 +16,7 @@ from app.main import create_app
 from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.auth.rate_limit import get_login_rate_limiter
 from app.modules.auth.security import hash_do_token, hash_senha, verificar_senha
+from app.modules.condominios.models import Condominio, VinculoCondominio
 from app.modules.usuarios.models import TokenRecuperacaoSenha, Usuario
 from tests.isolamento.cenario import cabecalho, token_de
 from tests.test_contas_funcionarios_api import conta
@@ -456,3 +457,65 @@ def test_tempo_de_validade_vem_do_banco_com_fuso(client, session):
     )
     session.commit()
     assert client.post(REDEFINICAO, json={"token": token, "senha_nova": NOVA}).status_code == 204
+
+
+def test_redefinicao_desbloqueia_login_apos_excesso_de_falhas(client, session):
+    sessao, dados = cadastrar(client)
+    limite = get_login_rate_limiter()._max_falhas
+    for _ in range(limite):
+        assert login(client, dados["email"], "Errada999").status_code == 401
+    assert login(client, dados["email"], SENHA).status_code == 429
+
+    token = emitir_token(session, sessao["usuario"]["id"])
+    assert client.post(REDEFINICAO, json={"token": token, "senha_nova": NOVA}).status_code == 204
+    assert login(client, dados["email"], NOVA).status_code == 200
+
+
+def test_troca_preserva_condominio_selecionado_e_inutiliza_tokens(client, session):
+    sessao, _ = cadastrar(client)
+    usuario_id = uuid.UUID(sessao["usuario"]["id"])
+    aurora = Condominio(nome="Aurora", status="ativo")
+    boa_vista = Condominio(nome="Boa Vista", status="ativo")
+    session.add_all([aurora, boa_vista])
+    session.flush()
+    session.add_all(
+        [
+            VinculoCondominio(
+                usuario_id=usuario_id, condominio_id=aurora.id, perfil="morador", ativo=True
+            ),
+            VinculoCondominio(
+                usuario_id=usuario_id, condominio_id=boa_vista.id, perfil="morador", ativo=True
+            ),
+        ]
+    )
+    session.commit()
+    token_recuperacao = emitir_token(session, usuario_id)
+
+    selecao = client.post(
+        "/api/v1/auth/selecionar-condominio",
+        headers=bearer(sessao),
+        json={"condominio_id": str(boa_vista.id)},
+    )
+    assert selecao.status_code == 200
+
+    troca = client.put(
+        TROCA,
+        headers=bearer(selecao.json()),
+        json={"senha_atual": SENHA, "senha_nova": NOVA},
+    )
+    assert troca.status_code == 200
+    corpo = troca.json()
+    assert corpo["condominio"]["id"] == str(boa_vista.id)
+    assert corpo["requer_selecao"] is False
+    me = client.get("/api/v1/auth/me", headers=bearer(corpo))
+    assert me.status_code == 200
+    assert me.json()["condominio"]["id"] == str(boa_vista.id)
+
+    (evento,) = eventos(session, usuario_id, "conta.senha_alterar")
+    assert evento.condominio_id is None and evento.perfil is None
+
+    redefinicao = client.post(
+        REDEFINICAO, json={"token": token_recuperacao, "senha_nova": "Mais1Senha"}
+    )
+    assert redefinicao.status_code == 422
+    assert redefinicao.json()["error"]["reason"] == "token_invalido"

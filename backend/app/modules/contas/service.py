@@ -1,3 +1,4 @@
+import uuid
 from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
@@ -157,12 +158,9 @@ def trocar_propria_senha(
     limiter: LoginRateLimiter,
     settings: Settings,
     ip: str | None,
+    condominio_id_atual: uuid.UUID | None = None,
 ) -> SessaoEmitida:
     """Troca a senha de quem está logado e devolve uma sessão nova (as antigas caem pelo `sv`)."""
-    # Trava a conta: duas trocas simultâneas não usam a mesma senha atual nem a mesma versão.
-    usuario = repository.bloquear_conta(session, usuario.id)
-    # Mesmo recorte do PUT /contas/me: conta compartilhada troca acesso pela US-210, com
-    # responsável; o ADM da plataforma não tem cadastro global.
     if not _cadastro_global(usuario):
         raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
 
@@ -175,25 +173,44 @@ def trocar_propria_senha(
             "Muitas tentativas. Tente novamente mais tarde.",
             headers={"Retry-After": str(segundos)},
         )
-    if usuario.senha_hash is None or not verificar_senha(dados.senha_atual, usuario.senha_hash):
-        limiter.registrar_falha(chave)
-        raise ApiError(
-            422, "validation_error", MENSAGEM_SENHA_ATUAL, reason="senha_atual_incorreta"
-        )
-    limiter.limpar(chave)
 
-    if dados.senha_nova == dados.senha_atual:
-        raise ApiError(
-            422, "validation_error", MENSAGEM_SENHA_IGUAL, reason="senha_nova_igual_atual"
-        )
+    versao_token = usuario.sessao_versao
     try:
-        conferir_senha(dados.senha_nova, usuario.email)  # a parte da regra que depende do e-mail
-    except ValueError as erro:
-        raise _senha_invalida() from erro
+        # Trava a conta: duas trocas simultâneas não usam a mesma senha atual nem a mesma versão.
+        usuario = repository.bloquear_conta(session, usuario.id)
+        if usuario.sessao_versao != versao_token:
+            raise ApiError(
+                401,
+                "not_authenticated",
+                "Sessão inválida ou expirada. Entre novamente.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # Mesmo recorte do PUT /contas/me: conta compartilhada troca acesso pela US-210, com
+        # responsável; o ADM da plataforma não tem cadastro global.
+        if not _cadastro_global(usuario):
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
 
-    try:
+        if usuario.senha_hash is None or not verificar_senha(dados.senha_atual, usuario.senha_hash):
+            limiter.registrar_falha(chave)
+            raise ApiError(
+                422, "validation_error", MENSAGEM_SENHA_ATUAL, reason="senha_atual_incorreta"
+            )
+        limiter.limpar(chave)
+
+        if dados.senha_nova == dados.senha_atual:
+            raise ApiError(
+                422, "validation_error", MENSAGEM_SENHA_IGUAL, reason="senha_nova_igual_atual"
+            )
+        try:
+            conferir_senha(
+                dados.senha_nova, usuario.email
+            )  # a parte da regra que depende do e-mail
+        except ValueError as erro:
+            raise _senha_invalida() from erro
+
         versao_antiga = usuario.sessao_versao
         repository.gravar_senha(session, usuario, hash_senha(dados.senha_nova))
+        repository.inutilizar_tokens_pendentes(session, usuario.id)
         auditoria.registrar_acao(
             session,
             ctx=ContextoAuditoria(usuario_id=usuario.id, ip=ip),
@@ -204,7 +221,12 @@ def trocar_propria_senha(
             antes={"sessao_versao": versao_antiga},
             depois={"sessao_versao": usuario.sessao_versao},
         )
-        sessao = emitir_sessao_do_usuario(session, usuario=usuario, settings=settings)
+        sessao = emitir_sessao_do_usuario(
+            session,
+            usuario=usuario,
+            settings=settings,
+            condominio_id_atual=condominio_id_atual,
+        )
         session.commit()
     except Exception:
         session.rollback()
@@ -212,7 +234,13 @@ def trocar_propria_senha(
     return sessao
 
 
-def redefinir_senha(session: Session, dados: RedefinicaoSenha, *, ip: str | None) -> None:
+def redefinir_senha(
+    session: Session,
+    dados: RedefinicaoSenha,
+    *,
+    limiter: LoginRateLimiter | None = None,
+    ip: str | None,
+) -> None:
     """Consome o token e grava a senha nova, tudo ou nada.
 
     Qualquer falha (token inválido, conta que não pode redefinir, senha igual ao e-mail,
@@ -239,6 +267,7 @@ def redefinir_senha(session: Session, dados: RedefinicaoSenha, *, ip: str | None
             raise _senha_invalida() from erro
 
         versao_antiga = usuario.sessao_versao
+        email_conta = usuario.email
         repository.gravar_senha(session, usuario, novo_hash)
         repository.inutilizar_tokens_pendentes(session, usuario.id)
         auditoria.registrar_acao(
@@ -255,3 +284,6 @@ def redefinir_senha(session: Session, dados: RedefinicaoSenha, *, ip: str | None
     except Exception:
         session.rollback()
         raise
+    if limiter is not None:
+        limiter.limpar(email_conta)
+        limiter.limpar(f"senha:{usuario_id}")

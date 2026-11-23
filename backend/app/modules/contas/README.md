@@ -64,13 +64,16 @@ comprobatório permanece no cadastro do condomínio. Nenhuma migration ou depend
   travada (`FOR UPDATE`) durante a troca. Senha atual errada: 422 `senha_atual_incorreta`, contada
   no `LoginRateLimiter` com a chave `senha:{usuario_id}`; no limite, 429 com `Retry-After`, como no
   login; acerto zera o contador. Igual à atual: 422 `senha_nova_igual_atual`. Sucesso: hash novo,
-  `sessao_versao + 1` e o mesmo `LoginResponse` do login, com tokens novos (os antigos caem).
+  `sessao_versao + 1`, tokens de recuperação pendentes inutilizados e o mesmo `LoginResponse` do
+  login, preservando o `cid` selecionado quando continua ativo e liberado (os tokens antigos caem).
 - `POST /api/v1/contas/redefinicao-senha`: público, `{"token", "senha_nova"}`, 204 sem sessão. O
   banco guarda só `hash_do_token(token)` (SHA-256 hexadecimal, em `auth/security.py`; a parte B usa
-  a mesma função). Numa transação: `UPDATE` condicional que consome o token, senha nova,
-  `sessao_versao + 1`, demais tokens pendentes da conta inutilizados e auditoria. Qualquer falha
-  (inclusive senha igual ao e-mail) desfaz tudo e o token continua valendo. Inexistente, expirado,
-  usado ou de conta inativa/sem cadastro próprio: o mesmo 422 `token_invalido`.
+  a mesma função). Numa transação: localiza o dono, trava a conta (`FOR UPDATE`), executa `UPDATE`
+  condicional que consome o token, grava a senha nova, soma `sessao_versao + 1`, inutiliza demais
+  tokens pendentes da conta e audita; após o commit, limpa eventual bloqueio da conta no
+  `LoginRateLimiter`. Qualquer falha (inclusive senha igual ao e-mail) desfaz tudo e o token
+  continua valendo. Inexistente, expirado, usado ou de conta inativa/sem cadastro próprio: o mesmo
+  422 `token_invalido`.
 - A regra da senha nova é a do cadastro, numa só função (`conferir_senha` em `schemas.py`). A
   comparação com o e-mail é feita no service, que é quem conhece a conta.
 - Auditoria: `conta.senha_alterar` e `conta.senha_redefinir`, com só `sessao_versao` em

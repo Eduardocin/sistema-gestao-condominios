@@ -94,6 +94,7 @@ def trocar_senha(
         limiter=limiter,
         settings=settings,
         ip=ip_do_cliente(request),
+        condominio_id_atual=autenticado.condominio_id,
     )
     return resposta_de_sessao(sessao)
 
@@ -106,6 +107,8 @@ def trocar_senha(
         422: {"description": "Senha nova fora da regra ou `token_invalido` (sempre igual)."}
     },
 )
-def redefinir(dados: RedefinicaoSenha, session: SessionDep, request: Request) -> None:
+def redefinir(
+    dados: RedefinicaoSenha, session: SessionDep, limiter: LimiterDep, request: Request
+) -> None:
     # Sem sessão na resposta: a pessoa entra pelo login com a senha nova.
-    redefinir_senha(session, dados, ip=ip_do_cliente(request))
+    redefinir_senha(session, dados, limiter=limiter, ip=ip_do_cliente(request))

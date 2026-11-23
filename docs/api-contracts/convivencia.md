@@ -1,6 +1,6 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado:** áreas comuns e reservas (TASK-84), aviso à unidade no cancelamento administrativo (TASK-48), API de encomendas (TASK-36), cadastro de visitantes e veículos do Morador (TASK-38) e ocorrências (TASK-40: abrir, consultar, responder e resolver). `reason` adicionais para áreas e reservas: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (as reservas já respeitam os bloqueios existentes), envio do e-mail `reserva_cancelada` no cancelamento administrativo e comentários/reabertura de ocorrências (US-704, TASK-63).
+Status: rascunho para revisão no portão dos leads. **Implementado:** áreas comuns e reservas (TASK-84), aviso à unidade no cancelamento administrativo (TASK-48), API de encomendas (TASK-36), filtro opcional por unidade em `GET /encomendas` (US-402), cadastro de visitantes e veículos do Morador (TASK-38) e ocorrências (TASK-40: abrir, consultar, responder e resolver). `reason` adicionais para áreas e reservas: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (as reservas já respeitam os bloqueios existentes), envio do e-mail `reserva_cancelada` no cancelamento administrativo, comentários/reabertura de ocorrências (US-704, TASK-63) e exigir `unidade_id` na consulta do Morador após a integração da tela (TASK-41).
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
@@ -282,6 +282,8 @@ A leitura da encomenda é do Vitor (US-402), mas o **recurso e os objetos** são
 
 1. Aceitar `unidade_id` como filtro e **exigi-lo quando quem chama é o Morador** (a US-402 abre com "seleciona a unidade"; sem o filtro, uma lista mista confunde). Funcionário e Administração continuam sem exigi-lo.
 2. A lista do Morador ordena da encomenda mais recente para a mais antiga e traz foto, data e hora, descrição, quem recebeu (`recebimento.funcionario`) e status. É o que `portaria.md` já devolve.
+
+**Implementação (US-402).** `GET /encomendas` aceita `unidade_id` para todos os perfis. Para o Morador, unidade que não é dele dá 404 e aba Encomendas Sem Acesso dá 403; para Funcionário e Administração, unidade de outro condomínio dá 404. O filtro combina com `status` e `busca`. **Ainda opcional:** o front atual da lista do Morador chama sem `unidade_id`, e tornar o parâmetro obrigatório (422 para o Morador, como o item 1 propõe) quebraria essa tela; a mudança é de uma linha no service quando a tela passar a enviar a unidade.
 
 ### 6.2 Visitantes cadastrados pelo Morador (US-501)
 

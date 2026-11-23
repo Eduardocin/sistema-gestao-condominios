@@ -55,8 +55,11 @@ def _filtros(
     *,
     busca: str | None = None,
     status: str | None = None,
+    unidade_id: UUID | None = None,
 ):
     filtros = [Encomenda.condominio_id == contexto.condominio_id]
+    if unidade_id is not None:
+        filtros.append(Encomenda.unidade_id == unidade_id)
     if contexto.perfil == "morador":
         link = aliased(MoradorUnidade)
         permissao = aliased(PermissaoAba)
@@ -170,10 +173,11 @@ def listar(
     *,
     busca: str | None,
     status: str | None,
+    unidade_id: UUID | None = None,
     page: int,
     page_size: int,
 ) -> tuple[list[LinhaEncomenda], int]:
-    filtros = _filtros(contexto, busca=busca, status=status)
+    filtros = _filtros(contexto, busca=busca, status=status, unidade_id=unidade_id)
     consulta = (
         _consulta_linhas(contexto)
         .where(*filtros)

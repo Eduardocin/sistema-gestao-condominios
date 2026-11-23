@@ -2,11 +2,11 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
-from app.modules.usuarios.models import Usuario
+from app.modules.usuarios.models import TokenRecuperacaoSenha, Usuario
 
 
 def campo_em_uso(
@@ -45,3 +45,65 @@ def atualizar_conta(
     usuario.email = email
     usuario.telefone = telefone
     session.flush()
+
+
+def gravar_senha(session: Session, usuario: Usuario, senha_hash: str) -> None:
+    """Troca o hash e soma 1 em `sessao_versao`: todos os tokens emitidos antes caem (claim sv).
+
+    Quem chama já travou a linha (`bloquear_conta` ou `obter_conta_travada`).
+    """
+    usuario.senha_hash = senha_hash
+    usuario.sessao_versao += 1
+    session.flush()
+
+
+def obter_conta_travada(session: Session, usuario_id: uuid.UUID) -> Usuario | None:
+    """A conta, ativa ou não, com a linha travada. Quem decide se ela serve é o service."""
+    return session.scalar(
+        select(Usuario)
+        .where(Usuario.id == usuario_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def obter_usuario_id_token_recuperacao(session: Session, token_hash: str) -> uuid.UUID | None:
+    """Localiza o dono do token sem consumi-lo, para travar a conta antes da linha do token."""
+    return session.scalar(
+        select(TokenRecuperacaoSenha.usuario_id).where(
+            TokenRecuperacaoSenha.token_hash == token_hash,
+            TokenRecuperacaoSenha.usado_em.is_(None),
+            TokenRecuperacaoSenha.expira_em > func.now(),
+        )
+    )
+
+
+def consumir_token_recuperacao(session: Session, token_hash: str) -> uuid.UUID | None:
+    """Marca o token como usado e devolve o dono, num único UPDATE condicional.
+
+    Dois pedidos simultâneos com o mesmo token não passam juntos: o segundo espera o primeiro e,
+    depois do commit dele, já não encontra `usado_em IS NULL`. Se a transação for desfeita, o
+    token volta a valer.
+    """
+    return session.scalar(
+        update(TokenRecuperacaoSenha)
+        .where(
+            TokenRecuperacaoSenha.token_hash == token_hash,
+            TokenRecuperacaoSenha.usado_em.is_(None),
+            TokenRecuperacaoSenha.expira_em > func.now(),
+        )
+        .values(usado_em=func.now())
+        .returning(TokenRecuperacaoSenha.usuario_id)
+    )
+
+
+def inutilizar_tokens_pendentes(session: Session, usuario_id: uuid.UUID) -> None:
+    """Outros links de recuperação ainda abertos da conta deixam de valer."""
+    session.execute(
+        update(TokenRecuperacaoSenha)
+        .where(
+            TokenRecuperacaoSenha.usuario_id == usuario_id,
+            TokenRecuperacaoSenha.usado_em.is_(None),
+        )
+        .values(usado_em=func.now())
+    )

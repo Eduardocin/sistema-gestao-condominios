@@ -231,6 +231,7 @@ class EdicaoCondominio(AcaoCorrecao):
     nome: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)]
     cnpj: str = Field(pattern=r"^[0-9]{14}$")
     endereco: EnderecoEntrada
+    logo_arquivo_id: uuid.UUID | None = None
 
     _cnpj = field_validator("cnpj")(validar_documento)
 
@@ -272,3 +273,7 @@ class EstruturaSaida(BaseModel):
 
 class ReenvioSaida(CondominioSaida):
     enviado_em: datetime
+
+
+TipoEstrutura = Literal["blocos", "andares", "unidades"]
+ElementoEstruturaSaida = AndarCorrecaoSaida | BlocoCorrecaoSaida | UnidadeAnalise

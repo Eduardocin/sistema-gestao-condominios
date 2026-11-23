@@ -194,7 +194,7 @@ Qualquer outra transição retorna 409 (`reason: "transicao_invalida"`). Não ex
 | Rota | `pendente` / `rejeitado` | `ativo` | `desativado` |
 | --- | --- | --- | --- |
 | `GET /condominio`, `GET /condominios/meus`, `GET /auth/me` | Sim | Sim | Sim |
-| `PUT /condominio`, três `PUT /estrutura/...` da TASK-57 | Somente `rejeitado`; `pendente` retorna 409 | 409 | 409 |
+| `PUT /condominio` e escritas de `/estrutura/...` (US-205/206) | Sim, Administração | Sim, Administração | 403 |
 | `POST /condominio/documentos` (proposta) | Sim (Administração) | Sim | 403 |
 | `POST /condominio/reenvio` | Só `rejeitado` | — | — |
 | Todas as demais (encomendas, reservas, vínculos, avisos...) | 403 | Conforme a matriz | 403 |
@@ -283,7 +283,7 @@ Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andar
 | --- | --- | --- | --- |
 | `GET /condominios/meus` | Administração (sem `cid`) | — | 200, lista `{id, nome, status, perfil}` dos prédios com vínculo ativo, para "alternar entre prédios" |
 | `GET /condominio` | Morador e Funcionário: só `id` e `nome`. Administração: completo | — | 200, objeto |
-| `PUT /condominio` | Administração; somente rejeitado (TASK-57) | `nome`, `cnpj`, `endereco`, `responsavel_id` | 200, objeto |
+| `PUT /condominio` | Administração; pendente, rejeitado ou ativo | `nome`, `cnpj`, `endereco`, `responsavel_id`; `logo_arquivo_id` opcional | 200, objeto |
 | `POST /condominio/reenvio` | Administração; somente rejeitado (TASK-57) | `{"responsavel_id": "UUID"}` | 200, objeto com `status = 'pendente'` e `enviado_em` |
 | `GET /condominio/documentos` | Administração | — | 200, lista de documentos |
 | `POST /condominio/documentos` | Administração | `{"arquivo_id": "UUID"}` | 201, documento |
@@ -292,7 +292,8 @@ Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andar
 ordenada por nome e ID, limitada aos vínculos ativos de perfil Administração da conta.
 Inclui todos os estados do condomínio; revogar o vínculo o remove da próxima consulta.
 `GET /condominio` para Administração foi implementado na TASK-29. A TASK-57 acrescenta
-`PUT /condominio` e `POST /condominio/reenvio`, restritos a cadastro rejeitado. As rotas de
+`PUT /condominio` e `POST /condominio/reenvio`. A US-206 amplia a edição para pendente,
+rejeitado e ativo; reenvio continua exclusivo de rejeitado. As rotas de
 documentos e a leitura por Morador/Funcionário permanecem propostas. Selecionar um condomínio
 pendente ou rejeitado não libera suas operações do dia a dia, sob a autorização central.
 
@@ -313,8 +314,8 @@ pendente ou rejeitado não libera suas operações do dia a dia, sob a autoriza�
 ```
 
 - `motivo_rejeicao` só aparece em `rejeitado`; **a Administração consegue lê-lo** (US-203) e o painel o exibe (US-204). `analises` é o histórico de tentativas (US-204), em ordem cronológica.
-- `PUT /condominio` (TASK-57): nome, CNPJ e endereço editáveis somente em `rejeitado`. O CNPJ continua **único** (409 `cnpj_ja_cadastrado`). Auditoria `condominio.editar` com os campos alterados. Logo e documentos existentes são preservados; alteração de logo e edição em outros estados ficam fora deste recorte.
-- `reenvio`: só de `rejeitado` (senão 409 `transicao_invalida`). Atualiza `enviado_em` com a hora do servidor, limpa `motivo_rejeicao`, acrescenta `reenviado` ao histórico e registra `condominio.reenviar`. Rejeições anteriores não são alteradas. Dados e estrutura são corrigidos antes do reenvio; depois dele as escritas desta entrega retornam 409.
+- `PUT /condominio` (US-206): nome, CNPJ e endereço editáveis em `pendente`, `rejeitado` e `ativo`; `desativado` retorna 403. O CNPJ continua **único** (409 `cnpj_ja_cadastrado`). Auditoria `condominio.editar` com os campos alterados. `logo_arquivo_id` omitido preserva a logo, nulo remove a associação e UUID substitui por imagem de `fotos` enviada pela própria conta administrativa no mesmo condomínio (404 para referência inválida). Documentos existentes são preservados. Upload usa o storage atual e exige condomínio ativo; upload de logo no cadastro inicial/pendente/rejeitado continua pendente, sem infraestrutura nova.
+- `reenvio`: só de `rejeitado` (senão 409 `transicao_invalida`). Atualiza `enviado_em` com a hora do servidor, limpa `motivo_rejeicao`, acrescenta `reenviado` ao histórico e registra `condominio.reenviar`. Rejeições anteriores não são alteradas. Dados e estrutura podem ser corrigidos antes e depois do reenvio, nos estados autorizados; isso não libera operações do dia a dia.
 - `GET /condominios/meus` mostra apenas os prédios do **próprio** vínculo. "Alternar" é chamar `selecionar-condominio` de novo (US-206: "tudo o que aparece pertence ao prédio escolhido").
 - Documento anexado nunca é apagado do condomínio no MVP; só se acrescenta.
 
@@ -326,7 +327,8 @@ reenvio e segue a auditoria central e as convenções de conta compartilhada. Au
 malformado: 422; inexistente, inativo ou de outro condomínio: 404. A lista já existente
 `/responsaveis-administracao` permite o primeiro cadastro também em condomínio rejeitado.
 
-`PUT /condominio` recebe todos os campos editáveis (não é PATCH):
+`PUT /condominio` exige nome, CNPJ, endereço completo e responsável (não é PATCH).
+A associação opcional `logo_arquivo_id` segue a regra de omissão/nulo descrita acima:
 
 ```json
 {
@@ -341,11 +343,12 @@ malformado: 422; inexistente, inativo ou de outro condomínio: 404. A lista já 
 ```
 
 Os campos seguem as validações do cadastro inicial; extras, IDs de destino, status e
-referências de arquivos não são aceitos. O condomínio vem do JWT e do vínculo administrativo
+referências de documentos não são aceitos. O condomínio vem do JWT e do vínculo administrativo
 atual, nunca do corpo. Cada escrita confirma alteração e auditoria na mesma transação,
-ou reverte tudo. A trava de linha no condomínio é a mesma da aprovação/rejeição do ADM:
-o estado é lido novamente após esperar pela trava. Dois reenvios geram um 200 e um 409;
-uma edição que perde a disputa para o reenvio recebe 409 sem gravar alterações.
+ou reverte tudo. A gestão usa `FOR NO KEY UPDATE` na linha do condomínio, incompatível
+com a trava da aprovação/rejeição do ADM; o estado é revalidado após esperar. Essa trava
+permite o `KEY SHARE` das FKs de encomendas/portaria. Dois reenvios geram um 200 e um 409.
+Uma edição serializada depois do reenvio pode prosseguir em `pendente`.
 
 O reenvio retorna os campos de `GET /condominio` mais `enviado_em`. Não aprova o prédio,
 não gera chaves nem envia e-mail. Não cria rascunhos, estados ou novas tabelas.
@@ -366,7 +369,7 @@ não gera chaves nem envia e-mail. Não cria rascunhos, estados ou novas tabelas
 }
 ```
 
-Contagens de moradores/proprietário e filtro de itens inativos permanecem propostas. A TASK-57 implementa somente renomeação de bloco/unidade e nome/ordem do andar em cadastro rejeitado, preservando IDs, pais e vínculos. Não cria, move, remove, desativa ou reativa elementos. Rotas e campos: [plataforma.md](plataforma.md), seção 7; a gestão restante fica para a TASK-51.
+Contagens de moradores/proprietário e filtro de itens inativos permanecem propostas. A US-205 reaproveita as edições da TASK-57 em pendente, rejeitado e ativo, acrescentando criação individual, desativação lógica e reativação. Preserva IDs, pais, vínculos e registros históricos; não move nem exclui elementos. Rotas, campos e restrições: [plataforma.md](plataforma.md), seção 7.
 
 ## 5. Aprovação pelo ADM (US-203, Must, Sprint 1) e gestão de condomínios ativos (US-208)
 

@@ -410,16 +410,14 @@ Variáveis no `.env.example`: `EMAIL_BACKEND` (`smtp` ou `console`), `SMTP_HOST`
 
 A **leitura** da árvore (`GET /condominio/estrutura`) e o cadastro inicial pelo assistente estão no [núcleo](nucleo.md). Aqui, a edição depois do cadastro:
 
-**Recorte implementado pela TASK-57:** apenas os três `PUT` abaixo, para Administração
-de condomínio **rejeitado**, com responsável ativo obrigatório. Outros estados retornam
-409 `transicao_invalida`. Bloco e unidade são renomeados; andar admite nome e ordem.
-As respostas são `{id,nome,ativo}`, `{id,nome,ordem,ativo}` e
-`{id,identificacao,ativo}`, respectivamente. Campos extras e referências a pais são
-rejeitados; IDs, vínculos e histórico permanecem. Unicidade usa as constraints existentes
-(409 `nome_duplicado`). Cada escrita e um evento central `estrutura.editar` são
-transacionais, sob a mesma trava do reenvio e decisão do ADM. O responsável é validado antes
-da alteração. As demais rotas e a ampliação para outros estados continuam **propostas**,
-fora da TASK-57. Não há API genérica de edição em lote nem nova migration.
+**Implementado na US-205, sobre a TASK-57:** as oito operações abaixo aceitam
+Administração de condomínio `pendente`, `rejeitado` ou `ativo`; `desativado` retorna
+403. Exigem responsável ativo do próprio condomínio. Bloco e unidade admitem renomeação;
+andar admite nome e ordem. As respostas são `{id,nome,ativo}`, `{id,nome,ordem,ativo}`
+e `{id,identificacao,ativo}`. Os três `POST` de criação retornam 201 e
+`Location: /api/v1/condominio/estrutura`. Extras, mudança de pais, transferência e
+criação em lote não são aceitos. Unicidade usa as constraints existentes
+(409 `nome_duplicado`); não há nova migration.
 
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
@@ -436,11 +434,14 @@ Regras:
 
 - **Responsável obrigatório nas oito operações de escrita acima.** `responsavel_id` identifica um responsável ativo da Administração no condomínio do contexto. Ausente ou inválido no formato: 422; inexistente, inativo ou de outro condomínio: 404 genérico. O service valida antes de alterar a estrutura e passa `ResponsavelRef(tipo="administracao", id=responsavel_id)` para `registrar_acao`, na mesma transação. A auditoria preserva o nome e a identidade da conta autenticada. O responsável deve estar cadastrado pela seção 5.2 também quando a estrutura for corrigida em condomínio pendente ou rejeitado; a gestão dessa lista precisa estar liberada no mesmo fluxo de cadastro.
 - Nomes únicos: bloco no condomínio, andar no bloco, unidade no andar (regra 18 do DER). Repetir retorna 409 (`reason: "nome_duplicado"`). Nome de 1 a 50 caracteres. "101" pode existir em blocos diferentes.
-- **Desativar unidade:** retorna 409 (`reason: "unidade_com_vinculo_ativo"`) se houver morador vinculado ativo (matriz: "não remove unidade com vínculo"). Sem vínculo ativo, a unidade é desativada, **nunca apagada**, e seus registros antigos (encomendas, reservas, ocorrências) continuam. A chave de acesso vigente da unidade é **revogada** na mesma transação, para ninguém se vincular a uma unidade desativada.
+- **Desativar unidade:** retorna 409 (`reason: "unidade_com_vinculo_ativo"`) se houver morador vinculado ativo (matriz: "não remove unidade com vínculo"). Sem vínculo ativo, a unidade é desativada, **nunca apagada**, e seus registros antigos (encomendas, visitantes, registros de visita, veículos, reservas e ocorrências) continuam. A chave de acesso vigente da unidade é **revogada** na mesma transação, para ninguém se vincular a uma unidade desativada.
 - **Desativar andar ou bloco:** só se todas as suas unidades já estiverem desativadas (409, `reason: "estrutura_com_unidades_ativas"`).
-- **Unidade nova em condomínio `ativo`** recebe uma chave de acesso gerada na hora, pelo serviço de chaves do núcleo.
+- **Pais ativos:** criar andar exige bloco ativo; criar unidade ou reativá-la exige andar e bloco ativos. Reativar andar exige bloco ativo. Violação retorna 409 `estrutura_inativa`. Desativar/reativar não altera os flags dos filhos; repetir o estado retorna 409 `transicao_invalida`.
+- **Unidade nova ou reativada em condomínio `ativo`** recebe chave pelo serviço existente, se não houver vigente. Chaves revogadas permanecem no histórico e não são reutilizadas. Em pendente/rejeitado, a chave será gerada na aprovação. O índice parcial existente impede mais de uma chave vigente.
+- **Transação e concorrência:** gestão serializada por condomínio com `FOR NO KEY UPDATE`, compatível com `KEY SHARE` das FKs da portaria e conflitante com decisões do ADM. Alterar uma unidade também usa `FOR UPDATE` nela, como vínculo e regeneração de chaves. A verificação de moradores ocorre depois da trava; auditoria, status e chaves confirmam ou revertem juntos.
+- **Histórico e operação:** desativar não cancela visitas/reservas nem altera veículos/encomendas existentes. Os filtros operacionais de cada módulo continuam próprios; APIs dos PRs de visitantes/veículos ainda não incorporados precisam de regressão quando integradas.
 - Uma alteração por requisição gera **um** evento `estrutura.editar`, com `antes` e `depois` só dos campos mudados.
-- **Estado do condomínio.** A regra R7 diz que em `pendente` e `rejeitado` a Administração só vê e corrige o cadastro. Corrigir o cadastro inclui a estrutura (US-204), então estas rotas valem em `pendente`, `rejeitado` e `ativo`, e retornam 403 em `desativado`. A dependência de autorização precisa tratar essas rotas como "fluxo de cadastro" (pendências).
+- **Estado do condomínio.** A regra R7 diz que em `pendente` e `rejeitado` a Administração só vê e corrige o cadastro. Corrigir o cadastro inclui a estrutura (US-204), então estas rotas valem em `pendente`, `rejeitado` e `ativo`, e retornam 403 em `desativado`. A dependência específica existente trata essas rotas como fluxo de cadastro, sem liberar as operações normais.
 - Funcionário lê a estrutura só com a identificação das unidades; Morador não usa estas rotas (matriz).
 
 Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a lista "alternar entre prédios" estão no [núcleo](nucleo.md), seção 4, porque são do mesmo recurso do cadastro.

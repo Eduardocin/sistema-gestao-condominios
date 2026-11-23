@@ -295,7 +295,8 @@ def obter_do_cadastro(
         )
     )
     if bloquear:
-        consulta = consulta.with_for_update(of=Condominio)
+        # Serializa a gestão sem bloquear KEY SHARE das FKs da portaria.
+        consulta = consulta.with_for_update(of=Condominio, key_share=True)
     item = session.scalar(consulta.execution_options(populate_existing=True))
     if item is None:
         raise RecursoNaoEncontrado
@@ -305,6 +306,29 @@ def obter_do_cadastro(
 class RepositorioBlocos(RepositorioDoCondominio[Bloco]):
     modelo = Bloco
 
+    def tem_unidades_ativas(self, id_: uuid.UUID) -> bool:
+        consulta = (
+            select(Unidade.id)
+            .join(
+                Andar,
+                and_(Andar.id == Unidade.andar_id, Andar.condominio_id == Unidade.condominio_id),
+            )
+            .where(
+                Unidade.condominio_id == self.contexto.condominio_id,
+                Andar.bloco_id == id_,
+                Unidade.ativo.is_(True),
+            )
+        )
+        return bool(self.session.scalar(select(consulta.exists())))
+
 
 class RepositorioAndares(RepositorioDoCondominio[Andar]):
     modelo = Andar
+
+    def tem_unidades_ativas(self, id_: uuid.UUID) -> bool:
+        consulta = select(Unidade.id).where(
+            Unidade.condominio_id == self.contexto.condominio_id,
+            Unidade.andar_id == id_,
+            Unidade.ativo.is_(True),
+        )
+        return bool(self.session.scalar(select(consulta.exists())))

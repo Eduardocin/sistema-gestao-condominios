@@ -124,8 +124,10 @@ As novas rotas usam o prefixo `/api/v1`:
 | `PUT /estrutura/unidades/{id}` | Corrige identificação |
 | `POST /condominio/reenvio` | Retorna o cadastro rejeitado à análise |
 
-As cinco escritas exigem estado `rejeitado` e `responsavel_id` ativo do próprio
-condomínio; qualquer outro estado retorna 409 `transicao_invalida`. A leitura
+As quatro edições aceitam `pendente`, `rejeitado` e `ativo` (US-205/206);
+`desativado` retorna 403. Reenvio continua exclusivo de `rejeitado`, com 409
+`transicao_invalida` nos demais estados. Todas exigem `responsavel_id` ativo do próprio
+condomínio. A leitura
 administrativa continua disponível nos quatro estados. Identidade e vínculo vêm dos
 mecanismos existentes, pelo contexto específico do cadastro; a autorização operacional
 não foi flexibilizada. Sem identidade: 401; sem vínculo/perfil/cid: 403; referências
@@ -137,18 +139,48 @@ estado, muda para `pendente`, atualiza `enviado_em`, limpa o motivo corrente, ac
 `reenviado` em `condominio_analises` e registra `condominio.reenviar`. A resposta inclui
 `enviado_em`. Rejeições anteriores continuam legíveis em `analises`.
 
-Correções usam a mesma trava da decisão do ADM e não recriam registros. IDs, pais,
+Correções usam uma trava conflitante com a decisão do ADM e não recriam registros. IDs, pais,
 proprietários, moradores e demais referências permanecem. Auditoria central:
 `condominio.editar` e `estrutura.editar`, com a conta, responsável, IP e campos alterados.
 CNPJ passa pela máscara central. Constraints existentes protegem a unicidade
 (`cnpj_ja_cadastrado` ou `nome_duplicado`); falhas de auditoria/persistência revertem tudo.
 
-Limites deste recorte: sem inclusão, movimentação, remoção, desativação ou reativação de
-elementos; sem edição em outros estados, rascunhos, uploads, troca de logo, e-mail ou
-alteração de frontend. Logo/documentos existentes são preservados. Essas restrições não
-impedem a correção mínima de dados e identificações da TASK-57. Não há nova migration.
+## Gestão de estrutura e dados — US-205/206
+
+Além dos PUT existentes, implementados:
+
+- `POST /estrutura/blocos`, `POST /estrutura/blocos/{id}/andares` e
+  `POST /estrutura/andares/{id}/unidades`: criação individual, 201, com o mesmo corpo do
+  PUT correspondente. Elemento pai deve existir no condomínio e estar ativo.
+- `POST /estrutura/{tipo}/{id}/desativacao` e `/reativacao`: corpo
+  `{"responsavel_id":"UUID"}`; `tipo` é `blocos`, `andares` ou `unidades`.
+  Unidade com morador ativo não pode ser desativada; bloco/andar com unidade ativa também
+  não. Reativação exige pais ativos e não reativa filhos automaticamente.
+- Desativação revoga a chave vigente. Unidade criada/reativada em condomínio ativo recebe
+  chave pelo serviço existente, se não houver vigente. Chaves anteriores e todos os
+  registros históricos permanecem; não há exclusão física nem cancelamento em cascata.
+- `PUT /condominio` aceita `logo_arquivo_id`: omitido preserva, nulo desassocia, UUID
+  associa imagem de `fotos` enviada pela mesma conta no mesmo condomínio. A política de
+  download reconhece a logo para os perfis locais, mantendo isolamento e a restrição do
+  ADM da plataforma. Upload continua exigindo condomínio ativo, pelo storage atual.
+- A alternância já funciona por `GET /condominios/meus` e
+  `POST /auth/selecionar-condominio`; autenticação e roteador central não foram alterados.
+
+As escritas de estrutura usam `FOR NO KEY UPDATE` no condomínio (serializa a gestão e
+conflita com decisões do ADM, preservando o `KEY SHARE` das FKs da portaria) e
+`FOR UPDATE` na unidade quando alterada. Status, chave e um evento `estrutura.editar`
+são transacionais. A falha de qualquer etapa reverte todas.
+
+Limites: sem transferência, criação em lote, reconstrução da árvore, rascunhos, novo
+upload, e-mail ou alteração de frontend. Upload no cadastro inicial/pendente/rejeitado,
+US-208 e US-210 continuam pendentes. Não há nova migration. Os PRs de visitantes/veículos
+foram analisados sem incorporação; executar suas regressões quando forem integrados.
 
 Testes focados: [test_condominios_reenvio.py](../../../tests/test_condominios_reenvio.py).
 Cobrem correções, IDs/vínculos preservados, histórico de rejeições, estados, perfis,
 isolamento, responsáveis, unicidade, rollback após auditoria e disputas de reenvio com
 outro reenvio, edição e aprovação em sessões PostgreSQL independentes.
+
+Testes da US-205/206: [test_condominios_estrutura.py](../../../tests/test_condominios_estrutura.py),
+com estados, criação, unicidade, pais, chaves, histórico, logo, alternância, rollback e
+disputa com inserção de encomenda em sessão independente.

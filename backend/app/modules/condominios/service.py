@@ -16,9 +16,10 @@ from app.modules.condominios.schemas import (
     CadastroCondominioSaida,
     CondominioResumo,
 )
-from app.modules.funcionarios.repository import RepositorioResponsaveis
+from app.modules.funcionarios.repository import RepositorioFotos, RepositorioResponsaveis
+from app.modules.permissoes_aba.repository import RepositorioMoradores
 from app.modules.unidades.models import Andar, Bloco, Unidade
-from app.modules.unidades.repository import RepositorioUnidades
+from app.modules.unidades.repository import RepositorioChaves, RepositorioUnidades
 from app.modules.unidades.service import gerar_chave
 from app.modules.usuarios.models import Usuario
 
@@ -287,14 +288,24 @@ class CorrecaoCadastroService:
     def __init__(self, session: Session, contexto: ContextoCondominio) -> None:
         self.session = session
         self.contexto = contexto
+        self.blocos = repository.RepositorioBlocos(session, contexto)
+        self.andares = repository.RepositorioAndares(session, contexto)
+        self.unidades = RepositorioUnidades(session, contexto)
+        self.chaves = RepositorioChaves(session, contexto)
+        self.moradores = RepositorioMoradores(session, contexto)
+        self.fotos = RepositorioFotos(session, contexto)
 
-    def _bloquear_rejeitado(self, responsavel_id: uuid.UUID) -> Condominio:
+    def _bloquear_cadastro(
+        self, responsavel_id: uuid.UUID, *, somente_rejeitado: bool = False
+    ) -> Condominio:
         if self.contexto.perfil != "administracao":
             raise ApiError(403, "forbidden", "Você não tem permissão para realizar esta ação.")
-        # Mesma trava da decisão do ADM. Revalidar o estado depois de esperar por ela.
+        # Conflita com a decisão do ADM e revalida o estado depois de esperar pela trava.
         condominio = repository.obter_do_cadastro(self.session, self.contexto, bloquear=True)
-        if condominio.status != "rejeitado":
+        if somente_rejeitado and condominio.status != "rejeitado":
             raise ApiError(409, "conflict", "Transição inválida.", reason="transicao_invalida")
+        if not somente_rejeitado and condominio.status not in {"pendente", "rejeitado", "ativo"}:
+            raise ApiError(403, "forbidden", "Este condomínio não está disponível no momento.")
         RepositorioResponsaveis(self.session, self.contexto).obter_ativo(responsavel_id)
         return condominio
 
@@ -302,8 +313,12 @@ class CorrecaoCadastroService:
         self, dados: schemas.EdicaoCondominio, *, ip: str | None
     ) -> schemas.CondominioSaida:
         try:
-            condominio = self._bloquear_rejeitado(dados.responsavel_id)
+            condominio = self._bloquear_cadastro(dados.responsavel_id)
             campos = {"nome": dados.nome, "cnpj": dados.cnpj, **dados.endereco.model_dump()}
+            if "logo_arquivo_id" in dados.model_fields_set:
+                if dados.logo_arquivo_id is not None:
+                    self.fotos.conferir(dados.logo_arquivo_id)
+                campos["logo_arquivo_id"] = dados.logo_arquivo_id
             antes = {
                 campo: getattr(condominio, campo)
                 for campo, valor in campos.items()
@@ -336,8 +351,8 @@ class CorrecaoCadastroService:
         self, id_: uuid.UUID, dados: schemas.EdicaoBloco, *, ip: str | None
     ) -> schemas.BlocoCorrecaoSaida:
         try:
-            self._bloquear_rejeitado(dados.responsavel_id)
-            bloco = repository.RepositorioBlocos(self.session, self.contexto).obter(id_)
+            self._bloquear_cadastro(dados.responsavel_id)
+            bloco = self.blocos.obter(id_)
             antes = {"nome": bloco.nome} if bloco.nome != dados.nome else {}
             bloco.nome = dados.nome
             self.session.flush()
@@ -365,8 +380,8 @@ class CorrecaoCadastroService:
         self, id_: uuid.UUID, dados: schemas.EdicaoAndar, *, ip: str | None
     ) -> schemas.AndarCorrecaoSaida:
         try:
-            self._bloquear_rejeitado(dados.responsavel_id)
-            andar = repository.RepositorioAndares(self.session, self.contexto).obter(id_)
+            self._bloquear_cadastro(dados.responsavel_id)
+            andar = self.andares.obter(id_)
             campos = {"nome": dados.nome, "ordem": dados.ordem}
             antes = {
                 campo: getattr(andar, campo)
@@ -399,8 +414,8 @@ class CorrecaoCadastroService:
         self, id_: uuid.UUID, dados: schemas.EdicaoUnidade, *, ip: str | None
     ) -> schemas.UnidadeAnalise:
         try:
-            self._bloquear_rejeitado(dados.responsavel_id)
-            unidade = RepositorioUnidades(self.session, self.contexto).bloquear(id_)
+            self._bloquear_cadastro(dados.responsavel_id)
+            unidade = self.unidades.bloquear(id_)
             antes = (
                 {"identificacao": unidade.identificacao}
                 if unidade.identificacao != dados.identificacao
@@ -434,7 +449,7 @@ class CorrecaoCadastroService:
         self, dados: schemas.AcaoCorrecao, *, ip: str | None, relogio: Relogio = agora
     ) -> schemas.ReenvioSaida:
         try:
-            condominio = self._bloquear_rejeitado(dados.responsavel_id)
+            condominio = self._bloquear_cadastro(dados.responsavel_id, somente_rejeitado=True)
             momento = relogio()
             condominio.status = "pendente"
             condominio.enviado_em = momento
@@ -462,6 +477,225 @@ class CorrecaoCadastroService:
             )
             self.session.commit()
             return saida
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def _bloco_ativo(self, id_: uuid.UUID) -> Bloco:
+        bloco = self.blocos.obter(id_)
+        if not bloco.ativo:
+            raise ApiError(409, "conflict", "Estrutura inativa.", reason="estrutura_inativa")
+        return bloco
+
+    def _andar_ativo(self, id_: uuid.UUID) -> Andar:
+        andar = self.andares.obter(id_)
+        self._bloco_ativo(andar.bloco_id)
+        if not andar.ativo:
+            raise ApiError(409, "conflict", "Estrutura inativa.", reason="estrutura_inativa")
+        return andar
+
+    def _auditar_estrutura(
+        self,
+        tipo: str,
+        id_: uuid.UUID,
+        responsavel_id: uuid.UUID,
+        *,
+        antes: dict[str, object],
+        depois: dict[str, object],
+        ip: str | None,
+    ) -> None:
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+            acao="estrutura.editar",
+            recurso_tipo=tipo,
+            recurso_id=id_,
+            responsavel=ResponsavelRef("administracao", responsavel_id),
+            antes=antes,
+            depois=depois,
+        )
+
+    def cadastrar_bloco(
+        self, dados: schemas.EdicaoBloco, *, ip: str | None
+    ) -> schemas.BlocoCorrecaoSaida:
+        try:
+            self._bloquear_cadastro(dados.responsavel_id)
+            bloco = self.blocos.criar({"nome": dados.nome})
+            self._auditar_estrutura(
+                "bloco",
+                bloco.id,
+                dados.responsavel_id,
+                antes={},
+                depois={"nome": bloco.nome, "ativo": True},
+                ip=ip,
+            )
+            saida = schemas.BlocoCorrecaoSaida.model_validate(bloco)
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def cadastrar_andar(
+        self, bloco_id: uuid.UUID, dados: schemas.EdicaoAndar, *, ip: str | None
+    ) -> schemas.AndarCorrecaoSaida:
+        try:
+            self._bloquear_cadastro(dados.responsavel_id)
+            bloco = self._bloco_ativo(bloco_id)
+            andar = self.andares.criar(
+                {"bloco_id": bloco.id, "nome": dados.nome, "ordem": dados.ordem}
+            )
+            self._auditar_estrutura(
+                "andar",
+                andar.id,
+                dados.responsavel_id,
+                antes={},
+                depois={
+                    "bloco_id": bloco.id,
+                    "nome": andar.nome,
+                    "ordem": andar.ordem,
+                    "ativo": True,
+                },
+                ip=ip,
+            )
+            saida = schemas.AndarCorrecaoSaida.model_validate(andar)
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def cadastrar_unidade(
+        self,
+        andar_id: uuid.UUID,
+        dados: schemas.EdicaoUnidade,
+        *,
+        ip: str | None,
+        relogio: Relogio = agora,
+    ) -> schemas.UnidadeAnalise:
+        try:
+            condominio = self._bloquear_cadastro(dados.responsavel_id)
+            andar = self._andar_ativo(andar_id)
+            unidade = self.unidades.criar(
+                {"andar_id": andar.id, "identificacao": dados.identificacao}
+            )
+            depois: dict[str, object] = {
+                "andar_id": andar.id,
+                "identificacao": unidade.identificacao,
+                "ativo": True,
+            }
+            if condominio.status == "ativo":
+                chave = gerar_chave(self.session, unidade, relogio())
+                depois["chave_id"] = chave.id
+            self._auditar_estrutura(
+                "unidade",
+                unidade.id,
+                dados.responsavel_id,
+                antes={},
+                depois=depois,
+                ip=ip,
+            )
+            saida = schemas.UnidadeAnalise(
+                id=unidade.id, identificacao=unidade.identificacao, ativo=unidade.ativo
+            )
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def alterar_status_estrutura(
+        self,
+        tipo: schemas.TipoEstrutura,
+        id_: uuid.UUID,
+        ativo: bool,
+        dados: schemas.AcaoCorrecao,
+        *,
+        ip: str | None,
+        relogio: Relogio = agora,
+    ) -> schemas.ElementoEstruturaSaida:
+        try:
+            condominio = self._bloquear_cadastro(dados.responsavel_id)
+            item: Bloco | Andar | Unidade
+            if tipo == "blocos":
+                item = self.blocos.obter(id_)
+                recurso = "bloco"
+            elif tipo == "andares":
+                item = self.andares.obter(id_)
+                recurso = "andar"
+            else:
+                item = self.unidades.bloquear(id_)
+                recurso = "unidade"
+            if item.ativo == ativo:
+                raise ApiError(409, "conflict", "Transição inválida.", reason="transicao_invalida")
+            antes: dict[str, object] = {"ativo": item.ativo}
+            depois: dict[str, object] = {"ativo": ativo}
+            if isinstance(item, Bloco):
+                if not ativo and self.blocos.tem_unidades_ativas(item.id):
+                    raise ApiError(
+                        409,
+                        "conflict",
+                        "Há unidades ativas nesta estrutura.",
+                        reason="estrutura_com_unidades_ativas",
+                    )
+            elif isinstance(item, Andar):
+                if ativo:
+                    self._bloco_ativo(item.bloco_id)
+                elif self.andares.tem_unidades_ativas(item.id):
+                    raise ApiError(
+                        409,
+                        "conflict",
+                        "Há unidades ativas nesta estrutura.",
+                        reason="estrutura_com_unidades_ativas",
+                    )
+            else:
+                if not ativo and self.moradores.contar_da_unidade(item.id):
+                    raise ApiError(
+                        409,
+                        "conflict",
+                        "A unidade possui moradores ativos.",
+                        reason="unidade_com_vinculo_ativo",
+                    )
+                if ativo and item.andar_id is not None:
+                    self._andar_ativo(item.andar_id)
+                chave = self.chaves.vigente(item.id)
+                if not ativo and chave is not None:
+                    antes["chave_id"] = chave.id
+                    chave.revogada_em = relogio()
+                    depois["chave_id"] = None
+                elif ativo and condominio.status == "ativo" and chave is None:
+                    chave = gerar_chave(self.session, item, relogio())
+                    antes["chave_id"] = None
+                    depois["chave_id"] = chave.id
+            item.ativo = ativo
+            self.session.flush()
+            self._auditar_estrutura(
+                recurso, item.id, dados.responsavel_id, antes=antes, depois=depois, ip=ip
+            )
+            if isinstance(item, Andar):
+                saida: schemas.ElementoEstruturaSaida = schemas.AndarCorrecaoSaida.model_validate(
+                    item
+                )
+            elif isinstance(item, Bloco):
+                saida = schemas.BlocoCorrecaoSaida.model_validate(item)
+            else:
+                saida = schemas.UnidadeAnalise(
+                    id=item.id, identificacao=item.identificacao, ativo=item.ativo
+                )
+            self.session.commit()
+            return saida
+        except IntegrityError as erro:
+            self.session.rollback()
+            raise erro_de_correcao(erro) from None
         except Exception:
             self.session.rollback()
             raise

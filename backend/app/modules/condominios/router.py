@@ -233,3 +233,85 @@ def corrigir_unidade(
     return service.CorrecaoCadastroService(session, contexto).editar_unidade(
         id, dados, ip=ip_do_cliente(request)
     )
+
+
+@estrutura_router.post("/blocos", status_code=201, response_model=schemas.BlocoCorrecaoSaida)
+def adicionar_bloco(
+    dados: schemas.EdicaoBloco,
+    contexto: ContextoCadastroDep,
+    session: SessionDep,
+    request: Request,
+    response: Response,
+) -> schemas.BlocoCorrecaoSaida:
+    saida = service.CorrecaoCadastroService(session, contexto).cadastrar_bloco(
+        dados, ip=ip_do_cliente(request)
+    )
+    response.headers["Location"] = "/api/v1/condominio/estrutura"
+    return saida
+
+
+@estrutura_router.post(
+    "/blocos/{id}/andares", status_code=201, response_model=schemas.AndarCorrecaoSaida
+)
+def adicionar_andar(
+    id: uuid.UUID,
+    dados: schemas.EdicaoAndar,
+    contexto: ContextoCadastroDep,
+    session: SessionDep,
+    request: Request,
+    response: Response,
+) -> schemas.AndarCorrecaoSaida:
+    saida = service.CorrecaoCadastroService(session, contexto).cadastrar_andar(
+        id, dados, ip=ip_do_cliente(request)
+    )
+    response.headers["Location"] = "/api/v1/condominio/estrutura"
+    return saida
+
+
+@estrutura_router.post(
+    "/andares/{id}/unidades", status_code=201, response_model=schemas.UnidadeAnalise
+)
+def adicionar_unidade(
+    id: uuid.UUID,
+    dados: schemas.EdicaoUnidade,
+    contexto: ContextoCadastroDep,
+    session: SessionDep,
+    request: Request,
+    response: Response,
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+) -> schemas.UnidadeAnalise:
+    saida = service.CorrecaoCadastroService(session, contexto).cadastrar_unidade(
+        id, dados, ip=ip_do_cliente(request), relogio=relogio
+    )
+    response.headers["Location"] = "/api/v1/condominio/estrutura"
+    return saida
+
+
+@estrutura_router.post("/{tipo}/{id}/desativacao", response_model=schemas.ElementoEstruturaSaida)
+def desativar_estrutura(
+    tipo: schemas.TipoEstrutura,
+    id: uuid.UUID,
+    dados: schemas.AcaoCorrecao,
+    contexto: ContextoCadastroDep,
+    session: SessionDep,
+    request: Request,
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+) -> schemas.ElementoEstruturaSaida:
+    return service.CorrecaoCadastroService(session, contexto).alterar_status_estrutura(
+        tipo, id, False, dados, ip=ip_do_cliente(request), relogio=relogio
+    )
+
+
+@estrutura_router.post("/{tipo}/{id}/reativacao", response_model=schemas.ElementoEstruturaSaida)
+def reativar_estrutura(
+    tipo: schemas.TipoEstrutura,
+    id: uuid.UUID,
+    dados: schemas.AcaoCorrecao,
+    contexto: ContextoCadastroDep,
+    session: SessionDep,
+    request: Request,
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+) -> schemas.ElementoEstruturaSaida:
+    return service.CorrecaoCadastroService(session, contexto).alterar_status_estrutura(
+        tipo, id, True, dados, ip=ip_do_cliente(request), relogio=relogio
+    )

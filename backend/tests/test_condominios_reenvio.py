@@ -179,7 +179,6 @@ def test_reenvios_preservam_todas_as_rejeicoes(client, session, rejeitado):
     )
     assert fila.json()["items"][0]["id"] == str(c.a.condominio.id)
     assert client.post(BASE + "/reenvio", headers=headers, json=corpo).status_code == 409
-    assert client.put(BASE, headers=headers, json=dados(c)).status_code == 409
     assert client.get("/api/v1/encomendas", headers=headers).status_code == 403
 
     rejeicao = client.post(
@@ -204,16 +203,14 @@ def test_reenvios_preservam_todas_as_rejeicoes(client, session, rejeitado):
 
 
 @pytest.mark.parametrize("estado", ["pendente", "ativo", "desativado"])
-def test_escritas_exigem_estado_rejeitado(client, session, rejeitado, estado):
+def test_reenvio_exige_estado_rejeitado(client, session, rejeitado, estado):
     c = rejeitado
     c.a.condominio.status = estado
     session.commit()
-    for metodo, rota, corpo in escritas(c):
-        resposta = client.request(
-            metodo, rota, headers=c.a.cabecalho_de("administracao"), json=corpo
-        )
-        assert resposta.status_code == 409, resposta.text
-        assert resposta.json()["error"]["reason"] == "transicao_invalida"
+    metodo, rota, corpo = escritas(c)[-1]
+    resposta = client.request(metodo, rota, headers=c.a.cabecalho_de("administracao"), json=corpo)
+    assert resposta.status_code == 409, resposta.text
+    assert resposta.json()["error"]["reason"] == "transicao_invalida"
     session.refresh(c.a.condominio)
     assert c.a.condominio.status == estado
     assert eventos(session, c.a.condominio.id) == []
@@ -293,7 +290,7 @@ def test_responsavel_obrigatorio_e_campos_protegidos(client, session, rejeitado)
     )
     assert (
         client.put(
-            BASE, headers=headers, json=dados(c) | {"logo_arquivo_id": str(uuid.uuid4())}
+            BASE, headers=headers, json=dados(c) | {"documentos": [str(uuid.uuid4())]}
         ).status_code
         == 422
     )

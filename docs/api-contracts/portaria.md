@@ -74,7 +74,8 @@ Para ler a foto, usar `GET /arquivos/{foto_arquivo_id}/download` com Bearer. A r
 
 - `GET /portaria/visitantes?busca=&unidade_id=&page=&page_size=` busca cadastros pelo nome, com unidade opcional.
 - `POST /portaria/visitantes/busca-documento?page=&page_size=` consulta por CPF completo. O corpo contém `unidade_id` e `cpf`; o CPF não vai na URL nem no retorno.
-- Ambas retornam `items`, `total`, `page`, `page_size`. As opções incluem `id`, `nome`, `unidade_id`, `unidade` (id e nome com bloco e andar), `entrada_prevista`, `saida_prevista` e `ambigua`. Se nome, unidade e período forem iguais dentro do resultado, `ambigua=true` mesmo em páginas diferentes. A portaria deve refinar a busca ou solicitar ao morador que revise o cadastro.
+- Ambas retornam `items`, `total`, `page`, `page_size`. As opções incluem `id`, `nome`, `unidade_id`, `unidade` (id e nome com bloco e andar), `entrada_prevista`, `saida_prevista`, `cancelado` e `ambigua`. Se nome, unidade e período forem iguais dentro do resultado, `ambigua=true` mesmo em páginas diferentes. A busca por CPF distingue a via ativa da cancelada porque o documento confirma a identidade. A portaria deve refinar a busca ou solicitar ao morador que revise o cadastro se a ambiguidade persistir.
+- Cadastros cancelados aparecem nas duas buscas para que a portaria possa registrar um novo contato com o morador. A consulta de autorização prévia devolve uma lista vazia para esses cadastros.
 
 | Método e rota | Perfil / escopo | Entrada | Sucesso |
 | --- | --- | --- | --- |
@@ -112,7 +113,7 @@ Entrada após contato externo:
 }
 ```
 
-Exigir **exatamente um** entre `autorizacao_id` e `contato`. Canal: `interfone` ou `telefone`. O morador consultado deve ter vínculo ativo na unidade. Contato com `resposta` diferente de `autorizou` não cria visita (422); registrar separadamente em `/portaria/contatos`, com os mesmos dados e `resposta = negou | sem_resposta`. Retorno do contato contém `id`, referências, resposta, canal, `registrado_em` e funcionário; nunca uma visita liberada.
+Exigir **exatamente um** entre `autorizacao_id` e `contato`. Canal: `interfone` ou `telefone`. O morador consultado deve ter vínculo ativo na unidade. Se a autorização prévia estiver ausente, expirada ou revogada por cancelamento, uma nova entrada exige contato com `resposta = autorizou`. Registrar `negou` ou `sem_resposta` separadamente em `/portaria/contatos` (enviar essas respostas em `POST /visitas` retorna 422). O retorno do contato contém `id`, referências, resposta, canal, `registrado_em` e funcionário. O nome da unidade inclui bloco e andar quando disponíveis.
 
 Visita retorna `id`, `visitante` (id/nome), `unidade` (id/nome), `status`, `entrada` (em/funcionário), `autorizacao_id` e `autorizacao` com a janela registrada ou `contato`, e `saida` (null até encerramento; depois em/funcionário). A conta autenticada permanece na auditoria interna. O histórico conserva a evidência validada na entrada. Registros anteriores à migração podem retornar os campos de evidência como `null`.
 

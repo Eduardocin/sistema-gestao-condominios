@@ -443,6 +443,7 @@ function VisitorsWorkspace({ name }: { name: string }) {
                 </Text>
                 <Text size="sm">
                   {dataPrevista(item.entrada_prevista)} a {dataPrevista(item.saida_prevista)}
+                  {item.cancelado && ' · Cadastro cancelado'}
                 </Text>
                 {item.ambigua ? (
                   <Notice tone="warning">

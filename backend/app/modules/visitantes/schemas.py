@@ -126,6 +126,7 @@ class Referencia(BaseModel):
 class VisitantePortaria(OpcaoVisitante):
     unidade: Referencia
     ambigua: bool
+    cancelado: bool
 
 
 class Autorizacao(BaseModel):

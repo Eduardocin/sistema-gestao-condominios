@@ -216,6 +216,7 @@ class VisitantesService:
                         id=item.unidade_id, nome=nome_unidade(identificacao, bloco, andar)
                     ),
                     ambigua=ambigua,
+                    cancelado=item.cancelado_em is not None,
                 )
                 for item, identificacao, bloco, andar, ambigua in linhas
             ],
@@ -293,8 +294,6 @@ class VisitantesService:
     def entrar(self, dados: s.EntradaVisita, ip: str | None) -> s.VisitaSaida:
         item = self._destino(dados.visitante_id, dados.unidade_id, trancar=True)
         self._funcionario(dados.funcionario_id)
-        if item.cancelado_em is not None:
-            raise conflito("visitante_cancelado", "Este cadastro foi cancelado.")
         if self.visitas.tem_visita(item.id, aberta=True):
             raise conflito(
                 "visita_em_andamento", "Já existe uma visita em andamento para este cadastro."
@@ -425,8 +424,6 @@ class VisitantesService:
         item = self._destino(dados.visitante_id, dados.unidade_id, trancar=True)
         self._funcionario(dados.funcionario_id)
         self._contato(item.unidade_id, dados.morador_id)
-        if item.cancelado_em is not None:
-            raise conflito("visitante_cancelado", "Este cadastro foi cancelado.")
         contato = self.contatos.criar({**dados.model_dump(), "registrado_em": self.relogio()})
         self._auditar(
             "visita.registrar_contato",
@@ -442,14 +439,16 @@ class VisitantesService:
 
     @staticmethod
     def _contato_saida(linha: LinhaContato) -> s.ContatoSaida:
-        contato, visitante, unidade, funcionario = linha
+        contato, visitante, identificacao, bloco, andar, funcionario = linha
         return s.ContatoSaida.model_validate(
             {
                 **{campo: getattr(contato, campo) for campo in s.ContatoSemEntrada.model_fields},
                 "id": contato.id,
                 "registrado_em": contato.registrado_em,
                 "visitante": s.Referencia(id=contato.visitante_id, nome=visitante),
-                "unidade": s.Referencia(id=contato.unidade_id, nome=unidade),
+                "unidade": s.Referencia(
+                    id=contato.unidade_id, nome=nome_unidade(identificacao, bloco, andar)
+                ),
                 "funcionario": s.Referencia(id=contato.funcionario_id, nome=funcionario),
             }
         )

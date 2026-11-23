@@ -22,6 +22,7 @@ export interface Visitante {
   entrada_prevista: string
   saida_prevista: string
   ambigua: boolean
+  cancelado: boolean
 }
 export interface Autorizacao {
   id: string

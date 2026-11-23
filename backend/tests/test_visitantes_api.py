@@ -13,13 +13,183 @@ from app.db.session import get_session
 from app.main import create_app
 from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.funcionarios.models import Funcionario
-from app.modules.unidades.models import PermissaoAba
+from app.modules.unidades.models import Andar, Bloco, PermissaoAba
 from app.modules.visitantes.models import RegistroVisita, Visitante
 from tests.auditoria.conftest import cenario as cenario
 from tests.autorizacao.cenario import montar_predio
 from tests.autorizacao.conftest import session as session
 
 pytestmark = pytest.mark.postgres
+
+
+@pytest.fixture
+def portaria(session):
+    predio = montar_predio(session)
+    funcionario = Funcionario(
+        condominio_id=predio.condominio.id, nome="Porteiro de teste", funcao="porteiro"
+    )
+    session.add_all(
+        [
+            funcionario,
+            PermissaoAba(
+                condominio_id=predio.condominio.id,
+                morador_unidade_id=predio.morador_unidade.id,
+                aba="visitantes",
+                com_acesso=True,
+            ),
+        ]
+    )
+    session.flush()
+    momento = datetime(2030, 4, 2, 10, tzinfo=FUSO_CONDOMINIO)
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_relogio] = lambda: lambda: momento
+    with TestClient(app) as client:
+        yield client, predio, funcionario
+
+
+def cadastrar_visitante_para_contato(client, predio):
+    cadastro = client.post(
+        "/api/v1/visitantes",
+        headers=predio.cabecalho_de("morador"),
+        json={
+            "unidade_id": str(predio.unidade_101.id),
+            "nome": "Camila Exemplo",
+            "cpf": "12345678909",
+            "entrada_prevista": "2030-04-01",
+            "saida_prevista": "2030-04-03",
+        },
+    )
+    assert cadastro.status_code == 201, cadastro.text
+    return cadastro.json()["id"]
+
+
+def test_cancelamento_revoga_autorizacao_previa_e_permite_novo_contato(portaria):
+    client, predio, funcionario = portaria
+    visitante = cadastrar_visitante_para_contato(client, predio)
+    porteiro = predio.cabecalho_de("funcionario")
+    unidade = str(predio.unidade_101.id)
+    alvo = {"visitante_id": visitante, "unidade_id": unidade}
+    dados = {**alvo, "funcionario_id": str(funcionario.id)}
+    morador = {"morador_id": str(predio.morador_unidade.id), "canal": "interfone"}
+
+    autorizar = "/api/v1/portaria/autorizacoes"
+    assert client.get(autorizar, headers=porteiro, params=alvo).json()[0]["id"] == visitante
+    cancelado = client.post(
+        f"/api/v1/visitantes/{visitante}/cancelamento", headers=predio.cabecalho_de("morador")
+    )
+    assert cancelado.status_code == 200, cancelado.text
+
+    por_nome = client.get(
+        "/api/v1/portaria/visitantes", headers=porteiro, params={"busca": "Camila"}
+    )
+    por_cpf = client.post(
+        "/api/v1/portaria/visitantes/busca-documento",
+        headers=porteiro,
+        json={"unidade_id": unidade, "cpf": "12345678909"},
+    )
+    for resultado in (por_nome, por_cpf):
+        assert resultado.status_code == 200, resultado.text
+        assert [item["id"] for item in resultado.json()["items"]] == [visitante]
+
+    assert client.get(autorizar, headers=porteiro, params=alvo).json() == []
+    anterior = client.post(
+        "/api/v1/visitas",
+        headers=porteiro,
+        json={
+            **dados,
+            "autorizacao_id": visitante,
+        },
+    )
+    assert (
+        anterior.status_code == 409 and anterior.json()["error"]["reason"] == "autorizacao_invalida"
+    )
+    for resposta in ("negou", "sem_resposta"):
+        contato = client.post(
+            "/api/v1/portaria/contatos",
+            headers=porteiro,
+            json={
+                **dados,
+                **morador,
+                "resposta": resposta,
+            },
+        )
+        assert contato.status_code == 201, contato.text
+        assert contato.json()["resposta"] == resposta
+    assert client.get("/api/v1/visitas", headers=porteiro).json()["total"] == 0
+
+    nova = client.post(
+        "/api/v1/visitas",
+        headers=porteiro,
+        json={
+            **dados,
+            "contato": {**morador, "resposta": "autorizou"},
+        },
+    )
+    assert nova.status_code == 201, nova.text
+    assert nova.json()["autorizacao"] is None and nova.json()["contato"]["resposta"] == "autorizou"
+    assert client.get(autorizar, headers=porteiro, params=alvo).json() == []
+
+
+def test_historico_de_contatos_identifica_bloco_e_andar(portaria, session):
+    client, predio, funcionario = portaria
+    bloco = Bloco(condominio_id=predio.condominio.id, nome="Bloco B")
+    session.add(bloco)
+    session.flush()
+    andar = Andar(condominio_id=predio.condominio.id, bloco_id=bloco.id, nome="1º andar", ordem=1)
+    session.add(andar)
+    session.flush()
+    predio.unidade_101.andar_id = andar.id
+    predio.unidade_101.identificacao = "101"
+    session.flush()
+
+    visitante = cadastrar_visitante_para_contato(client, predio)
+    porteiro = predio.cabecalho_de("funcionario")
+    rota = "/api/v1/portaria/contatos"
+    contato = client.post(
+        rota,
+        headers=porteiro,
+        json={
+            "visitante_id": visitante,
+            "unidade_id": str(predio.unidade_101.id),
+            "funcionario_id": str(funcionario.id),
+            "morador_id": str(predio.morador_unidade.id),
+            "canal": "telefone",
+            "resposta": "negou",
+        },
+    )
+    assert contato.status_code == 201, contato.text
+    unidade = {"id": str(predio.unidade_101.id), "nome": "Bloco B / 1º andar / 101"}
+    assert contato.json()["unidade"] == unidade
+    historico = client.get(rota, headers=porteiro)
+    assert historico.status_code == 200, historico.text
+    assert historico.json()["items"][0]["unidade"] == unidade
+
+
+def test_busca_por_cpf_distingue_cadastro_ativo_de_copia_cancelada(portaria):
+    client, predio, _ = portaria
+    cancelado = cadastrar_visitante_para_contato(client, predio)
+    resposta = client.post(
+        f"/api/v1/visitantes/{cancelado}/cancelamento", headers=predio.cabecalho_de("morador")
+    )
+    assert resposta.status_code == 200, resposta.text
+    vigente = cadastrar_visitante_para_contato(client, predio)
+    porteiro = predio.cabecalho_de("funcionario")
+    busca = client.post(
+        "/api/v1/portaria/visitantes/busca-documento",
+        headers=porteiro,
+        json={"unidade_id": str(predio.unidade_101.id), "cpf": "12345678909"},
+    )
+    assert busca.status_code == 200, busca.text
+    assert {item["id"]: (item["ambigua"], item["cancelado"]) for item in busca.json()["items"]} == {
+        cancelado: (False, True),
+        vigente: (False, False),
+    }
+    por_nome = client.get(
+        "/api/v1/portaria/visitantes", headers=porteiro, params={"busca": "Camila"}
+    )
+    assert por_nome.status_code == 200, por_nome.text
+    assert [item["ambigua"] for item in por_nome.json()["items"]] == [True, True]
 
 
 def test_visita_reutiliza_autorizacao_e_contato_negado_nao_abre_visita(session):

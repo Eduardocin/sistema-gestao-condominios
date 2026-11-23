@@ -15,7 +15,7 @@ from app.modules.visitantes.schemas import Situacao, StatusVisita
 
 LinhaVisitante = tuple[Visitante, str, str | None, str | None, bool]
 LinhaVisita = tuple[RegistroVisita, str, uuid.UUID, str, str | None, str | None, str, str | None]
-LinhaContato = tuple[ContatoPortaria, str, str, str]
+LinhaContato = tuple[ContatoPortaria, str, str, str | None, str | None, str]
 
 
 class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
@@ -72,6 +72,8 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
         page: int,
         size: int,
     ) -> tuple[list[LinhaVisitante], int]:
+        # Só o CPF confirma que cadastros ativo e cancelado são da mesma pessoa.
+        situacao_no_documento = (Visitante.cancelado_em.is_not(None),) if cpf else ()
         consulta = (
             self.consulta()
             .add_columns(
@@ -84,6 +86,7 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
                         func.lower(Visitante.nome),
                         Visitante.entrada_prevista,
                         Visitante.saida_prevista,
+                        *situacao_no_documento,
                     )
                 )
                 > 1,
@@ -105,7 +108,6 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
             .where(
                 Unidade.ativo.is_(True),
                 Visitante.avulso.is_(False),
-                Visitante.cancelado_em.is_(None),
             )
         )
         if unidade_id is not None:
@@ -290,7 +292,9 @@ class RepositorioContatos(RepositorioDoCondominio[ContatoPortaria]):
     def detalhada(self) -> Select[LinhaContato]:
         return (
             self.consulta()
-            .add_columns(Visitante.nome, Unidade.identificacao, Funcionario.nome)
+            .add_columns(
+                Visitante.nome, Unidade.identificacao, Bloco.nome, Andar.nome, Funcionario.nome
+            )
             .join(
                 Visitante,
                 and_(
@@ -304,6 +308,13 @@ class RepositorioContatos(RepositorioDoCondominio[ContatoPortaria]):
                     Unidade.id == ContatoPortaria.unidade_id,
                     Unidade.condominio_id == ContatoPortaria.condominio_id,
                 ),
+            )
+            .outerjoin(
+                Andar,
+                and_(Andar.id == Unidade.andar_id, Andar.condominio_id == Unidade.condominio_id),
+            )
+            .outerjoin(
+                Bloco, and_(Bloco.id == Andar.bloco_id, Bloco.condominio_id == Andar.condominio_id)
             )
             .join(
                 Funcionario,

@@ -6,7 +6,7 @@ from sqlalchemy import Select, func, select
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
 from app.modules.auditoria.models import RegistroAuditoria
-from app.modules.condominios.models import Condominio
+from app.modules.condominios.models import Condominio, VinculoCondominio
 from app.modules.funcionarios.models import Funcionario, ResponsavelAdministracao
 from app.modules.storage.models import Arquivo
 from app.modules.usuarios.models import Usuario
@@ -97,30 +97,80 @@ class RepositorioResponsaveis(RepositorioDoCondominio[ResponsavelAdministracao])
             raise RecursoNaoEncontrado
         return item
 
-    def bloquear_cadastro(self) -> None:
-        # Serializa o teste de unicidade por nome entre cadastros concorrentes do prédio.
-        if (
-            self.session.scalar(
-                select(Condominio.id)
-                .where(Condominio.id == self.contexto.condominio_id)
-                .with_for_update()
-            )
-            is None
-        ):
+    def bloquear_cadastro(self) -> Condominio:
+        # Ordem da US-210: condomínio -> responsável -> conta. NO KEY UPDATE é compatível
+        # com KEY SHARE das FKs de operações que já validaram um responsável (FOR SHARE).
+        condominio = self.session.scalar(
+            select(Condominio)
+            .where(Condominio.id == self.contexto.condominio_id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        if condominio is None:
             raise RecursoNaoEncontrado
+        return condominio
 
-    def nome_em_uso(self, nome: str) -> bool:
+    def bloquear(self, id_: uuid.UUID) -> ResponsavelAdministracao:
+        item = self.session.scalar(
+            self.consulta()
+            .where(ResponsavelAdministracao.id == id_)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if item is None:
+            raise RecursoNaoEncontrado
+        return item
+
+    def contar_ativos(self) -> int:
+        consulta = self.consulta().where(ResponsavelAdministracao.ativo.is_(True))
+        return self.session.scalar(select(func.count()).select_from(consulta.subquery())) or 0
+
+    def nome_em_uso(self, nome: str, *, exceto: uuid.UUID | None = None) -> bool:
+        consulta = self.consulta().where(
+            ResponsavelAdministracao.ativo.is_(True),
+            func.lower(ResponsavelAdministracao.nome) == nome.lower(),
+        )
+        if exceto is not None:
+            consulta = consulta.where(ResponsavelAdministracao.id != exceto)
+        return self.session.scalar(consulta.limit(1)) is not None
+
+
+class RepositorioContaFuncionarios(RepositorioDoCondominio[VinculoCondominio]):
+    modelo = VinculoCondominio
+
+    def vinculo(self) -> VinculoCondominio | None:
+        return self.session.scalar(
+            self.consulta()
+            .where(VinculoCondominio.perfil == "funcionario")
+            .execution_options(populate_existing=True)
+        )
+
+    def usuario(self, vinculo: VinculoCondominio, *, bloquear: bool = False) -> Usuario:
+        # ID obtido exclusivamente do vínculo do condomínio, nunca recebido do cliente.
+        consulta = select(Usuario).where(Usuario.id == vinculo.usuario_id)
+        if bloquear:
+            consulta = consulta.with_for_update(key_share=True)
+        usuario = self.session.scalar(consulta.execution_options(populate_existing=True))
+        if usuario is None:
+            raise RecursoNaoEncontrado
+        return usuario
+
+    def quantidade_vinculos(self, usuario_id: uuid.UUID) -> int:
+        # Verificação global restrita à identidade já localizada neste condomínio.
         return (
             self.session.scalar(
-                self.consulta()
-                .where(
-                    ResponsavelAdministracao.ativo.is_(True),
-                    func.lower(ResponsavelAdministracao.nome) == nome.lower(),
-                )
-                .limit(1)
+                select(func.count())
+                .select_from(VinculoCondominio)
+                .where(VinculoCondominio.usuario_id == usuario_id)
             )
-            is not None
+            or 0
         )
+
+    def criar_usuario(self, *, login: str, senha_hash: str) -> Usuario:
+        usuario = Usuario(nome="Conta de Funcionários", email=login, senha_hash=senha_hash)
+        self.session.add(usuario)
+        self.session.flush()
+        return usuario
 
 
 class RepositorioFotos(RepositorioDoCondominio[Arquivo]):

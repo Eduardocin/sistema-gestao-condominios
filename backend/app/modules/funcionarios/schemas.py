@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.validation import normalizar_email, validar_telefone
 from app.modules.auditoria.schemas import ReferenciaAuditoria
+from app.modules.contas.schemas import Senha, conferir_senha
 
 
 class NomeEntrada(BaseModel):
@@ -66,6 +67,30 @@ class ResponsavelEntrada(NomeEntrada):
 
 class ResponsavelSaida(FuncionarioNome):
     ativo: bool
+
+
+class EntradaVazia(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ContaFuncionariosEntrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    login: str = Field(max_length=254)
+    senha: Senha
+    responsavel_id: uuid.UUID
+
+    _login = field_validator("login")(normalizar_email)
+
+    @model_validator(mode="after")
+    def validar_senha(self) -> "ContaFuncionariosEntrada":
+        conferir_senha(self.senha, self.login)
+        return self
+
+
+class ContaFuncionariosSaida(BaseModel):
+    login: str
+    atualizada_em: datetime | None
 
 
 class EventoHistoricoFuncionario(BaseModel):

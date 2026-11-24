@@ -5,13 +5,17 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
+from app.core.tempo import Relogio, get_relogio
 from app.db.session import get_session
 from app.modules.auditoria.contexto import ip_do_cliente
 from app.modules.auth.autorizacao import require_permission
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.funcionarios.dependencies import contexto_responsaveis
 from app.modules.funcionarios.schemas import (
+    ContaFuncionariosEntrada,
+    ContaFuncionariosSaida,
     DesligamentoEntrada,
+    EntradaVazia,
     FuncionarioEntrada,
     FuncionarioNome,
     FuncionarioSaida,
@@ -20,10 +24,11 @@ from app.modules.funcionarios.schemas import (
     ResponsavelEntrada,
     ResponsavelSaida,
 )
-from app.modules.funcionarios.service import FuncionariosService
+from app.modules.funcionarios.service import ContaFuncionariosService, FuncionariosService
 
 router = APIRouter(prefix="/funcionarios", tags=["funcionarios"])
 responsaveis_router = APIRouter(prefix="/responsaveis-administracao", tags=["responsaveis"])
+conta_router = APIRouter(prefix="/conta-funcionarios", tags=["conta-funcionarios"])
 SessionDep = Annotated[Session, Depends(get_session)]
 ResponsaveisContextoDep = Annotated[ContextoCondominio, Depends(contexto_responsaveis)]
 
@@ -140,4 +145,57 @@ def cadastrar_responsavel(
     service = FuncionariosService(session, contexto)
     return ResponsavelSaida.model_validate(
         service.cadastrar_responsavel(dados.nome, ip=ip_do_cliente(request))
+    )
+
+
+@responsaveis_router.put("/{responsavel_id}", response_model=ResponsavelSaida)
+def editar_responsavel(
+    responsavel_id: uuid.UUID,
+    dados: ResponsavelEntrada,
+    session: SessionDep,
+    contexto: ResponsaveisContextoDep,
+    request: Request,
+) -> ResponsavelSaida:
+    service = FuncionariosService(session, contexto)
+    return ResponsavelSaida.model_validate(
+        service.editar_responsavel(responsavel_id, dados.nome, ip=ip_do_cliente(request))
+    )
+
+
+@responsaveis_router.post("/{responsavel_id}/desativacao", response_model=ResponsavelSaida)
+def desativar_responsavel(
+    responsavel_id: uuid.UUID,
+    dados: EntradaVazia,
+    session: SessionDep,
+    contexto: ResponsaveisContextoDep,
+    request: Request,
+) -> ResponsavelSaida:
+    service = FuncionariosService(session, contexto)
+    return ResponsavelSaida.model_validate(
+        service.desativar_responsavel(responsavel_id, ip=ip_do_cliente(request))
+    )
+
+
+@conta_router.get("", response_model=ContaFuncionariosSaida)
+def consultar_conta_funcionarios(
+    session: SessionDep,
+    contexto: Annotated[
+        ContextoCondominio, Depends(require_permission("contas_compartilhadas:ver"))
+    ],
+) -> ContaFuncionariosSaida:
+    return ContaFuncionariosService(session, contexto).obter()
+
+
+@conta_router.put("", response_model=ContaFuncionariosSaida)
+def definir_conta_funcionarios(
+    dados: ContaFuncionariosEntrada,
+    session: SessionDep,
+    contexto: Annotated[
+        ContextoCondominio, Depends(require_permission("contas_compartilhadas:editar"))
+    ],
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+    request: Request,
+) -> ContaFuncionariosSaida:
+    return ContaFuncionariosService(session, contexto, relogio).definir(
+        dados, ip=ip_do_cliente(request)
     )

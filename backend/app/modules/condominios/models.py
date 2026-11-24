@@ -78,6 +78,19 @@ class VinculoCondominio(Base):
         ),
         Index("ix_vinculos_condominio_condominio_id", "condominio_id"),
         Index("ix_vinculos_condominio_unidade_id_condominio_id", "unidade_id", "condominio_id"),
+        # A identidade de Funcionários é permanente, mesmo com o vínculo inativo (US-210).
+        Index(
+            "uq_vinculos_funcionario_condominio",
+            "condominio_id",
+            unique=True,
+            postgresql_where=text("perfil = 'funcionario'"),
+        ),
+        Index(
+            "uq_vinculos_funcionario_usuario",
+            "usuario_id",
+            unique=True,
+            postgresql_where=text("perfil = 'funcionario'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -89,6 +102,8 @@ class VinculoCondominio(Base):
     unidade_id: Mapped[uuid.UUID | None]
     perfil: Mapped[str] = mapped_column(String(20))
     ativo: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # Só a US-210 escreve. NULL significa que a data das credenciais legadas é desconhecida.
+    credenciais_atualizadas_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

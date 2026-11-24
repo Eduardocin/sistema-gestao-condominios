@@ -8,6 +8,7 @@ import uuid
 from dataclasses import replace
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
@@ -220,22 +221,29 @@ class OcorrenciasService:
         ja_anexados = {anexo.arquivo_id for anexo in self.ocorrencias.anexos(ocorrencia_id)}
         if ja_anexados & set(dados.anexos):
             raise ApiError(422, "validation_error", MENSAGEM_ANEXO_INVALIDO)
-        interacao = self.interacoes.criar(
-            {
-                "ocorrencia_id": ocorrencia_id,
-                "tipo": "comentario",
-                "texto": dados.texto,
-                "usuario_id": self.contexto.usuario_id,
-            }
-        )
-        for arquivo_id in dados.anexos:
-            self.anexos.criar(
-                {
-                    "ocorrencia_id": ocorrencia_id,
-                    "arquivo_id": arquivo_id,
-                    "interacao_id": interacao.id,
-                }
-            )
+        try:
+            with self.session.begin_nested():
+                interacao = self.interacoes.criar(
+                    {
+                        "ocorrencia_id": ocorrencia_id,
+                        "tipo": "comentario",
+                        "texto": dados.texto,
+                        "usuario_id": self.contexto.usuario_id,
+                    }
+                )
+                for arquivo_id in sorted(dados.anexos):
+                    self.anexos.criar(
+                        {
+                            "ocorrencia_id": ocorrencia_id,
+                            "arquivo_id": arquivo_id,
+                            "interacao_id": interacao.id,
+                        }
+                    )
+        except IntegrityError as erro:
+            restricao = getattr(getattr(erro.orig, "diag", None), "constraint_name", None)
+            if restricao != "pk_ocorrencia_anexos":
+                raise
+            raise ApiError(422, "validation_error", MENSAGEM_ANEXO_INVALIDO) from erro
         interacao_id = interacao.id
         self.session.commit()
         return self._interacao(ocorrencia_id, interacao_id)

@@ -1150,6 +1150,22 @@ def test_relatorio_respeita_periodo_e_unidade(client, session):
     assert [i["unidade"]["id"] for i in so_102["por_unidade"]] == [str(predio.unidade_102.id)]
 
 
+@pytest.mark.parametrize("recurso", ["/encomendas", "/encomendas/relatorio"])
+def test_consultas_aceitam_ultima_data_do_calendario(client, session, recurso):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    criar_encomenda(session, predio, funcionario, descricao="Caixa para consultar")
+    resposta = client.get(
+        f"/api/v1{recurso}",
+        headers=predio.cabecalho_de("administracao"),
+        params={"data_ate": "9999-12-31"},
+    )
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()
+    total = dados["totais"]["registradas"] if recurso.endswith("/relatorio") else dados["total"]
+    assert total == 1
+
+
 def test_relatorio_vazio_devolve_zeros(client, session):
     predio = montar_predio(session)
     dados = client.get(

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.core.permissoes import Perfil
 from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.ocorrencias.models import Ocorrencia, OcorrenciaAnexo, OcorrenciaInteracao
+from app.modules.ocorrencias.repository import RepositorioOcorrencias
 from tests.ocorrencias.cenario import criar_arquivo, criar_interacao, criar_ocorrencia
 from tests.reservas.cenario import criar_responsavel, definir_aba
 
@@ -223,6 +224,27 @@ def test_comentario_nao_reaproveita_anexo_ja_na_ocorrencia(client, session, pred
         select(OcorrenciaAnexo).where(OcorrenciaAnexo.ocorrencia_id == ocorrencia.id)
     ).all()
     assert len(total) == 1
+
+
+def test_comentario_reverte_gravacao_se_o_anexo_for_vinculado_em_paralelo(
+    client, session, predio, morador, monkeypatch
+):
+    foto = criar_arquivo(session, predio)
+    ocorrencia = criar_ocorrencia(session, predio, anexos=(foto,))
+    # Simula uma leitura feita antes de o outro pedido gravar o vínculo.
+    monkeypatch.setattr(RepositorioOcorrencias, "anexos", lambda *_: [])
+    resposta = client.post(
+        f"{URL}/{ocorrencia.id}/comentarios",
+        headers=morador,
+        json={"texto": "Mesmo arquivo", "anexos": [str(foto.id)]},
+    )
+    assert resposta.status_code == 422, resposta.text
+    assert (
+        session.scalar(
+            select(OcorrenciaInteracao).where(OcorrenciaInteracao.ocorrencia_id == ocorrencia.id)
+        )
+        is None
+    )
 
 
 # --- reabertura -------------------------------------------------------------------------------

@@ -4,13 +4,14 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.core.permissoes import Perfil
 from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.avisos.models import Aviso
 from app.modules.notificacoes.models import EnvioEmail
 from app.modules.reservas.models import BloqueioArea, Reserva
+from app.modules.reservas.repository import RepositorioReservas
 from tests.reservas.cenario import (
     AGORA,
     DIA,
@@ -403,6 +404,44 @@ def test_com_confirmacao_cancela_avisa_enfileira_e_audita(
 
     # O horário fica livre: a unidade reserva de novo noutra data, e a agenda mostra o bloqueio.
     assert contar(session, BloqueioArea, BloqueioArea.area_id == area.id) == 1
+
+
+def test_bloqueio_preserva_cancelamento_ocorrido_apos_a_consulta(
+    client, session, predio, area, adm, responsavel, monkeypatch
+):
+    reserva = criar_reserva(session, predio, area, data=DIA, hora=18)
+    consulta = RepositorioReservas.afetadas_por_bloqueio
+
+    def consultar_e_simular_cancelamento(repo, *args, **kwargs):
+        afetadas = consulta(repo, *args, **kwargs)
+        # Reproduz a linha já carregada na sessão e a atualização posterior no banco.
+        repo.session.execute(
+            text(
+                "UPDATE reservas SET status = 'cancelada', cancelada_em = now(), "
+                "cancelada_por_usuario_id = :morador WHERE id = :reserva"
+            ),
+            {"morador": predio.morador.id, "reserva": reserva.id},
+        )
+        return afetadas
+
+    monkeypatch.setattr(
+        RepositorioReservas, "afetadas_por_bloqueio", consultar_e_simular_cancelamento
+    )
+    resposta = client.post(
+        url(area),
+        headers=adm,
+        json=corpo(responsavel, DIA, DIA, confirmar_cancelamentos=True),
+    )
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["reservas_canceladas"] == 0
+    session.refresh(reserva)
+    assert reserva.cancelada_por_usuario_id == predio.morador.id
+    assert reserva.cancelada_responsavel_id is None
+    assert contar(session, Aviso, Aviso.condominio_id == predio.condominio.id) == 0
+    assert contar(session, EnvioEmail, EnvioEmail.recurso_id == reserva.id) == 0
+    [bloqueio] = eventos(session, predio, "area.bloquear")
+    assert bloqueio.depois["reservas_canceladas"] == 0
+    assert eventos(session, predio, "reserva.cancelar") == []
 
 
 def test_confirmar_sem_reservas_afetadas_nao_cria_aviso_nem_email(

@@ -687,6 +687,7 @@ class BloqueiosService:
         )
         ctx = ContextoAuditoria.do_condominio(self.contexto, ip=ip)
         ref = ResponsavelRef("administracao", responsavel.id)
+        canceladas = self._cancelar(afetadas, dados.motivo, responsavel.id, ctx, ref)
         auditoria.registrar_acao(
             self.session,
             ctx=ctx,
@@ -700,11 +701,10 @@ class BloqueiosService:
                 "data_inicio": dados.data_inicio.isoformat(),
                 "data_fim": dados.data_fim.isoformat(),
                 "motivo": dados.motivo,
-                "reservas_canceladas": len(afetadas),
+                "reservas_canceladas": len(canceladas),
             },
         )
 
-        canceladas = self._cancelar(afetadas, dados.motivo, responsavel.id, ctx, ref)
         self._avisar_unidades(area, canceladas, dados, responsavel.id, ip)
         self.session.commit()
         return self._criado(bloqueio, responsavel.nome, len(canceladas))

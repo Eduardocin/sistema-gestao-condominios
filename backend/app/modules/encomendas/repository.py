@@ -69,7 +69,7 @@ def _filtros(
         filtros.append(
             Encomenda.registrada_em >= datetime.combine(data_de, time.min, FUSO_CONDOMINIO)
         )
-    if data_ate is not None:
+    if data_ate is not None and data_ate < date.max:
         filtros.append(
             Encomenda.registrada_em
             < datetime.combine(data_ate + timedelta(days=1), time.min, FUSO_CONDOMINIO)

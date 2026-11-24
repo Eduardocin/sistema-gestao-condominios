@@ -289,7 +289,12 @@ class RepositorioReservas(RepositorioDoCondominio[Reserva]):
     def bloquear(self, reserva_id: uuid.UUID) -> Reserva | None:
         """A reserva travada até o fim da transação: dois cancelamentos simultâneos não passam
         juntos pela checagem de status."""
-        consulta = self.consulta().where(Reserva.id == reserva_id).with_for_update()
+        consulta = (
+            self.consulta()
+            .where(Reserva.id == reserva_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         return self.session.scalar(consulta)
 
     def _contar(self, consulta: Select[Any]) -> int:

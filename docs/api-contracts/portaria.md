@@ -1,6 +1,6 @@
 # Portaria — contrato REST (TASK-12)
 
-Status: encomendas (TASK-36) e entrada e saída de visitantes (TASK-37) têm API e telas autenticadas. A prévia `/prototipos/portaria` continua usando dados locais. Cadastro avulso e consulta de veículos na portaria ficam na TASK-64.
+Status: encomendas (TASK-36), entrada e saída de visitantes (TASK-37), cadastro avulso e consulta de veículos (TASK-64) têm API e telas autenticadas. A prévia `/prototipos/portaria` usa dados locais.
 
 Base: `/api/v1`. JSON em UTF-8, IDs UUID e datas ISO 8601 com fuso, emitidas pelo servidor. Na interface, datas são apresentadas no fuso do condomínio. Atualizações de status usam ações explícitas, sem `PATCH status` genérico.
 
@@ -74,7 +74,8 @@ Para ler a foto, usar `GET /arquivos/{foto_arquivo_id}/download` com Bearer. A r
 
 - `GET /portaria/visitantes?busca=&unidade_id=&page=&page_size=` busca cadastros pelo nome, com unidade opcional.
 - `POST /portaria/visitantes/busca-documento?page=&page_size=` consulta por CPF completo. O corpo contém `unidade_id` e `cpf`; o CPF não vai na URL nem no retorno.
-- Ambas retornam `items`, `total`, `page`, `page_size`. As opções incluem `id`, `nome`, `unidade_id`, `unidade` (id e nome com bloco e andar), `entrada_prevista`, `saida_prevista` e `ambigua`. Se nome, unidade e período forem iguais dentro do resultado, `ambigua=true` mesmo em páginas diferentes. A portaria deve refinar a busca ou solicitar ao morador que revise o cadastro.
+- Ambas retornam `items`, `total`, `page`, `page_size`. As opções incluem `id`, `nome`, `unidade_id`, `unidade` (id e nome com bloco e andar), `entrada_prevista`, `saida_prevista`, `cancelado` e `ambigua`. Se nome, unidade e período forem iguais dentro do resultado, `ambigua=true` mesmo em páginas diferentes. A busca por CPF distingue a via ativa da cancelada porque o documento confirma a identidade. A portaria deve refinar a busca ou solicitar ao morador que revise o cadastro se a ambiguidade persistir.
+- Cadastros cancelados aparecem nas duas buscas para que a portaria possa registrar um novo contato com o morador. A consulta de autorização prévia devolve uma lista vazia para esses cadastros.
 
 | Método e rota | Perfil / escopo | Entrada | Sucesso |
 | --- | --- | --- | --- |
@@ -90,7 +91,7 @@ No DER, `entrada_prevista` e `saida_prevista` são datas inclusivas no fuso do c
 | --- | --- | --- | --- |
 | `GET /visitas` | Funcionário | `busca`, `status`, paginação | 200, lista |
 | `GET /visitas/{id}` | Funcionário | — | 200, histórico |
-| `POST /visitas` | Funcionário | Entrada autorizada abaixo | 201, visita `em_andamento` |
+| `POST /visitas` | Funcionário | Entrada autorizada de visitante cadastrado | 201, visita `em_andamento` |
 | `POST /visitas/{id}/saida` | Funcionário | `funcionario_id` | 200, visita `encerrada` |
 | `POST /portaria/contatos` | Funcionário | Contato negado/sem resposta abaixo | 201, contato sem visita |
 | `GET /portaria/contatos` | Funcionário | Paginação | 200, lista de contatos |
@@ -112,11 +113,23 @@ Entrada após contato externo:
 }
 ```
 
-Exigir **exatamente um** entre `autorizacao_id` e `contato`. Canal: `interfone` ou `telefone`. O morador consultado deve ter vínculo ativo na unidade. Contato com `resposta` diferente de `autorizou` não cria visita (422); registrar separadamente em `/portaria/contatos`, com os mesmos dados e `resposta = negou | sem_resposta`. Retorno do contato contém `id`, referências, resposta, canal, `registrado_em` e funcionário; nunca uma visita liberada.
+Exigir **exatamente um** entre `autorizacao_id` e `contato`. Canal: `interfone` ou `telefone`. O morador consultado deve ter vínculo ativo na unidade. Se a autorização prévia estiver ausente, expirada ou revogada por cancelamento, uma nova entrada exige contato com `resposta = autorizou`. Registrar `negou` ou `sem_resposta` separadamente em `/portaria/contatos` (enviar essas respostas em `POST /visitas` retorna 422). O retorno do contato contém `id`, referências, resposta, canal, `registrado_em` e funcionário. O nome da unidade inclui bloco e andar quando disponíveis.
 
 Visita retorna `id`, `visitante` (id/nome), `unidade` (id/nome), `status`, `entrada` (em/funcionário), `autorizacao_id` e `autorizacao` com a janela registrada ou `contato`, e `saida` (null até encerramento; depois em/funcionário). A conta autenticada permanece na auditoria interna. O histórico conserva a evidência validada na entrada. Registros anteriores à migração podem retornar os campos de evidência como `null`.
 
-Na entrada: validar visitante existente e cadastrado para a unidade selecionada; não admitir visitante avulso nesta etapa; verificar a autorização naquele momento e impedir outra visita em andamento do mesmo cadastro. A autorização não é consumida: após registrar a saída, outra visita pode usar a mesma permissão enquanto o período estiver vigente. A unicidade de visita aberta deve ser garantida também no banco; pedidos concorrentes para o mesmo cadastro só podem gerar uma visita ativa, com 409 para o perdedor. Na saída: aceitar somente `em_andamento`, preservar histórico e impedir repetição (409). Sem saída registrada, a visita permanece ativa, sem confirmação do morador ou encerramento automático. Fora do período, exigir novo contato externo autorizado antes de uma nova entrada.
+Na entrada por `/visitas`, validar o cadastro e a unidade de destino, verificar a autorização naquele momento e impedir outra visita em andamento do mesmo cadastro. Com CPF informado, impedir também outra visita aberta para esse documento na unidade. Após registrar a saída, outra visita pode usar a mesma autorização enquanto o período estiver vigente. A unicidade de visita aberta por cadastro é garantida no banco. Na saída, aceitar somente `em_andamento`, preservar histórico e impedir repetição (409). A visita permanece ativa até a portaria registrar a saída. Fora do período autorizado, exigir novo contato externo autorizado antes de uma nova entrada.
+
+## Visitante avulso e consulta de veículos
+
+| Método e rota | Perfil / escopo | Entrada | Sucesso |
+| --- | --- | --- | --- |
+| `POST /portaria/visitantes/avulsos` | Funcionário, condomínio | `unidade_id`, `nome`, `cpf`, `funcionario_id`, `contato` | 201, visita `em_andamento` com `Location` |
+| `GET /portaria/visitantes/moradores` | Funcionário, condomínio | `unidade_id` | 200, referências dos moradores aptos a autorizar a entrada |
+| `GET /veiculos` | Funcionário, condomínio | `unidade_id`, `busca`, `page` e `page_size` opcionais | 200, lista paginada |
+
+O cadastro avulso exige CPF válido e contato autorizado por um morador ativo da unidade. `contato` usa o mesmo formato da entrada após contato externo. O cadastro do dia e a entrada são gravados na mesma transação. Se houver visita aberta para o CPF na unidade, a API retorna 409 com `reason = visita_em_andamento`. A saída usa `POST /visitas/{id}/saida`. Avulsos aparecem no histórico do morador da unidade sem expor o CPF e não entram na busca de cadastros prévios da portaria.
+
+A consulta de veículos devolve placa, marca, modelo, cor e unidade dos veículos ativos. A portaria tem acesso de leitura. As permissões dos demais perfis estão no [contrato de Convivência](convivencia.md#63-veículos-us-502).
 
 ## Casos obrigatórios antes de integrar
 

@@ -22,6 +22,7 @@ export interface Visitante {
   entrada_prevista: string
   saida_prevista: string
   ambigua: boolean
+  cancelado: boolean
 }
 export interface Autorizacao {
   id: string
@@ -63,13 +64,42 @@ interface Resposta<T extends RespostaContato> {
   resposta: T
 }
 export type Busca = { unidade: string; termo: string; por: 'nome' | 'cpf' }
+export interface Veiculo {
+  id: string
+  placa: string
+  marca: string
+  modelo: string
+  cor: string
+  unidade: Referencia
+}
 
 export function createVisitantesClient(http: AxiosInstance) {
-  const { units, residents, employees } = createEncomendasClient(http)
+  const { units, employees } = createEncomendasClient(http)
   return {
     units,
-    residents,
+    async residents(unidade: string): Promise<Referencia[]> {
+      const { data } = await http.get<Referencia[]>('/portaria/visitantes/moradores', {
+        params: { unidade_id: unidade },
+      })
+      return data
+    },
     employees,
+    async registrarAvulso(
+      dados: Omit<Destino, 'visitante_id'> & {
+        nome: string
+        cpf: string
+        contato: Resposta<'autorizou'>
+      },
+    ): Promise<Visita> {
+      const { data } = await http.post<Visita>('/portaria/visitantes/avulsos', dados)
+      return data
+    },
+    async veiculos(unidade: string, placa: string, page: number): Promise<Pagina<Veiculo>> {
+      const { data } = await http.get<Pagina<Veiculo>>('/veiculos', {
+        params: { unidade_id: unidade || undefined, busca: placa.trim() || undefined, page },
+      })
+      return data
+    },
     async buscar(busca: Busca, page: number): Promise<Pagina<Visitante>> {
       const params = { page, page_size: 20 }
       if (busca.por === 'cpf') {

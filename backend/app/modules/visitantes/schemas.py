@@ -79,6 +79,18 @@ class ContatoSemEntrada(ReferenciasEntrada):
     resposta: Literal["negou", "sem_resposta"]
 
 
+class CadastroAvulso(FuncionarioEntrada):
+    unidade_id: uuid.UUID
+    nome: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)]
+    cpf: CPF
+    contato: ContatoAutorizado
+
+    @field_validator("cpf")
+    @classmethod
+    def cpf_valido(cls, valor: str) -> str:
+        return validar_documento(valor)
+
+
 class EntradaVisita(ReferenciasEntrada):
     autorizacao_id: uuid.UUID | None = None
     contato: ContatoAutorizado | None = None
@@ -99,6 +111,7 @@ class OpcaoVisitante(BaseModel):
 
 
 class VisitanteMorador(OpcaoVisitante):
+    avulso: bool
     idade: int | None
     observacoes: str | None
     cpf: str | None
@@ -113,6 +126,7 @@ class Referencia(BaseModel):
 class VisitantePortaria(OpcaoVisitante):
     unidade: Referencia
     ambigua: bool
+    cancelado: bool
 
 
 class Autorizacao(BaseModel):

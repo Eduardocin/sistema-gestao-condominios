@@ -132,6 +132,20 @@ def autorizacoes(
     return service.autorizacoes(visitante_id, unidade_id)
 
 
+@router.get("/portaria/visitantes/moradores", dependencies=[Ver])
+def moradores_para_contato(service: Portaria, unidade_id: uuid.UUID) -> list[s.Referencia]:
+    return service.moradores_para_contato(unidade_id)
+
+
+@router.post("/portaria/visitantes/avulsos", status_code=201, dependencies=[Criar])
+def registrar_avulso(
+    dados: s.CadastroAvulso, service: Portaria, request: Request, response: Response
+) -> s.VisitaSaida:
+    item = service.registrar_avulso(dados, ip_do_cliente(request))
+    response.headers["Location"] = f"/api/v1/visitas/{item.id}"
+    return item
+
+
 @router.get("/visitas", dependencies=[Ver])
 def listar_visitas(
     service: Portaria,

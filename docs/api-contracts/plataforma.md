@@ -217,7 +217,7 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 
 | Dono | Ações |
 | --- | --- |
-| Contas (TASK-27) | `conta.criar`, `conta.editar` — operações globais de conta própria; [contrato](nucleo.md#33-perfil-recorte-task-27-e-demais-rotas-de-conta-us-103-gabriel-sprint-3) |
+| Contas (TASK-27, TASK-53) | `conta.criar`, `conta.editar`, `conta.senha_alterar`, `conta.senha_redefinir` — operações globais de conta própria; [contrato](nucleo.md#33-perfil-recorte-task-27-e-demais-rotas-de-conta-us-103-gabriel-sprint-3) |
 | Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login`, `seguranca.login_falho`, `seguranca.login_bloqueado`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
 | Paulo (condomínio, chaves, vínculos) | `condominio.enviar` *(proposta: cadastro inicial)*, `condominio.reenviar`, `condominio.aprovar`, `condominio.rejeitar` (com motivo), `condominio.desativar`, `condominio.reativar`, `condominio.editar`, `chave.gerar`, `chave.regenerar`, `chave.revogar`, `seguranca.chave_invalida` *(proposta: tentativas erradas, US-301)*, `vinculo.aprovar`, `vinculo.rejeitar`, `vinculo.desfazer`, `proprietario.editar` |
 | Vitor (convivência) | `reserva.cancelar`, `area.bloquear`, `ocorrencia.resolver`, `ocorrencia.reabrir` |

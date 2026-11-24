@@ -124,13 +124,36 @@ Erros: 409 `conflict` com `reason` = `email_ja_cadastrado` ou `telefone_ja_cadas
 | --- | --- | --- | --- |
 | `GET /contas/me` | Qualquer conta | Dados da conta | US-103 |
 | `PUT /contas/me` | Cadastro global de Morador/Administração | Edita nome, telefone e e-mail; foto depende de storage global | US-103 (recorte TASK-27) |
-| `PUT /contas/me/senha` | Qualquer conta | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve um token novo | US-103, US-210 |
+| `PUT /contas/me/senha` | Cadastro global de Morador/Administração | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve tokens novos | US-103 |
 | `POST /contas/recuperacao-senha` | Público | `{"email"}`; **sempre 202**, exista ou não a conta; enfileira o e-mail `recuperacao_senha` | US-102 |
 | `POST /contas/redefinicao-senha` | Público | `{"token", "senha_nova"}`; token de uso único (`UPDATE ... WHERE usado_em IS NULL`) e com validade; incrementa `sessao_versao` | US-102 |
 
-**Implementado na TASK-27:** somente `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
-das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103; as rotas de senha
-da tabela continuam propostas. Os cadastros existentes e seu `LoginResponse` são preservados.
+**Implementado na TASK-27:** `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
+das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103. Os cadastros existentes e
+seu `LoginResponse` são preservados.
+
+**Implementado na TASK-53, parte A:** `PUT /contas/me/senha` e `POST /contas/redefinicao-senha`.
+`POST /contas/recuperacao-senha` continua proposta (parte B, depende do e-mail da TASK-50).
+
+- `PUT /contas/me/senha`: Bearer válido, sem exigir `cid`. Neste recorte, como no `PUT /contas/me`,
+  só cadastro global de Morador/Administração; conta compartilhada e ADM recebem 403 (o acesso
+  compartilhado troca pela US-210, com responsável). Senha atual errada: 422
+  `senha_atual_incorreta`, contada no limitador do login (chave por conta); no limite, 429
+  `too_many_attempts` com `Retry-After`. Senha nova com as regras do cadastro (3.1); igual à atual:
+  422 `senha_nova_igual_atual`. Grava o hash, soma 1 em `sessao_versao` (os tokens antigos caem),
+  inutiliza eventuais tokens pendentes de recuperação da conta e responde 200 com o mesmo
+  `LoginResponse` do login, preservando o `cid` do token quando o condomínio continua ativo e
+  liberado.
+- `POST /contas/redefinicao-senha`: público, `{"token", "senha_nova"}`. O banco guarda só o
+  SHA-256 hexadecimal do token. Uma transação localiza o dono, trava a conta (`FOR UPDATE`),
+  consome o token com um `UPDATE` condicional (`usado_em IS NULL` e `expira_em > now()`), grava a
+  senha, soma 1 em `sessao_versao`, inutiliza os outros tokens pendentes da conta e audita;
+  qualquer falha desfaz tudo e o token continua válido. Token inexistente, expirado, usado ou de
+  conta inativa/sem cadastro próprio: sempre o mesmo 422 `token_invalido`. Sucesso: 204, sem
+  sessão, liberando eventual bloqueio temporário de tentativas da conta no limitador do login.
+- Auditoria: `conta.senha_alterar` e `conta.senha_redefinir`, recurso `usuario`, com só a
+  `sessao_versao` em `antes`/`depois`. Senha, hash e token nunca entram na trilha, na resposta ou
+  no log.
 
 `GET` exige Bearer válido, inclusive sem `cid`, e retorna os dados da identidade autenticada:
 

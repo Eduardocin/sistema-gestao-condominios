@@ -116,8 +116,8 @@ def _emitir_sessao(
         usuario=usuario,
         acessos=acessos,
         selecionado=selecionado,
-        # Com mais de um condomínio, quem decide é o usuário (o token sai sem `cid`).
-        requer_selecao=len(acessos) > 1,
+        # Com mais de um condomínio e nenhum escolhido, quem decide é o usuário (sem `cid`).
+        requer_selecao=selecionado is None and len(acessos) > 1,
         access_token=emitir(TipoToken.ACCESS),
         refresh_token=emitir(TipoToken.REFRESH),
         expires_in=segundos_de_validade(TipoToken.ACCESS, settings),
@@ -129,11 +129,22 @@ def _credencial_invalida() -> ApiError:
 
 
 def emitir_sessao_do_usuario(
-    session: Session, *, usuario: Usuario, settings: Settings
+    session: Session,
+    *,
+    usuario: Usuario,
+    settings: Settings,
+    condominio_id_atual: uuid.UUID | None = None,
 ) -> SessaoEmitida:
-    """Emite a sessão após validar credenciais ou persistir um cadastro novo."""
+    """Emite a sessão após validar credenciais, trocar senha ou persistir um cadastro novo."""
     acessos = _acessos_do_usuario(session, usuario)
-    selecionado = acessos[0] if len(acessos) == 1 and acessos[0].liberado else None
+    selecionado: Acesso | None = None
+    if condominio_id_atual is not None:
+        selecionado = next(
+            (a for a in acessos if a.condominio_id == condominio_id_atual and a.liberado),
+            None,
+        )
+    if selecionado is None and len(acessos) == 1 and acessos[0].liberado:
+        selecionado = acessos[0]
     return _emitir_sessao(usuario, acessos, selecionado, settings)
 
 

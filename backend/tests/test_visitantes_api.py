@@ -13,11 +13,12 @@ from app.db.session import get_session
 from app.main import create_app
 from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.funcionarios.models import Funcionario
-from app.modules.unidades.models import Andar, Bloco, PermissaoAba
+from app.modules.unidades.models import Andar, Bloco, MoradorUnidade, PermissaoAba
 from app.modules.visitantes.models import RegistroVisita, Visitante
 from tests.auditoria.conftest import cenario as cenario
 from tests.autorizacao.cenario import montar_predio
 from tests.autorizacao.conftest import session as session
+from tests.isolamento.cenario import cabecalho, criar_usuario, token_de, vincular
 
 pytestmark = pytest.mark.postgres
 
@@ -494,3 +495,159 @@ def test_duas_requisicoes_simultaneas_so_gravam_uma_entrada_e_uma_saida(cenario)
                     delete(RegistroVisita).where(RegistroVisita.visitante_id == UUID(id_))
                 )
                 session.execute(delete(Visitante).where(Visitante.id == UUID(id_)))
+
+
+def test_rotas_complementares_e_comorador_mesma_unidade(session):
+    predio = montar_predio(session)
+    comorador = criar_usuario(session)
+    vincular(session, comorador, predio.condominio, perfil="morador")
+    vinculo_comorador = MoradorUnidade(
+        condominio_id=predio.condominio.id,
+        unidade_id=predio.unidade_101.id,
+        usuario_id=comorador.id,
+        origem="chave",
+    )
+    funcionario = Funcionario(
+        condominio_id=predio.condominio.id, nome="Porteiro Turno B", funcao="porteiro"
+    )
+    session.add_all([vinculo_comorador, funcionario])
+    session.flush()
+    session.add_all(
+        [
+            PermissaoAba(
+                condominio_id=predio.condominio.id,
+                morador_unidade_id=predio.morador_unidade.id,
+                aba="visitantes",
+                com_acesso=True,
+            ),
+            PermissaoAba(
+                condominio_id=predio.condominio.id,
+                morador_unidade_id=vinculo_comorador.id,
+                aba="visitantes",
+                com_acesso=True,
+            ),
+        ]
+    )
+    session.flush()
+
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    momento = datetime(2030, 4, 2, 10, tzinfo=FUSO_CONDOMINIO)
+    app.dependency_overrides[get_relogio] = lambda: lambda: momento
+
+    autor_h = predio.cabecalho_de("morador")
+    comorador_h = cabecalho(token_de(comorador, predio.condominio.id, perfil="morador"))
+    porteiro_h = predio.cabecalho_de("funcionario")
+    unidade = str(predio.unidade_101.id)
+
+    with TestClient(app) as client:
+        criado = client.post(
+            "/api/v1/visitantes",
+            headers=autor_h,
+            json={
+                "unidade_id": unidade,
+                "nome": "Marina Costa",
+                "cpf": "52998224725",
+                "observacoes": "Chega às 10h",
+                "entrada_prevista": "2030-04-02",
+                "saida_prevista": "2030-04-03",
+            },
+        )
+        assert criado.status_code == 201
+        vid = criado.json()["id"]
+
+        # Co-morador da mesma unidade consulta CPF/observações e edita antes do uso
+        detalhe = client.get(f"/api/v1/visitantes/{vid}", headers=comorador_h)
+        assert detalhe.status_code == 200
+        assert detalhe.json()["cpf"] == "52998224725"
+
+        editado = client.put(
+            f"/api/v1/visitantes/{vid}",
+            headers=comorador_h,
+            json={
+                "nome": "Marina Alves Costa",
+                "cpf": "52998224725",
+                "observacoes": "Chega às 11h",
+                "entrada_prevista": "2030-04-02",
+                "saida_prevista": "2030-04-03",
+            },
+        )
+        assert editado.status_code == 200
+        assert editado.json()["nome"] == "Marina Alves Costa"
+
+        # Autorizações vigentes na portaria e busca vazia sem 422
+        autorizacoes = client.get(
+            "/api/v1/portaria/autorizacoes",
+            headers=porteiro_h,
+            params={"visitante_id": vid, "unidade_id": unidade},
+        )
+        assert autorizacoes.status_code == 200
+        assert len(autorizacoes.json()) == 1
+        assert (
+            client.get(
+                "/api/v1/portaria/visitantes", headers=porteiro_h, params={"busca": ""}
+            ).status_code
+            == 200
+        )
+
+        # Após visita registrada, PUT retorna 409 visitante_ja_utilizado
+        entrada = client.post(
+            "/api/v1/visitas",
+            headers=porteiro_h,
+            json={
+                "visitante_id": vid,
+                "unidade_id": unidade,
+                "funcionario_id": str(funcionario.id),
+                "autorizacao_id": vid,
+            },
+        )
+        assert entrada.status_code == 201
+        visita_id = entrada.json()["id"]
+        assert (
+            client.get("/api/v1/visitas", headers=porteiro_h, params={"busca": "101"}).json()[
+                "total"
+            ]
+            >= 1
+        )
+        assert (
+            client.post(
+                f"/api/v1/visitas/{visita_id}/saida",
+                headers=porteiro_h,
+                json={"funcionario_id": str(funcionario.id)},
+            ).status_code
+            == 200
+        )
+        bloqueado = client.put(
+            f"/api/v1/visitantes/{vid}",
+            headers=comorador_h,
+            json={
+                "nome": "Marina Alves",
+                "entrada_prevista": "2030-04-02",
+                "saida_prevista": "2030-04-03",
+            },
+        )
+        assert bloqueado.status_code == 409
+        assert bloqueado.json()["error"]["reason"] == "visitante_ja_utilizado"
+
+        # Listagem de contatos e cancelamento por co-morador
+        assert (
+            client.post(
+                "/api/v1/portaria/contatos",
+                headers=porteiro_h,
+                json={
+                    "visitante_id": vid,
+                    "unidade_id": unidade,
+                    "funcionario_id": str(funcionario.id),
+                    "morador_id": str(predio.morador_unidade.id),
+                    "canal": "interfone",
+                    "resposta": "sem_resposta",
+                },
+            ).status_code
+            == 201
+        )
+        contatos = client.get("/api/v1/portaria/contatos", headers=porteiro_h)
+        assert contatos.status_code == 200 and contatos.json()["total"] == 1
+        assert (
+            client.post(f"/api/v1/visitantes/{vid}/cancelamento", headers=comorador_h).status_code
+            == 200
+        )

@@ -9,7 +9,11 @@ from app.core.permissoes import Perfil
 from app.core.tempo import Relogio, get_relogio
 from app.db.session import get_session
 from app.modules.auditoria.contexto import ip_do_cliente
-from app.modules.auth.autorizacao import require_permission
+from app.modules.auth.autorizacao import (
+    MENSAGEM_SEM_PERMISSAO,
+    registrar_negacao,
+    require_permission,
+)
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.visitantes import schemas as s
 from app.modules.visitantes.service import VisitantesService
@@ -19,14 +23,20 @@ SessionDep = Annotated[Session, Depends(get_session)]
 RelogioDep = Annotated[Relogio, Depends(get_relogio)]
 Page = Annotated[int, Query(ge=1)]
 Size = Annotated[int, Query(ge=1, le=100)]
-Busca = Annotated[str | None, Query(min_length=1, max_length=120)]
+Busca = Annotated[str | None, Query(max_length=120)]
 
 
 def somente_morador(
     session: SessionDep, contexto: ContextoDep, relogio: RelogioDep
 ) -> VisitantesService:
     if contexto.perfil != Perfil.MORADOR:
-        raise ApiError(403, "forbidden", "Você não tem permissão para esta operação.")
+        registrar_negacao(
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            perfil=contexto.perfil,
+            permissao="visitantes:morador",
+        )
+        raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
     return VisitantesService(session, contexto, relogio)
 
 
@@ -34,7 +44,13 @@ def somente_portaria(
     session: SessionDep, contexto: ContextoDep, relogio: RelogioDep
 ) -> VisitantesService:
     if contexto.perfil != Perfil.FUNCIONARIO:
-        raise ApiError(403, "forbidden", "Você não tem permissão para esta operação.")
+        registrar_negacao(
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            perfil=contexto.perfil,
+            permissao="visitantes:portaria",
+        )
+        raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
     return VisitantesService(session, contexto, relogio)
 
 

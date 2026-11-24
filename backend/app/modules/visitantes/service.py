@@ -11,7 +11,11 @@ from app.core.tempo import Relogio, inicio_do_slot, no_fuso
 from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.auditoria.service import registrar_acao
 from app.modules.auth import repository as auth_repository
-from app.modules.auth.autorizacao import garantir_aba_da_unidade
+from app.modules.auth.autorizacao import (
+    MENSAGEM_SEM_PERMISSAO,
+    garantir_aba_da_unidade,
+    registrar_negacao,
+)
 from app.modules.funcionarios.repository import RepositorioFuncionarios
 from app.modules.visitantes import schemas as s
 from app.modules.visitantes.models import Visitante
@@ -86,13 +90,12 @@ class VisitantesService:
         self._unidade_ativa(unidade_id)
 
     def _morador_saida(self, item: Visitante) -> s.VisitanteMorador:
-        autor = item.cadastrado_por_usuario_id == self.ctx.usuario_id
         return s.VisitanteMorador(
             **dados_basicos(item),
             avulso=item.avulso,
             idade=item.idade,
-            cpf=item.cpf if autor else None,
-            observacoes=item.observacoes if autor else None,
+            cpf=None if item.avulso else item.cpf,
+            observacoes=None if item.avulso else item.observacoes,
             cancelado_em=item.cancelado_em,
         )
 
@@ -105,8 +108,9 @@ class VisitantesService:
         size: int,
     ) -> s.Pagina[s.VisitanteMorador]:
         self._aba(unidade)
+        termo = (busca or "").strip() or None
         items, total = self.visitantes.pagina_morador(
-            unidade, busca, situacao, no_fuso(self.relogio()).date(), page, size
+            unidade, termo, situacao, no_fuso(self.relogio()).date(), page, size
         )
         return s.Pagina(
             items=[self._morador_saida(item) for item in items],
@@ -119,9 +123,13 @@ class VisitantesService:
         item = self.visitantes.bloquear(id_) if alterando else self.visitantes.obter(id_)
         self._aba(item.unidade_id)
         if alterando and item.avulso:
-            raise ApiError(403, "forbidden", "Cadastros avulsos são registrados pela portaria.")
-        if alterando and item.cadastrado_por_usuario_id != self.ctx.usuario_id:
-            raise ApiError(403, "forbidden", "Somente o autor pode alterar este cadastro.")
+            registrar_negacao(
+                usuario_id=self.ctx.usuario_id,
+                condominio_id=self.ctx.condominio_id,
+                perfil=self.ctx.perfil,
+                permissao="visitantes:avulso",
+            )
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
         return item
 
     def detalhe_morador(self, id_: uuid.UUID) -> s.VisitanteMorador:
@@ -207,7 +215,8 @@ class VisitantesService:
     ) -> s.Pagina[s.VisitantePortaria]:
         if unidade is not None:
             self._unidade_ativa(unidade)
-        linhas, total = self.visitantes.pagina_portaria(unidade, busca, cpf, page, size)
+        termo = (busca or "").strip() or None
+        linhas, total = self.visitantes.pagina_portaria(unidade, termo, cpf, page, size)
         return s.Pagina(
             items=[
                 s.VisitantePortaria(
@@ -502,7 +511,8 @@ class VisitantesService:
     def pagina_visitas(
         self, busca: str | None, status: s.StatusVisita | None, page: int, size: int
     ) -> s.Pagina[s.VisitaSaida]:
-        items, total = self.visitas.pagina(busca, status, page, size)
+        termo = (busca or "").strip() or None
+        items, total = self.visitas.pagina(termo, status, page, size)
         return s.Pagina(
             items=[self._visita_saida(linha) for linha in items],
             total=total,

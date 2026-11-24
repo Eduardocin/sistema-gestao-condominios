@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.core.errors import RecursoNaoEncontrado
@@ -43,7 +43,11 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
     ) -> tuple[list[Visitante], int]:
         consulta = self.consulta().where(Visitante.unidade_id == unidade_id)
         if busca:
-            consulta = consulta.where(Visitante.nome.icontains(busca, autoescape=True))
+            digitos = "".join(ch for ch in busca if ch.isdigit())
+            criterio = Visitante.nome.icontains(busca, autoescape=True)
+            if digitos:
+                criterio = or_(criterio, Visitante.cpf.icontains(digitos, autoescape=True))
+            consulta = consulta.where(criterio)
         if situacao == "cancelados":
             consulta = consulta.where(Visitante.cancelado_em.is_not(None))
         elif situacao is not None:
@@ -272,7 +276,13 @@ class RepositorioVisitas(RepositorioDoCondominio[RegistroVisita]):
     ) -> tuple[list[LinhaVisita], int]:
         consulta = self.detalhada()
         if busca:
-            consulta = consulta.where(Visitante.nome.icontains(busca, autoescape=True))
+            consulta = consulta.where(
+                or_(
+                    Visitante.nome.icontains(busca, autoescape=True),
+                    Unidade.identificacao.icontains(busca, autoescape=True),
+                    Bloco.nome.icontains(busca, autoescape=True),
+                )
+            )
         if status == "em_andamento":
             consulta = consulta.where(RegistroVisita.saida_em.is_(None))
         elif status == "encerrada":

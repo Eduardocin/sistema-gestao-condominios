@@ -10,7 +10,11 @@ from app.core.permissoes import Perfil
 from app.core.tempo import Relogio
 from app.modules.auditoria.schemas import ContextoAuditoria
 from app.modules.auditoria.service import registrar_acao
-from app.modules.auth.autorizacao import garantir_aba_da_unidade
+from app.modules.auth.autorizacao import (
+    MENSAGEM_SEM_PERMISSAO,
+    garantir_aba_da_unidade,
+    registrar_negacao,
+)
 from app.modules.auth.repository import obter_unidade
 from app.modules.visitantes.schemas import Pagina, Referencia
 from app.modules.visitantes.service import conflito, nome_unidade
@@ -35,12 +39,18 @@ class VeiculosService:
 
     def _unidade(self, id_: uuid.UUID, *, escrita: bool = False) -> None:
         if escrita and self.ctx.perfil != Perfil.MORADOR:
-            raise ApiError(403, "forbidden", "Somente moradores podem alterar veículos.")
-        if self.ctx.perfil == Perfil.MORADOR:
-            garantir_aba_da_unidade(self.session, self.ctx, id_, "veiculos")
+            registrar_negacao(
+                usuario_id=self.ctx.usuario_id,
+                condominio_id=self.ctx.condominio_id,
+                perfil=self.ctx.perfil,
+                permissao="veiculos:morador",
+            )
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
         unidade = obter_unidade(self.session, id_, self.ctx.condominio_id, bloquear=escrita)
         if unidade is None or not unidade.ativo:
             raise RecursoNaoEncontrado
+        if self.ctx.perfil == Perfil.MORADOR:
+            garantir_aba_da_unidade(self.session, self.ctx, id_, "veiculos")
 
     def _saida(self, linha: Linha) -> VeiculoSaida:
         veiculo, identificacao, bloco, andar, duplicada = linha

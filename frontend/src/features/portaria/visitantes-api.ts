@@ -1,5 +1,5 @@
 import type { AxiosInstance } from 'axios'
-import { createEncomendasClient } from './encomendas-api'
+import { createEncomendasClient } from './encomendas-api.ts'
 
 export type Canal = 'interfone' | 'telefone'
 export type RespostaContato = 'autorizou' | 'negou' | 'sem_resposta'
@@ -98,9 +98,9 @@ export function createVisitantesClient(http: AxiosInstance) {
       })
       return data[0] ?? null
     },
-    async visitas(status: StatusVisita, page: number): Promise<Pagina<Visita>> {
+    async visitas(status: StatusVisita, page: number, busca?: string): Promise<Pagina<Visita>> {
       const { data } = await http.get<Pagina<Visita>>('/visitas', {
-        params: { status, page, page_size: 20 },
+        params: { status, page, page_size: 20, busca: busca?.trim() || undefined },
       })
       return data
     },

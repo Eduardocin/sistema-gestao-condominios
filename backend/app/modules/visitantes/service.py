@@ -84,12 +84,11 @@ class VisitantesService:
         self._unidade_ativa(unidade_id)
 
     def _morador_saida(self, item: Visitante) -> s.VisitanteMorador:
-        autor = item.cadastrado_por_usuario_id == self.ctx.usuario_id
         return s.VisitanteMorador(
             **dados_basicos(item),
             idade=item.idade,
-            cpf=item.cpf if autor else None,
-            observacoes=item.observacoes if autor else None,
+            cpf=item.cpf,
+            observacoes=item.observacoes,
             cancelado_em=item.cancelado_em,
         )
 
@@ -102,8 +101,9 @@ class VisitantesService:
         size: int,
     ) -> s.Pagina[s.VisitanteMorador]:
         self._aba(unidade)
+        termo = (busca or "").strip() or None
         items, total = self.visitantes.pagina_morador(
-            unidade, busca, situacao, no_fuso(self.relogio()).date(), page, size
+            unidade, termo, situacao, no_fuso(self.relogio()).date(), page, size
         )
         return s.Pagina(
             items=[self._morador_saida(item) for item in items],
@@ -117,8 +117,6 @@ class VisitantesService:
         if item.avulso:
             raise RecursoNaoEncontrado
         self._aba(item.unidade_id)
-        if alterando and item.cadastrado_por_usuario_id != self.ctx.usuario_id:
-            raise ApiError(403, "forbidden", "Somente o autor pode alterar este cadastro.")
         return item
 
     def detalhe_morador(self, id_: uuid.UUID) -> s.VisitanteMorador:
@@ -204,7 +202,8 @@ class VisitantesService:
     ) -> s.Pagina[s.VisitantePortaria]:
         if unidade is not None:
             self._unidade_ativa(unidade)
-        linhas, total = self.visitantes.pagina_portaria(unidade, busca, cpf, page, size)
+        termo = (busca or "").strip() or None
+        linhas, total = self.visitantes.pagina_portaria(unidade, termo, cpf, page, size)
         return s.Pagina(
             items=[
                 s.VisitantePortaria(
@@ -440,7 +439,8 @@ class VisitantesService:
     def pagina_visitas(
         self, busca: str | None, status: s.StatusVisita | None, page: int, size: int
     ) -> s.Pagina[s.VisitaSaida]:
-        items, total = self.visitas.pagina(busca, status, page, size)
+        termo = (busca or "").strip() or None
+        items, total = self.visitas.pagina(termo, status, page, size)
         return s.Pagina(
             items=[self._visita_saida(linha) for linha in items],
             total=total,

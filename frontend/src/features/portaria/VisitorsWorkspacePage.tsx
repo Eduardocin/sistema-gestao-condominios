@@ -125,6 +125,8 @@ function VisitorsWorkspace({ name }: { name: string }) {
   const [resposta, setResposta] = useState<RespostaContato | ''>('')
   const [identidadeConferida, setIdentidadeConferida] = useState(false)
   const [visao, setVisao] = useState<'em_andamento' | 'encerrada' | 'contatos'>('em_andamento')
+  const [visitaBusca, setVisitaBusca] = useState('')
+  const [visitaFiltro, setVisitaFiltro] = useState('')
   const [historicoPage, setHistoricoPage] = useState(1)
   const [historico, setHistorico] = useState<Pagina<Visita | Contato> | null>(null)
   const [historicoRev, setHistoricoRev] = useState(0)
@@ -203,7 +205,9 @@ function VisitorsWorkspace({ name }: { name: string }) {
   useEffect(() => {
     let ativo = true
     const req =
-      visao === 'contatos' ? api.contatos(historicoPage) : api.visitas(visao, historicoPage)
+      visao === 'contatos'
+        ? api.contatos(historicoPage)
+        : api.visitas(visao, historicoPage, visitaFiltro)
     req
       .then((data) => {
         if (ativo) setHistorico(data)
@@ -217,7 +221,7 @@ function VisitorsWorkspace({ name }: { name: string }) {
     return () => {
       ativo = false
     }
-  }, [api, historicoPage, historicoRev, visao])
+  }, [api, historicoPage, historicoRev, visao, visitaFiltro])
 
   function prepararBusca() {
     setResultados(null)
@@ -229,8 +233,15 @@ function VisitorsWorkspace({ name }: { name: string }) {
     event.preventDefault()
     const documento = /^\d{11}$/.test(busca.termo.replace(/[.\-\s]/g, ''))
     if (busca.por === 'nome' && documento) {
-      setBusca({ ...busca, por: 'cpf' })
-      setBuscaErro('Escolha a unidade para buscar pelo CPF.')
+      const proxima: Busca = { ...busca, por: 'cpf' }
+      setBusca(proxima)
+      if (!proxima.unidade) {
+        setBuscaErro('Escolha a unidade para buscar pelo CPF.')
+        return
+      }
+      prepararBusca()
+      setBuscaPage(1)
+      setFiltro(proxima)
       return
     }
     if (busca.por === 'nome' && !busca.unidade && !busca.termo.trim()) {
@@ -506,6 +517,27 @@ function VisitorsWorkspace({ name }: { name: string }) {
               Atualizar
             </Button>
           </div>
+          {visao !== 'contatos' && (
+            <form
+              className={styles.tools}
+              onSubmit={(event) => {
+                event.preventDefault()
+                carregarHistorico()
+                setHistoricoPage(1)
+                setVisitaFiltro(visitaBusca.trim())
+              }}
+            >
+              <Input
+                label="Filtrar visitas"
+                value={visitaBusca}
+                onChange={(event) => setVisitaBusca(event.target.value)}
+                placeholder="Visitante ou unidade"
+              />
+              <Button type="submit" variant="secondary" disabled={carregandoHistorico}>
+                Filtrar
+              </Button>
+            </form>
+          )}
           {carregandoHistorico && <Text role="status">Carregando registros…</Text>}
           {historicoErro && (
             <Notice tone="alert" role="alert">
@@ -550,7 +582,7 @@ function VisitorsWorkspace({ name }: { name: string }) {
                 ) : (
                   <Text size="sm">
                     {respostaNome[item.resposta]} · {canalNome[item.canal]} ·{' '}
-                    {horario(item.registrado_em)}
+                    {horario(item.registrado_em)} · {item.funcionario.nome}
                   </Text>
                 )}
               </div>

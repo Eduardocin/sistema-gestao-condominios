@@ -186,6 +186,20 @@ class RepositorioReservas(RepositorioDoCondominio[Reserva]):
         )
         return list(self.session.scalars(consulta))
 
+    def horarios_ocupados(
+        self, area_id: uuid.UUID, inicio: date, fim: date
+    ) -> set[tuple[date, time]]:
+        consulta = (
+            self.consulta()
+            .with_only_columns(Reserva.data, Reserva.hora_inicio)
+            .where(
+                Reserva.area_id == area_id,
+                Reserva.status == "ativa",
+                Reserva.data.between(inicio, fim),
+            )
+        )
+        return {(dia, hora) for dia, hora in self.session.execute(consulta).tuples()}
+
     def dias_com_reserva_ativa_da_unidade(
         self, area_id: uuid.UUID, unidade_id: uuid.UUID, inicio: date, fim: date
     ) -> set[date]:

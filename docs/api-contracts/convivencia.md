@@ -112,7 +112,7 @@ Implementação (TASK-63):
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `GET /areas-comuns/{id}/agenda` | Morador `[Reserva de Áreas]` | `unidade_id` (obrigatório), `data` (obrigatório, `AAAA-MM-DD`) | 200, grade do dia |
-| `GET /areas-comuns/{id}/calendario` | Morador `[Reserva de Áreas]` | `unidade_id` (obrigatório), `mes` (`AAAA-MM`) | 200, marcações do mês |
+| `GET /areas-comuns/{id}/calendario` | Morador `[Reserva de Áreas]` | `unidade_id` (obrigatório), `mes` (`AAAA-MM`), `incluir_disponibilidade` (opcional) | 200, marcações do mês |
 
 Grade do dia (alinhar o formato com o Matheus, que faz o front da US-603):
 
@@ -142,7 +142,7 @@ Grade do dia (alinhar o formato com o Matheus, que faz o front da US-603):
 
 Há um slot por hora de `abre_as` até `fecha_as`: nunca aparecem horários fora do funcionamento ("não podem ser escolhidos"). `unidade_ja_reservou = true` quando a unidade já tem reserva ativa nessa área e dia; o front pode desabilitar os slots `livre` e explicar a regra, mas **o servidor continua validando** (seção 4.2).
 
-Calendário do mês, para destacar dias: `{"mes": "2026-11", "dias": [{"data": "2026-11-14", "bloqueado": false, "tem_reserva_da_minha_unidade": true}]}`, com os dias em que algo acontece (bloqueio ou reserva da unidade). O dia atual é destacado pelo front. O calendário é uma **proposta** e pode ser descartado se a grade do dia bastar.
+O calendário mensal retorna os dias com bloqueio ou reserva da própria unidade em `dias`. Com `incluir_disponibilidade=true`, também retorna `dias_disponiveis`, uma lista de datas com pelo menos um horário futuro que a unidade pode reservar. A resposta respeita os bloqueios e o limite de uma reserva por unidade, área e dia. O calendário não identifica outras unidades ou moradores.
 
 ### 4.2 Criar reserva e a regra de conflito
 

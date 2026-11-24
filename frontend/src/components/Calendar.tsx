@@ -7,6 +7,8 @@ export interface CalendarProps {
   /** Data selecionada. */
   value?: Date | null
   onChange?: (date: Date) => void
+  onMonthChange?: (date: Date) => void
+  dayMarkers?: Record<string, { label: string; variant: 'success' | 'warning' | 'neutral' }>
   /** Datas fora do intervalo ficam desabilitadas. */
   min?: Date
   max?: Date
@@ -28,7 +30,7 @@ function shiftMonth(date: Date, amount: number) {
   return new Date(target.getFullYear(), target.getMonth(), day)
 }
 
-export function Calendar({ value, onChange, min, max, locale = 'pt-BR', className }: CalendarProps) {
+export function Calendar({ value, onChange, onMonthChange, dayMarkers, min, max, locale = 'pt-BR', className }: CalendarProps) {
   const titleId = useId()
   const gridRef = useRef<HTMLTableElement>(null)
   const moveFocus = useRef(false)
@@ -68,9 +70,13 @@ export function Calendar({ value, onChange, min, max, locale = 'pt-BR', classNam
   const weeks = Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7))
 
   function goTo(date: Date, focus: boolean) {
-    if (isDisabled(date)) return
+    const monthKey = (day: Date) => keyOf(day).slice(0, 7)
+    const bound = date.getTime() < minTime ? min : date.getTime() > maxTime ? max : undefined
+    if (bound && monthKey(bound) !== monthKey(date)) return
+    const target = bound ? startOfDay(bound) : date
     moveFocus.current = focus
-    setFocusDate(date)
+    setFocusDate(target)
+    if (monthKey(target) !== monthKey(focusDate)) onMonthChange?.(target)
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -139,7 +145,8 @@ export function Calendar({ value, onChange, min, max, locale = 'pt-BR', classNam
                       data-date={keyOf(date)}
                       tabIndex={keyOf(date) === keyOf(focusDate) ? 0 : -1}
                       disabled={isDisabled(date)}
-                      aria-label={fullDate.format(date)}
+                      aria-label={[fullDate.format(date), dayMarkers?.[keyOf(date)]?.label].filter(Boolean).join(' · ')}
+                      data-marker={dayMarkers?.[keyOf(date)]?.variant}
                       aria-pressed={value ? keyOf(value) === keyOf(date) : false}
                       aria-current={keyOf(today) === keyOf(date) ? 'date' : undefined}
                       onClick={() => {

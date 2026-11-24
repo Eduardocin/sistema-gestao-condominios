@@ -18,6 +18,13 @@ import { WorkspacePage } from '../features/auth/WorkspacePage'
 import { PackagesWorkspacePage } from '../features/portaria/PackagesWorkspacePage'
 import { ResidentPackagesPage } from '../features/portaria/ResidentPackagesPage'
 import { VisitorsWorkspacePage } from '../features/portaria/VisitorsWorkspacePage'
+import { ResidentVisitorsPage } from '../features/resident/ResidentVisitorsPage'
+import { ResidentVehiclesPage } from '../features/resident/ResidentVehiclesPage'
+import {
+  ResidentReservationsPage,
+  ResidentReservePage,
+} from '../features/resident/ResidentReservationsPages'
+import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -65,6 +72,34 @@ export const router = createBrowserRouter([
       </RequireSession>
     ),
   },
+  {
+    path: '/app/morador/visitantes',
+    element: (
+      <RequireSession>
+        <ResidentVisitorsPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/morador/veiculos',
+    element: (
+      <RequireSession>
+        <ResidentVehiclesPage />
+      </RequireSession>
+    ),
+  },
+  ...[
+    { path: '/app/morador/areas-comuns', Page: ResidentReservePage },
+    { path: '/app/morador/reservas', Page: ResidentReservationsPage },
+    { path: '/app/morador/ocorrencias', Page: ResidentOccurrencesPage },
+  ].map(({ path, Page }) => ({
+    path,
+    element: (
+      <RequireSession>
+        <Page />
+      </RequireSession>
+    ),
+  })),
   ...['morador', 'portaria', 'administracao', 'plataforma', 'sem-condominio'].map((area) => ({
     path: `/app/${area}`,
     element: <WorkspacePage area={area} />,

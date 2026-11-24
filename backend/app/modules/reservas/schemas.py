@@ -204,6 +204,7 @@ class DiaDoCalendario(BaseModel):
 class CalendarioSaida(BaseModel):
     mes: str
     dias: list[DiaDoCalendario]
+    dias_disponiveis: list[date] | None = None
 
 
 # --- bloqueio de datas (US-602) -------------------------------------------------------------

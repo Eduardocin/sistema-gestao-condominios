@@ -95,6 +95,7 @@ export function createEncomendasClient(http: AxiosInstance) {
     filters: {
       search?: string
       status?: PackageStatus | ''
+      unitId?: string
       page?: number
     } = {},
   ): Promise<PackagePage> {
@@ -102,6 +103,7 @@ export function createEncomendasClient(http: AxiosInstance) {
       params: {
         ...(filters.search?.trim() ? { busca: filters.search.trim() } : {}),
         ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.unitId ? { unidade_id: filters.unitId } : {}),
         page: filters.page ?? 1,
         page_size: 20,
       },

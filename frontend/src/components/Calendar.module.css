@@ -57,6 +57,7 @@
 }
 
 .day {
+  position: relative;
   width: 100%;
   aspect-ratio: 1;
   padding: 0;
@@ -67,6 +68,40 @@
   font: inherit;
   font-size: var(--font-size-sm);
   cursor: pointer;
+}
+
+.day[data-marker]::after {
+  content: '';
+  display: block;
+  position: absolute;
+  inset-block-end: 2px;
+  inset-inline-start: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--color-text-secondary);
+}
+
+.day[data-marker='success']::after {
+  background-color: var(--color-success-strong);
+}
+
+.day[data-marker='warning']::after {
+  background-color: transparent;
+  border: 1px solid currentColor;
+}
+
+.day[data-marker='neutral']::after {
+  height: 1px;
+  border-radius: 0;
+}
+
+.selected[data-marker]::after {
+  background-color: currentColor;
+}
+
+.selected[data-marker='warning']::after {
+  background-color: transparent;
 }
 
 .day:hover:not(:disabled) {

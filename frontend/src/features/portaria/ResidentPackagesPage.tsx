@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { Link } from 'react-router'
 import {
   Badge,
   Button,
@@ -8,13 +7,13 @@ import {
   Heading,
   Modal,
   Notice,
-  OperationsLayout,
   RecordPhoto,
+  Select,
   Table,
   Text,
 } from '../../components'
-import { AccessDenied } from '../auth/SessionPages'
 import { useAuth } from '../auth/context'
+import { ResidentWorkspace } from '../resident/ResidentWorkspace'
 import { createEncomendasClient } from './encomendas-api'
 import type { PackageRecord, PackageStatus } from './encomendas-api'
 import styles from './PackagesWorkspacePage.module.css'
@@ -53,21 +52,20 @@ function failureMessage(error: unknown) {
 }
 
 export function ResidentPackagesPage() {
-  const { snapshot } = useAuth()
-  const condominium = snapshot.identity?.condominio
-  if (
-    !condominium ||
-    condominium.perfil !== 'morador' ||
-    condominium.status !== 'ativo' ||
-    snapshot.identity?.administrador_plataforma
+  return (
+    <ResidentWorkspace activeKey="packages">
+      <ResidentPackages />
+    </ResidentWorkspace>
   )
-    return <AccessDenied />
-  return <ResidentPackages name={condominium.nome} />
 }
 
-function ResidentPackages({ name }: { name: string }) {
+function ResidentPackages() {
   const { client, snapshot } = useAuth()
   const api = useMemo(() => createEncomendasClient(client.http), [client])
+  const units = snapshot.identity?.unidades ?? []
+  const [unitId, setUnitId] = useState(() => units[0]?.id ?? '')
+  const activeUnit = units.some((unit) => unit.id === unitId) ? unitId : (units[0]?.id ?? '')
+  const [loadedUnit, setLoadedUnit] = useState('')
   const [items, setItems] = useState<PackageRecord[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -77,13 +75,15 @@ function ResidentPackages({ name }: { name: string }) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const [selected, setSelected] = useState<PackageRecord | null>(null)
+  const [opened, setSelected] = useState<PackageRecord | null>(null)
+  const selected = opened?.unidade.id === activeUnit ? opened : null
   const [photoRecord, setPhotoRecord] = useState<{ fileId: string; url: string } | null>(null)
 
   useEffect(() => {
+    if (!activeUnit) return
     let current = true
     api
-      .list({ page })
+      .list({ unitId: activeUnit, page })
       .then((result) => {
         if (!current) return
         setItems(result.items)
@@ -94,12 +94,15 @@ function ResidentPackages({ name }: { name: string }) {
         if (current) setLoadError(failureMessage(error))
       })
       .finally(() => {
-        if (current) setLoading(false)
+        if (current) {
+          setLoadedUnit(activeUnit)
+          setLoading(false)
+        }
       })
     return () => {
       current = false
     }
-  }, [api, page, revision])
+  }, [activeUnit, api, page, revision])
 
   useEffect(() => {
     let current = true
@@ -141,16 +144,7 @@ function ResidentPackages({ name }: { name: string }) {
     }
   }
 
-  const tools = (
-    <div className={styles.tools}>
-      {snapshot.condominiums.length > 1 && (
-        <Link to="/selecionar-condominio">Trocar condomínio</Link>
-      )}
-      <Button variant="secondary" size="sm" onClick={() => client.logout()}>
-        Sair
-      </Button>
-    </div>
-  )
+  const isLoading = loading || loadedUnit !== activeUnit
   const selectedPhotoUrl =
     selected && photoRecord?.fileId === selected.foto_arquivo_id ? photoRecord.url : null
   const rows = items.map((item) => [
@@ -177,24 +171,16 @@ function ResidentPackages({ name }: { name: string }) {
         setSuccess(null)
         setSelected(item)
       }}
-      aria-label={`Ver detalhes de ${item.descricao}`}
+      aria-label={`Ver foto e detalhes de ${item.descricao}`}
     >
-      Ver detalhes
+      Ver foto e detalhes
     </Button>,
   ])
 
   return (
-    <OperationsLayout
-      activeKey="packages"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/morador', symbol: '⌂' },
-        { key: 'packages', label: 'Encomendas', to: '/app/morador/encomendas', symbol: '▣' },
-      ]}
-      workspace={{ name, profile: 'Morador', tools }}
-    >
+    <>
       <section className={styles.content} aria-labelledby="resident-packages-title">
         <div>
-          <Badge variant="primary">Morador</Badge>
           <Heading level={1} id="resident-packages-title">
             Minhas encomendas
           </Heading>
@@ -208,73 +194,90 @@ function ResidentPackages({ name }: { name: string }) {
             {success}
           </Notice>
         )}
-        <Card>
-          <div className={styles.header}>
-            <div>
-              <Heading level={2} size="md">
-                Encomendas vinculadas
-              </Heading>
-              <Text size="sm" tone="secondary">
-                {loading ? 'Atualizando registros…' : `${total} registro(s)`}
-              </Text>
-            </div>
-            <Button variant="secondary" size="sm" onClick={reload} disabled={loading}>
-              Atualizar lista
-            </Button>
-          </div>
-          {loadError ? (
-            <Notice tone="alert" role="alert">
-              {loadError}
-              <div className={styles.retry}>
-                <Button variant="secondary" size="sm" onClick={reload}>
-                  Tentar novamente
-                </Button>
-              </div>
-            </Notice>
-          ) : loading ? (
-            <Text role="status">Carregando encomendas…</Text>
-          ) : (
-            <>
-              <Table
-                caption="Encomendas das suas unidades"
-                headers={['Encomenda e recebimento', 'Unidade', 'Situação', 'Ação']}
-                rows={rows}
-                emptyMessage="Nenhuma encomenda está vinculada às suas unidades."
-              />
-              <div className={styles.pagination}>
+        {!activeUnit ? (
+          <Notice>Você ainda não tem uma unidade vinculada para consultar encomendas.</Notice>
+        ) : (
+          <Card className={styles.content}>
+            <Select
+              label="Unidade"
+              value={activeUnit}
+              options={units.map((unit) => ({ value: unit.id, label: unit.identificacao }))}
+              onChange={(event) => {
+                setUnitId(event.target.value)
+                setPage(1)
+                setSelected(null)
+                setPhotoRecord(null)
+                setSuccess(null)
+                reload()
+              }}
+            />
+            <div className={styles.header}>
+              <div>
+                <Heading level={2} size="md">
+                  Encomendas vinculadas
+                </Heading>
                 <Text size="sm" tone="secondary">
-                  Página {page} de {Math.max(1, Math.ceil(total / 20))}
+                  {isLoading ? 'Atualizando registros…' : `${total} registro(s)`}
                 </Text>
-                <div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => {
-                      setLoading(true)
-                      setLoadError(null)
-                      setPage((value) => value - 1)
-                    }}
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={page * 20 >= total}
-                    onClick={() => {
-                      setLoading(true)
-                      setLoadError(null)
-                      setPage((value) => value + 1)
-                    }}
-                  >
-                    Próxima
+              </div>
+              <Button variant="secondary" size="sm" onClick={reload} disabled={isLoading}>
+                Atualizar lista
+              </Button>
+            </div>
+            {isLoading ? (
+              <Text role="status">Carregando encomendas…</Text>
+            ) : loadError ? (
+              <Notice tone="alert" role="alert">
+                {loadError}
+                <div className={styles.retry}>
+                  <Button variant="secondary" size="sm" onClick={reload}>
+                    Tentar novamente
                   </Button>
                 </div>
-              </div>
-            </>
-          )}
-        </Card>
+              </Notice>
+            ) : (
+              <>
+                <Table
+                  caption="Encomendas da unidade selecionada"
+                  headers={['Encomenda e recebimento', 'Unidade', 'Situação', 'Ação']}
+                  rows={rows}
+                  emptyMessage="Nenhuma encomenda nesta unidade por enquanto."
+                />
+                <div className={styles.pagination}>
+                  <Text size="sm" tone="secondary">
+                    Página {page} de {Math.max(1, Math.ceil(total / 20))}
+                  </Text>
+                  <div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page <= 1}
+                      onClick={() => {
+                        setLoading(true)
+                        setLoadError(null)
+                        setPage((value) => value - 1)
+                      }}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={page * 20 >= total}
+                      onClick={() => {
+                        setLoading(true)
+                        setLoadError(null)
+                        setPage((value) => value + 1)
+                      }}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+        )}
         <Notice>
           Apenas o morador identificado no registro da entrega pode confirmar a retirada. A portaria
           não confirma em nome do morador.
@@ -385,6 +388,6 @@ function ResidentPackages({ name }: { name: string }) {
           </div>
         )}
       </Modal>
-    </OperationsLayout>
+    </>
   )
 }

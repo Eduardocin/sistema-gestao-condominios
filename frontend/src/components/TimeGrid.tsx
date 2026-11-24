@@ -6,6 +6,8 @@ export type SlotStatus = 'free' | 'own' | 'other'
 export interface TimeSlotData {
   time: string
   status: SlotStatus
+  caption?: string
+  disabled?: boolean
 }
 
 export interface TimeGridProps {
@@ -32,12 +34,12 @@ export function TimeGrid({ slots, label, onSlotClick, className }: TimeGridProps
           key={slot.time}
           type="button"
           className={cx(styles.slot, styles[slot.status])}
-          disabled={slot.status === 'other'}
+          disabled={slot.disabled || slot.status === 'other'}
           aria-pressed={slot.status === 'free' ? false : slot.status === 'own' ? true : undefined}
           onClick={() => onSlotClick?.(slot.time, slot.status)}
         >
           <span className={styles.time}>{slot.time}</span>
-          <span className={styles.caption}>{statusLabel[slot.status]}</span>
+          <span className={styles.caption}>{slot.caption ?? statusLabel[slot.status]}</span>
         </button>
       ))}
     </div>

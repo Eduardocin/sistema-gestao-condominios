@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -86,6 +88,23 @@ class RegistroVisita(Base):
         CheckConstraint(
             "(saida_em IS NULL) = (saida_por_funcionario_id IS NULL)", name="saida_completa"
         ),
+        CheckConstraint(
+            "evidencia IS NULL OR COALESCE(jsonb_typeof(evidencia) = 'object' AND ("
+            "(NOT (evidencia ? 'contato') AND "
+            "pg_input_is_valid(evidencia #>> '{autorizacao,id}', 'uuid') AND "
+            "pg_input_is_valid(evidencia #>> '{autorizacao,visitante_id}', 'uuid') AND "
+            "pg_input_is_valid(evidencia #>> '{autorizacao,unidade_id}', 'uuid') AND "
+            "pg_input_is_valid(evidencia #>> '{autorizacao,autorizado_por,id}', 'uuid') AND "
+            "jsonb_typeof(evidencia #> '{autorizacao,autorizado_por,nome}') = 'string' AND "
+            "pg_input_is_valid(evidencia #>> '{autorizacao,inicio}', "
+            "'timestamp with time zone') AND "
+            "pg_input_is_valid(evidencia #>> '{autorizacao,fim}', 'timestamp with time zone')) OR "
+            "(NOT (evidencia ? 'autorizacao') AND "
+            "pg_input_is_valid(evidencia #>> '{contato,morador_id}', 'uuid') AND "
+            "(evidencia #>> '{contato,canal}') IN ('interfone', 'telefone') AND "
+            "(evidencia #>> '{contato,resposta}') = 'autorizou')), false)",
+            name="evidencia_exclusiva",
+        ),
         # No máximo uma visita em aberto por visitante (regra 11).
         Index(
             "uq_registros_visita_em_aberto",
@@ -113,6 +132,53 @@ class RegistroVisita(Base):
     entrada_por_funcionario_id: Mapped[uuid.UUID]
     saida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     saida_por_funcionario_id: Mapped[uuid.UUID | None]
+    evidencia: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+
+
+class ContatoPortaria(Base):
+    __tablename__ = "contatos_portaria"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["visitante_id", "condominio_id"],
+            ["visitantes.id", "visitantes.condominio_id"],
+            name="fk_contatos_portaria_visitante",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["unidade_id", "condominio_id"],
+            ["unidades.id", "unidades.condominio_id"],
+            name="fk_contatos_portaria_unidade",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["funcionario_id", "condominio_id"],
+            ["funcionarios.id", "funcionarios.condominio_id"],
+            name="fk_contatos_portaria_funcionario",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["morador_id", "condominio_id"],
+            ["moradores_unidade.id", "moradores_unidade.condominio_id"],
+            name="fk_contatos_portaria_morador",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("canal IN ('interfone', 'telefone')", name="canal_valido"),
+        CheckConstraint("resposta IN ('negou', 'sem_resposta')", name="resposta_valida"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    condominio_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("condominios.id", ondelete="RESTRICT"), index=True
+    )
+    visitante_id: Mapped[uuid.UUID]
+    unidade_id: Mapped[uuid.UUID]
+    funcionario_id: Mapped[uuid.UUID]
+    morador_id: Mapped[uuid.UUID]
+    canal: Mapped[str] = mapped_column(String(12))
+    resposta: Mapped[str] = mapped_column(String(12))
+    registrado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Veiculo(Base):

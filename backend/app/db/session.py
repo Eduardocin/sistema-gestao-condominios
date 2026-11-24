@@ -11,6 +11,7 @@ from app.core.config import get_settings
 def get_engine() -> Engine:
     return create_engine(
         get_settings().sqlalchemy_url,
+        hide_parameters=True,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,

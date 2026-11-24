@@ -17,6 +17,7 @@ import {
 import { WorkspacePage } from '../features/auth/WorkspacePage'
 import { PackagesWorkspacePage } from '../features/portaria/PackagesWorkspacePage'
 import { ResidentPackagesPage } from '../features/portaria/ResidentPackagesPage'
+import { VisitorsWorkspacePage } from '../features/portaria/VisitorsWorkspacePage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -45,6 +46,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireSession>
         <PackagesWorkspacePage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/portaria/visitantes',
+    element: (
+      <RequireSession>
+        <VisitorsWorkspacePage />
       </RequireSession>
     ),
   },

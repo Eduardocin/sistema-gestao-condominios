@@ -46,6 +46,9 @@ sem SQL, parâmetros ou traceback potencialmente sensíveis. A fábrica pode ser
 
 - Permissões: `permissao_aba.alterar`; repetir o mesmo valor não produz evento.
 - Pessoas: `responsaveis.alterar`, `funcionario.cadastrar`, `funcionario.desativar`.
+- US-305: um `vinculo.desfazer` por desvinculação, incluindo unidade, estado, efeito no vínculo
+  global e ID/indicador da chave automaticamente revogada. Não registra o código nem emite
+  outro `chave.revogar` para o mesmo efeito. Negação/rollback não deixam evento de sucesso.
 - Reservas: `reserva.criar`, `reserva.cancelar`; mantidos os dados e a transação já existentes.
 - Login: `seguranca.login`, transacional com eventual rehash; falha ou bloqueio usa sessão própria
   (`seguranca.login_falho`, `seguranca.login_bloqueado`). Nunca grava e-mail digitado ou tokens.

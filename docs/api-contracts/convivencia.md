@@ -1,10 +1,10 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-63):** bloqueio de datas com cancelamento das reservas afetadas (seção 3), e-mail `reserva_cancelada` no cancelamento pela Administração (seção 4.3), comentários e reabertura de ocorrências (seção 5) e relatório de encomendas (seção 6.1). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes (seção 6.2) e veículos (seção 6.3) do Morador, e o filtro `unidade_id` em `GET /encomendas` (seção 6.1, ainda opcional). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`, `periodo_passado`. **Pendentes:** remover bloqueios lançados por engano (seção 3), o worker que envia os e-mails da fila (a fila `envios_email` já recebe `reserva_cancelada`) e tornar `unidade_id` obrigatório para o Morador em `GET /encomendas` (seção 6.1). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
+Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-63):** bloqueio de datas com cancelamento das reservas afetadas (seção 3), enfileiramento de `reserva_cancelada` no cancelamento pela Administração (seção 4.3), comentários e reabertura de ocorrências (seção 5) e relatório de encomendas (seção 6.1). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes (seção 6.2) e veículos (seção 6.3) do Morador, e o filtro `unidade_id` em `GET /encomendas` (seção 6.1, ainda opcional). **Implementado (US-506 simplificada):** relatórios administrativos de visitantes e veículos (seção 6.4), sem CSV. `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`, `periodo_passado`. **Pendentes:** remover bloqueios lançados por engano (seção 3), o worker que envia os e-mails da fila (a fila `envios_email` já recebe `reserva_cancelada`) e tornar `unidade_id` obrigatório para o Morador em `GET /encomendas` (seção 6.1). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
-Histórias cobertas: US-601 a US-605, US-701 a US-704, US-402, US-501, US-502.
+Histórias cobertas: US-601 a US-605, US-701 a US-704, US-402, US-501, US-502 e US-506 simplificada.
 
 ## 1. Regras que valem para o módulo todo
 
@@ -364,6 +364,83 @@ Todos os campos são obrigatórios na criação. Na edição, `unidade_id` é op
 - `remocao` desativa (`ativo = false`, `removido_em` preenchido). A placa pode ser cadastrada de novo depois.
 - Funcionário (portaria): consulta `GET /veiculos` do condomínio para conferência no portão, com acesso de leitura (US-505).
 
+### 6.4 Relatórios administrativos (US-506 simplificada, TASK-52)
+
+**Implementado somente este recorte da TASK-52.** Rotas completas:
+
+| Método e rota | Permissão | Resultado |
+| --- | --- | --- |
+| `GET /api/v1/relatorios/visitantes` | Administração de condomínio ativo + `visitantes:ver` | Uma linha por entrada efetiva registrada |
+| `GET /api/v1/relatorios/veiculos` | Administração de condomínio ativo + `veiculos:ver` | Uma linha por cadastro de veículo, inclusive removido |
+
+Morador, Funcionário e ADM da plataforma recebem 403. Sem autenticação: 401.
+O condomínio é exclusivamente o do contexto autenticado. Não há filtro livre por
+`condominio_id`, nem novas permissões. As consultas operacionais da Portaria permanecem
+nas rotas existentes. Não se exige `responsavel_id` nem se cria evento de auditoria de
+sucesso por listagem; as negações continuam no mecanismo central de segurança.
+
+Parâmetros comuns de query, todos opcionais:
+
+| Campo | Regra |
+| --- | --- |
+| `unidade_id` | UUID; sem ele, todas as unidades do condomínio. Aceita unidade inativa. Unidade inexistente ou alheia: mesmo 404 genérico |
+| `de`, `ate` | Datas `AAAA-MM-DD` inclusivas em `America/Sao_Paulo`; cada limite pode ser informado sozinho. Período invertido: 422 |
+| `page` | Inteiro >= 1, padrão 1; o deslocamento `(page - 1) * page_size` deve caber no `bigint` do PostgreSQL (máximo `2^63 - 1`); acima: 422 |
+| `page_size` | Inteiro de 1 a 100, padrão 20 |
+
+Os limites são início de `de` (inclusivo) e início do dia seguinte a `ate` (exclusivo),
+calculados no fuso do projeto, inclusive nas transições históricas de horário de verão.
+`9999-12-31` é recusada em ambos os limites com 422 para evitar overflow;
+`0001-01-01` e `9999-12-30` são aceitas. Parâmetros inválidos ou extras retornam
+422 `validation_error`, no envelope comum.
+
+Ambas as respostas usam `{items,total,page,page_size}`. O total respeita todos os filtros;
+filtros, contagem e paginação são executados no PostgreSQL. A ordem é data/hora
+decrescente (`entrada_em` ou `criado_em`), com desempate por UUID crescente. Página além
+do fim devolve `items: []` e mantém o total filtrado.
+
+**Campos dos visitantes:** `id` da visita; `visitante: {id,nome}`;
+`unidade: {id,identificacao,bloco,andar}`; `avulso`; `status` (`em_andamento` ou `encerrada`);
+`entrada: {em,funcionario:{id,nome}}`; `saida` no mesmo formato ou `null` em visita aberta.
+`bloco` e `andar` são nomes, ou `null` quando não disponíveis. Os instantes são ISO 8601
+com fuso. Não se expõem CPF, idade, observações, contato, autorização ou evidência bruta.
+
+O período dos visitantes filtra **somente `entrada_em`**, nunca a autorização prevista
+ou o contato da Portaria. A saída aparece mesmo após o período consultado. Inclui
+avulsos, visitas repetidas do mesmo visitante, cadastros cancelados, unidades inativas
+e funcionários posteriormente desligados. Contatos negados, sem resposta e cadastros
+sem entrada efetiva não geram linhas. IDs e instantes vêm do registro histórico;
+nomes e identificação da unidade vêm dos cadastros atuais. Não existem snapshots
+desses nomes no registro de visita; não há reconstrução de nomes anteriores.
+
+**Campos dos veículos:** `id`; `unidade: {id,identificacao,bloco,andar}`; `placa`, `marca`,
+`modelo`, `cor`; `ativo`; `criado_em`; `removido_em` (ou `null`); `placa_duplicada` (booleano).
+O período filtra **somente `criado_em`**, a data de cadastro. Dados e situação são os
+atualmente registrados, inclusive remoção posterior ao período e unidade inativa.
+Não há reconstrução de versões anteriores dos dados do veículo.
+
+`placa_duplicada` indica se **hoje a placa possui cadastros ativos em pelo menos duas
+unidades ativas distintas do mesmo condomínio**. O cálculo não inclui removidos,
+unidades inativas ou outros condomínios, e independe dos filtros de unidade/período.
+O indicador também aparece nas linhas históricas da placa: elas não contam como
+cadastros ativos e só exibem `true` se existirem duas unidades ativas com a placa ativa.
+Remover um dos dois cadastros ou desativar uma das unidades faz o indicador voltar
+a `false`, a menos que ainda restem outras duas unidades qualificadas.
+
+Limites intencionais: sem CSV, Excel, PDF, gráficos ou estatísticas; o relatório de
+veículos **não representa circulação**, pois não existem registros de entrada/saída
+de veículos. Suporte, comunicados e e-mails não integram esta entrega.
+
+Integração futura: o PR #30 altera a busca de CPF de visitantes avulsos, testes e este
+contrato; o PR #31 sobrepõe repositories, services, schemas, routers operacionais e
+documentação de visitantes/veículos. Os relatórios ficam em arquivos próprios e
+reutilizam `RepositorioVisitas.detalhada()`; a consulta de veículos é específica para
+históricos e duplicidade atual, seguindo as mesmas regras de ativos da operacional.
+Esta entrega não altera endpoints/services/repositories operacionais. A simulação da
+revisão integrada não encontrou conflito textual com o PR #30; o PR #31 requer resolução
+explícita nos arquivos operacionais, registro de routers e documentação. Nenhuma dessas
+branches foi incorporada; a conciliação permanece uma etapa própria.
+
 ## 7. Casos obrigatórios de teste
 
 Além da matriz parametrizada e dos testes de isolamento (matriz, seção 11):
@@ -389,7 +466,7 @@ Além da matriz parametrizada e dos testes de isolamento (matriz, seção 11):
 | Calendário e grade | Confirmar o formato da grade (estados `bloqueado` e `passado` incluídos) e se o `calendario` do mês é necessário | Matheus e Vitor |
 | Fuso do condomínio | Hoje não há coluna; proposta: `America/Sao_Paulo` fixo no MVP | Davi e Gabriel |
 | Antecedência da reserva | As stories não limitam quão à frente se reserva. Proposta: sem limite no MVP; revisar se houver abuso | Paulo (regra de negócio) |
-| Relatório da Administração | A consulta administrativa já informa placas repetidas entre unidades. A apresentação dessa indicação no relatório é parte da US-506. | Vitor, Tude e Paulo |
+| Relatório da Administração | US-506 simplificada implementada na seção 6.4, com indicação de placas duplicadas e sem CSV. A TASK-52 completa permanece fora deste recorte. | Tude e Paulo |
 | Cancelar visitante depois da primeira entrada | Com a autorização reutilizável (22/10), o Morador precisa poder **revogar** um cadastro em curso. A US-501 só permite cancelar "antes da entrada". **Proposta:** permitir enquanto não houver visita em andamento. | Vitor e Eduardo |
 | `unidade_id` em `GET /encomendas` | Ajuste em `portaria.md` (seção 6.1) | Eduardo e Vitor |
 | Anexos de ocorrência | Tipos, tamanhos, quantidade (5) e leitura protegida de vídeo | Eduardo (TASK-26) e Vitor |

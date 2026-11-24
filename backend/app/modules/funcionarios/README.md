@@ -42,9 +42,57 @@ existente sem eventos retorna lista vazia. A auditoria geral permanece exclusiva
 Esta exceção restrita de histórico continua sujeita à revisão de Gabriel, sem aprovação
 presumida ou ampliação das permissões globais.
 
-Ainda fora deste recorte: edição/desativação de responsáveis, provisionamento e troca
-de senha da conta compartilhada. Não há reativação, exclusão física, frontend ou nova
-migration.
+## US-210 — conta compartilhada e responsáveis
+
+Completa `PUT /api/v1/responsaveis-administracao/{id}` (`{nome}`) e
+`POST /api/v1/responsaveis-administracao/{id}/desativacao` (`{}`). Reutiliza GET/POST,
+normalização, contexto de cadastro e auditoria `responsaveis.alterar`, sem responsável
+previamente selecionado. Duplicidade entre ativos: 409 `nome_duplicado`; último ativo:
+409 `ultimo_responsavel`; desativação repetida: 409 `ja_desativado`. IDs e referências
+permanecem. Editar um inativo não o reativa. Repetir o mesmo nome não gera evento.
+
+`GET /api/v1/conta-funcionarios` devolve `{login,atualizada_em}` ou 404.
+`PUT` recebe `{login,senha,responsavel_id}` e cria/troca a conta, retornando o mesmo
+formato. Só Administração de condomínio ativo passa pelas permissões centrais
+`contas_compartilhadas:ver/editar`. A gestão dos responsáveis continua disponível em
+pendente/rejeitado/ativo; desativado é bloqueado também depois de esperar a trava.
+
+A identidade dedicada usa `Usuario` sem tipo próprio, telefone/documento ou privilégio
+de plataforma, e exatamente um `VinculoCondominio` de Funcionários, sem unidade.
+Nunca se associa um usuário pelo e-mail informado. Colisão global de e-mail retorna
+409 `login_indisponivel`; conta/vínculo inativo, sem senha ou incompatível retorna
+409 `conta_compartilhada_incompativel`, sem criação paralela ou reativação automática.
+Os fluxos de cadastro/vínculo existentes exigem tipo próprio e não associam essa conta
+a outro perfil/condomínio; o serviço revalida todos os seus vínculos antes da troca.
+
+Login é e-mail normalizado; senha segue o validador compartilhado e Argon2id.
+Mudança efetiva preserva IDs e incrementa `sessao_versao`, derrubando access/refresh
+antigos. Repetição idempotente preserva hash, versão, data e auditoria. Não emite tokens.
+`credenciais_atualizadas_em` fica no vínculo, é gravada na criação/troca e corresponde
+à saída `atualizada_em`. Legados sem data conhecida permanecem com `null`, sem inventar
+uma data. Conta, vínculo e evento `conta_compartilhada.trocar_acesso` são transacionais;
+o evento recebe só login/versão, nunca senha, hash ou token.
+
+A migration `20261124_0009`, sobre `20261121_0008`, adiciona essa coluna nullable e dois
+índices únicos parciais para `perfil='funcionario'`: por condomínio e por usuário,
+incluindo vínculos inativos. Não restringe múltiplos condomínios de moradores ou
+Administração. Antes da alteração, bloqueia gravações nas tabelas envolvidas e recusa
+duplicidades, contas pessoais/plataforma, unidades indevidas e outros vínculos da mesma
+conta. A correção desses legados é explícita; não exclui nem consolida dados. Downgrade
+remove somente os índices e a coluna nova, preservando identidades/vínculos/históricos.
+
+Criação/troca e gestão da lista usam condomínio `FOR NO KEY UPDATE` antes do responsável
+(`FOR SHARE` na validação; `FOR UPDATE` na edição/desativação), e a troca depois bloqueia
+a conta `FOR NO KEY UPDATE`, recarregando os dados. Isso serializa criação, versões,
+nomes e proteção do último ativo e evita inverter a trava do responsável com as FKs de
+outras operações. Falhas de auditoria ou persistência revertem a transação inteira.
+
+Testes da entrega: [US-210](../../../tests/us210/), com HTTP/JWT reais, isolamento,
+tokens antigos, idempotência, legados, rollback, índices no PostgreSQL e concorrência
+por conexões independentes. Gestão da conta compartilhada e edição/desativação de
+responsáveis ainda não têm telas; o frontend existente permite cadastrar responsáveis.
+Não há reativação ou exclusão física. A US-208
+permanece fora do escopo; esta entrega não conclui a TASK-51 inteira.
 
 Verificação: `tests/test_contas_funcionarios_api.py` usa HTTP real, JWT e PostgreSQL migrado; cobre perfis, A/B, filtros, fotos, bootstrap, auditoria e rollback controlado.
 

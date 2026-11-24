@@ -30,6 +30,13 @@ As permissões são as da matriz central (`chaves_acesso:ver/criar/editar/desati
 
 ## Atomicidade e concorrência
 
+A US-305 reutiliza a trava da unidade e o repositório de chaves para revogar a vigente na
+mesma transação da desvinculação. Não gera outra chave nem cancela registros operacionais.
+Depois, a Administração deve usar a rota de **geração**, pois a regeneração continua
+exigindo uma chave vigente. A nova chave deve ser fornecida somente às pessoas legitimamente
+autorizadas. A revogação automática é identificada no único evento `vinculo.desfazer`, sem
+duplicar `chave.revogar`. As três ações manuais de chave mantêm suas semânticas.
+
 O bloqueio `FOR UPDATE` na unidade serializa geração, regeneração, revogação e cadastro/edição
 do proprietário, inclusive a primeira criação. O índice parcial existente garante no máximo
 uma chave vigente; a constraint global de código inclui chaves antigas e revogadas.

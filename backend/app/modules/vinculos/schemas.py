@@ -1,5 +1,6 @@
 import uuid
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -35,6 +36,19 @@ class ReferenciaUnidade(BaseModel):
 class VinculoSaida(BaseModel):
     unidade: ReferenciaUnidade
     condominio: ReferenciaCondominio
+
+
+class DesvinculacaoEntrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    responsavel_id: uuid.UUID | None = None
+
+
+class DesvinculacaoSaida(BaseModel):
+    id: uuid.UUID
+    status: Literal["desvinculado"] = "desvinculado"
+    desvinculado_em: datetime
+    chave_revogada: bool
 
 
 class ProprietarioPublico(BaseModel):

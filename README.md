@@ -17,13 +17,17 @@ Esta relação descreve o código integrado nesta branch. Contratos, modelos, ca
 
 | Área | Backend disponível | Frontend disponível |
 | --- | --- | --- |
-| Contas e sessão | Cadastro de Morador/Administração, consulta e edição da própria conta; JWT, refresh, logout, seleção de condomínio e autorização central | Cadastro, login, restauração de sessão, seleção de condomínio e navegação por perfil |
+| Contas e sessão | Cadastro de Morador/Administração, consulta/edição da própria conta, troca de senha e redefinição com token de uso único; JWT, refresh, logout, seleção de condomínio e autorização central | Cadastro, login, restauração de sessão, seleção de condomínio e navegação por perfil; sem telas de troca/redefinição de senha |
 | Cadastro de condomínio | Cadastro com estrutura, consulta, aprovação/rejeição pelo ADM e correção/reenvio de rejeitado (TASK-57 / US-204) | Sem tela de cadastro, análise ou reenvio de condomínio |
 | Dados e estrutura | Edição de dados e referência à logo; criação, edição e desativação/reativação lógica de blocos, andares e unidades (US-205/206) | Sem telas de gestão de dados, logo ou estrutura |
-| Unidades e moradores | Proprietário e chaves por unidade, vínculo por chave, consulta das próprias unidades e permissões por aba | Sem telas desses fluxos |
-| Funcionários (US-209) | Lista, cadastro, desligamento, consulta individual, edição e histórico restrito; cadastro/lista de responsáveis | Lista, cadastro e desligamento de funcionários; cadastro de responsáveis. Detalhe, edição e histórico ainda sem tela |
-| Encomendas | Recebimento com foto, entrega e confirmação pelo morador recebedor | Fluxos autenticados em `/app/portaria/encomendas` e `/app/morador/encomendas` |
-| Convivência | Áreas comuns, reservas, cancelamentos e avisos | Sem telas operacionais de reservas e avisos |
+| Unidades e moradores | Proprietário e chaves por unidade, vínculo por chave, consulta das próprias unidades, permissões por aba e desvinculação segura (US-305) | Sem telas desses fluxos |
+| Funcionários (US-209) e responsáveis | Lista, cadastro, desligamento, consulta individual, edição e histórico restrito de funcionários; cadastro/lista, edição e desativação de responsáveis administrativos | Lista, cadastro e desligamento de funcionários; cadastro de responsáveis. Demais operações sem tela |
+| Conta compartilhada (US-210) | Criação, consulta e troca das credenciais de Funcionários, com identidade permanente e invalidação de sessões antigas | Sem tela de gestão da conta compartilhada |
+| Encomendas | Recebimento com foto, entrega, confirmação pelo recebedor, filtros por unidade/período e relatório administrativo por status/unidade | Fluxos autenticados em `/app/portaria/encomendas` e `/app/morador/encomendas`; sem tela do relatório administrativo |
+| Visitantes | Cadastro, edição e cancelamento pelo Morador; avulsos, contatos e entrada/saída pela Portaria; relatório administrativo de visitas efetivas (US-506) | Sem telas operacionais integradas; o protótipo público usa dados fictícios |
+| Veículos | Cadastro, edição, remoção lógica, consulta operacional e relatório administrativo de cadastros com placas duplicadas (US-506) | Sem telas integradas |
+| Reservas e avisos | Áreas comuns, agenda/calendário, reservas, cancelamentos, bloqueio de datas com cancelamento das reservas afetadas e avisos transacionais | Sem telas operacionais desses fluxos |
+| Ocorrências | Abertura, consulta, resposta/resolução administrativa e comentários/reabertura pelo Morador | Sem telas operacionais integradas |
 | Arquivos e auditoria | Upload autorizado, bucket MinIO privado, download por URL assinada curta e auditoria transacional | Integração de fotos no fluxo de encomendas; sem tela geral de auditoria |
 
 Em US-205/206, as edições e a gestão da estrutura aceitam condomínios `pendente`, `rejeitado` e `ativo`; `desativado` bloqueia escritas. O reenvio continua exclusivo de `rejeitado`. As operações exigem responsável ativo do próprio condomínio e preservam IDs, vínculos e históricos. Unidade com morador ativo não pode ser desativada; bloco/andar com unidades ativas também não. A reativação exige pais ativos e não reativa filhos automaticamente. Desativar uma unidade revoga sua chave; criar/reativar em condomínio ativo gera chave se não houver vigente, preservando as anteriores.
@@ -32,7 +36,13 @@ A logo usa o storage existente: referência omitida preserva, nula desassocia e 
 
 O histórico de funcionários é exclusivo da Administração do próprio condomínio ativo, inclusive para desligados. Expõe apenas ação, data, responsável e identificação do autor; a auditoria geral permanece exclusiva do ADM. Essa exceção restrita continua sujeita à revisão de autorização por Gabriel. Detalhes nos módulos de [condomínios](backend/app/modules/condominios/README.md), [funcionários](backend/app/modules/funcionarios/README.md) e nos [contratos](docs/api-contracts/).
 
-`/prototipos/portaria` é uma demonstração pública com dados fictícios em memória, sem persistência na API. As páginas gerais de cada perfil são pontos de navegação; não representam todos os fluxos concluídos. Visitantes e veículos ainda não possuem API integrada nesta branch; os PRs [#26](https://github.com/Eduardocin/sistema-gestao-condominios/pull/26)/[#27](https://github.com/Eduardocin/sistema-gestao-condominios/pull/27) estão pendentes, assim como troca/redefinição de senha do PR [#25](https://github.com/Eduardocin/sistema-gestao-condominios/pull/25). Consulte [Próximas entregas](#próximas-entregas) para os demais limites.
+Na US-210, `GET /api/v1/conta-funcionarios` consulta login e data da atualização e `PUT` define o acesso com responsável ativo. A troca efetiva preserva a identidade e invalida access/refresh tokens; repetir as mesmas credenciais preserva sessão, data e auditoria. A gestão de responsáveis protege o último ativo. Na US-305, `POST /api/v1/unidades/{unidade_id}/moradores/{morador_unidade_id}/desvinculacao` preserva históricos, revoga o acesso na próxima requisição e revoga a chave vigente, sem criar substituta. O vínculo global só é desativado se não restar outra unidade ativa no condomínio; outros acessos legítimos são preservados. A Administração pode deixar a unidade vazia e gerar depois uma nova chave com `POST /api/v1/unidades/{id}/chave`. Contratos e limites em [núcleo](docs/api-contracts/nucleo.md), [plataforma](docs/api-contracts/plataforma.md) e [vínculos](backend/app/modules/vinculos/README.md).
+
+Os relatórios `GET /api/v1/relatorios/visitantes` e `GET /api/v1/relatorios/veiculos` são exclusivos da Administração de condomínio ativo. Aceitam unidade opcional, `de`/`ate` inclusivos em `America/Sao_Paulo` e paginação de até 100 itens; ordenam pelo instante decrescente e ID crescente. Visitantes filtra a entrada efetiva e preserva saídas posteriores ao período; veículos filtra a data de cadastro, inclui removidos e exibe os dados atuais. Ambos incluem unidades inativas. Placas duplicadas consideram cadastros atualmente ativos em unidades ativas distintas do próprio condomínio, independentemente dos filtros. Não há CSV, circulação de veículos ou reconstrução de versões anteriores dos nomes/dados. Detalhes em [convivência, seção 6.4](docs/api-contracts/convivencia.md#64-relatórios-administrativos-us-506-simplificada-task-52).
+
+As APIs dos PRs #25–#29, #32 e #33 já estão integradas: senha, visitantes/avulsos/veículos, reenvio cadastral/estrutura/funcionários, ocorrências, filtros/relatório de encomendas e bloqueios/reabertura. As USs 205/206 pertencem aos recortes integrados anteriormente pelo PR #28. Aprovação de condomínio, registro de encomenda e cancelamento administrativo de reservas já gravam eventos na outbox, mas não há processamento/entrega SMTP. A recuperação completa de senha ainda depende da solicitação de recuperação e dessa infraestrutura; a troca autenticada e a redefinição com token já estão disponíveis na API.
+
+`/prototipos/portaria` é uma demonstração pública com dados fictícios em memória, sem persistência na API. As páginas gerais de cada perfil são pontos de navegação; não representam todos os fluxos concluídos. As três novas USs 210, 305 e 506 são entregas de backend. Permanecem pendentes a foto opcional de conta por storage global, o rascunho persistente/retomada do cadastro e uploads nos contextos cadastrais ainda não suportados. Consulte [Próximas entregas](#próximas-entregas) para os demais limites.
 
 **Primeira vez no projeto?** Siga o [Guia de primeira execução](#guia-de-primeira-execução) do início ao fim. Cada etapa termina com uma verificação; só avance quando ela passar. Se algo falhar, consulte [Solução de problemas](#solução-de-problemas).
 
@@ -210,7 +220,7 @@ docker compose version
 docker info --format '{{.ServerVersion}}'
 ```
 
-Esperado: Python `3.12.x` ou `3.13.x`; Node `v24.x` (ou `v22.13+`); `docker compose version` mostrando `v2.x`; e `docker info` imprimindo um número de versão. Se `docker info` falhar, o Docker está instalado mas parado — veja [Docker não responde](#docker-não-responde).
+Esperado: Python `3.12.x` ou `3.13.x`; Node compatível com `^22.13.0 || >=24.0.0` (`v24.x` no CI); `docker compose version` mostrando `v2.x`; e `docker info` imprimindo um número de versão. Se `docker info` falhar, o Docker está instalado mas parado — veja [Docker não responde](#docker-não-responde).
 
 ### Etapa 1 — Clonar e configurar o `.env`
 
@@ -383,7 +393,7 @@ Linux / macOS:
 #### ✅ Verificação da etapa 4
 
 - `upgrade head` aplica as revisões pendentes (ou termina sem novas revisões, se já aplicadas).
-- `alembic current` corresponde a `alembic heads` e indica `(head)`. Nesta branch, a revisão atual é `20261119_0007`. TASK-57, complementos da US-209 e US-205/206 não acrescentam migrations.
+- `alembic current` corresponde a `alembic heads` e indica `(head)`. A revisão atual é `20261124_0009`: a US-210 adiciona a data das credenciais e a unicidade permanente da conta de Funcionários. US-305, US-506 e os PRs #32/#33 não acrescentam migrations. O upgrade recusa legados incompatíveis, sem apagar/consolidar contas; regularize explicitamente os dados apontados antes de tentar novamente.
 - O teste de conexão imprime `1`.
 
 Para ver as tabelas criadas:
@@ -795,7 +805,7 @@ export TEST_DATABASE_URL="$DATABASE_URL"
 unset DATABASE_URL TEST_DATABASE_URL
 ```
 
-Esperado: os testes de PostgreSQL são executados e passam. O teste de integração MinIO exige configuração própria; veja [storage](docs/storage.md). Os testes usam rollback ou limpeza dos próprios registros; os de concorrência confirmam transações reais. Não execute suítes simultâneas de worktrees diferentes no mesmo banco. **Remova as variáveis ao terminar**, senão a API passará a usar o banco de testes. O CI fornece PostgreSQL limpo automaticamente.
+Esperado: os testes de PostgreSQL são executados e passam. Para executar a suíte completa também com MinIO real, configure `TEST_STORAGE_ENDPOINT`, `TEST_STORAGE_PUBLIC_ENDPOINT`, `TEST_STORAGE_ACCESS_KEY` e `TEST_STORAGE_SECRET_KEY` de um serviço exclusivo de testes, construído com `infra/minio`; veja [storage](docs/storage.md). Os dois testes marcados `storage` usam buckets aleatórios próprios e não devem ser contabilizados como aprovados quando pulados por falta de infraestrutura. A suíte completa inclui [US-210](backend/tests/us210/), [US-305](backend/tests/us305/) e [US-506](backend/tests/us506/). Os testes usam rollback ou limpeza dos próprios registros; os de concorrência confirmam transações reais. Não execute suítes simultâneas de worktrees diferentes no mesmo banco. **Remova as variáveis ao terminar**, senão a API passará a usar o banco de testes. O CI fornece PostgreSQL limpo automaticamente e um job separado de MinIO.
 
 Os placeholders de conexão não são credenciais prontas; caracteres especiais no usuário/senha precisam de codificação de URL.
 
@@ -825,11 +835,17 @@ O workflow [ci.yaml](.github/workflows/ci.yaml) valida backend (Python 3.13, com
 
 ## Próximas entregas
 
-- US-208: desativação/reativação do condomínio pela plataforma. A gestão lógica dos elementos da estrutura não conclui essa story.
-- US-210: gestão da conta compartilhada. US-205/206 representam apenas parte da TASK-51; a TASK-51 não está integralmente concluída.
-- TASK-50: processamento e envio assíncrono de e-mail. Aprovação de condomínio e recebimento de encomenda gravam eventos pendentes, sem entrega SMTP.
-- TASK-52: relatórios, suporte e comunicados; TASK-58: convites e desvinculação de moradores. Modelos e contratos não significam APIs disponíveis.
-- Visitantes/entrada e saída ([PR #26](https://github.com/Eduardocin/sistema-gestao-condominios/pull/26)), veículos/visitantes avulsos ([PR #27](https://github.com/Eduardocin/sistema-gestao-condominios/pull/27), baseado no #26) e troca/redefinição de senha ([PR #25](https://github.com/Eduardocin/sistema-gestao-condominios/pull/25)) ainda aguardam integração. Revalidar migrations, autorização e regressões de unidades inativas e históricos ao integrar.
+| Task | Recorte de backend disponível | Pendências |
+| --- | --- | --- |
+| TASK-51 — Tude | US-210; US-205/206 já integradas anteriormente pelo PR #28 | US-208 (desativação/reativação do condomínio) e telas correspondentes; limites de cadastro/storage e histórico restrito documentados |
+| TASK-58 — Paulo | US-305 | US-303 (convites) e telas correspondentes |
+| TASK-52 — Tude | US-506 simplificada | Exportação CSV, USs 804, 901 e 902 e telas correspondentes |
+| TASK-50 — Tude | Nenhum serviço novo de envio; somente enfileiramento existente | US-803: processamento e entrega assíncrona de e-mails, adiada integralmente |
+
+As TASKs 51, 58 e 52 não estão integralmente concluídas. A TASK-50 não foi implementada; os eventos pendentes de aprovação, encomenda e cancelamento de reserva não equivalem à entrega SMTP. Solicitação de recuperação de senha e infraestrutura de envio continuam pendentes; não há fluxo completo de recuperação por e-mail.
+
+- Os PRs #30 e #31 tratam de visitantes e veículos e podem sobrepor consultas, contratos e registro de rotas existentes; exigem conciliação própria antes de serem integrados.
+- Remoção de bloqueios de datas ainda sem endpoint; filtro `unidade_id` de encomendas continua opcional para preservar a tela atual do Morador.
 - Telas para os fluxos hoje exclusivos do backend; upload de logo/documentos no cadastro inicial e em condomínio pendente/rejeitado; provisionamento inicial do ADM e revisão da exceção de histórico de funcionários.
 - TASK-59: revisão final e apresentação.
 

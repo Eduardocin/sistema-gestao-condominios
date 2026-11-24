@@ -8,8 +8,20 @@ from app.core.permissoes import Perfil, interpretar, pode
 TODOS = [Perfil.MORADOR, Perfil.FUNCIONARIO, Perfil.ADMINISTRACAO, Perfil.PLATAFORMA]
 
 
-def test_a_matriz_tem_os_20_modulos_do_documento():
-    assert len(permissoes.RECURSOS) == 20
+def test_a_matriz_tem_os_21_recursos_do_documento():
+    # US-305 acrescenta um recurso restrito, sem ampliar os privilégios de vínculos.
+    assert len(permissoes.RECURSOS) == 21
+
+
+@pytest.mark.parametrize("perfil", TODOS)
+def test_desvinculacao_e_especifica_e_nao_amplia_vinculos(perfil):
+    assert pode(perfil, "desvinculacoes_moradores", "criar") is (
+        perfil in {Perfil.MORADOR, Perfil.ADMINISTRACAO}
+    )
+    assert not pode(perfil, "desvinculacoes_moradores", "editar")
+    assert not pode(perfil, "desvinculacoes_moradores", "desativar")
+    assert not pode(Perfil.MORADOR, "vinculos", "editar")
+    assert not pode(Perfil.MORADOR, "vinculos", "desativar")
 
 
 def test_perfil_ou_recurso_desconhecido_e_negado():

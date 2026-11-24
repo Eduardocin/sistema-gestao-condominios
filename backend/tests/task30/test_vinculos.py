@@ -220,6 +220,18 @@ def test_sem_identidade_e_conta_inativa(client, session, caso):
 @pytest.mark.parametrize("perfil", ["administracao", "funcionario"])
 @pytest.mark.parametrize("ativo", [True, False])
 def test_vinculo_de_outro_perfil_nao_e_sobrescrito(client, session, caso, perfil, ativo):
+    if perfil == "funcionario":
+        # montar_predio já cria um Funcionário fictício. A US-210 permite apenas um,
+        # inclusive inativo: retirar só esse vínculo da preparação evita uma duplicidade
+        # inválida antes de testar a proteção original contra conversão de perfil.
+        ficticio = session.scalars(
+            select(VinculoCondominio).where(
+                VinculoCondominio.usuario_id == caso.a.funcionario.id,
+                VinculoCondominio.condominio_id == caso.a.condominio.id,
+            )
+        ).one()
+        session.delete(ficticio)
+        session.flush()
     session.add(
         VinculoCondominio(
             usuario_id=caso.usuario.id,

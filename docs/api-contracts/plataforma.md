@@ -335,7 +335,19 @@ livres de condomínio, recurso ou ação nem acesso a eventos de outros recursos
 | `PUT /responsaveis-administracao/{id}` | Administração | `{"nome": "..."}` | 200, objeto |
 | `POST /responsaveis-administracao/{id}/desativacao` | Administração | `{}` | 200, objeto |
 
-Nome de 1 a 100 caracteres, único entre os ativos do condomínio ignorando maiúsculas (proposta). Essa lista alimenta o campo `responsavel_id` de **todas** as ações da Administração.
+Nome de 1 a 100 caracteres, único entre os ativos do condomínio ignorando maiúsculas. Essa lista alimenta o campo `responsavel_id` de **todas** as ações da Administração.
+
+**Implementado na US-210:** as quatro rotas usam o prefixo `/api/v1`. Nomes têm espaços
+normalizados e unicidade entre ativos ignorando caixa. `PUT` exige apenas `nome` e rejeita
+campos extras; repetir o nome normalizado não gera evento. Pode corrigir também o nome de
+um registro inativo, sem reativá-lo. A desativação recebe `{}`, preserva o registro e retorna
+409 `ja_desativado` se repetida. Não é permitido desativar o último ativo (409
+`ultimo_responsavel`); cadastre um substituto primeiro. A lista inicialmente vazia é válida.
+Administração pode gerir a lista em condomínio `pendente`, `rejeitado` ou `ativo`; em
+`desativado`, recebe 403. IDs inexistentes ou de outro condomínio retornam 404. Criação,
+edição e desativação são serializadas pelo condomínio e auditadas na mesma transação.
+Referências antigas e nomes copiados para a auditoria permanecem preservados; os nomes
+mostrados por outros módulos que consultam a lista continuam seguindo seus contratos.
 
 Há um ciclo a evitar: a lista começa vazia e as ações exigem um responsável da lista. Por isso **gerir a própria lista é a única ação da Administração que não recebe `responsavel_id`**; a alteração é auditada (`responsaveis.alterar`) só com a conta autenticada. O front deve orientar a cadastrar ao menos um responsável antes da primeira ação que exija `responsavel_id`, inclusive para corrigir a estrutura durante o cadastro do condomínio; enquanto a lista estiver vazia, essas ações retornam 422 (`validation_error`).
 
@@ -346,9 +358,47 @@ Há um ciclo a evitar: a lista começa vazia e as ações exigem um responsável
 | `GET /conta-funcionarios` | Administração | — | 200, `{"login": "...", "atualizada_em": "..." }` ou 404 se não existe |
 | `PUT /conta-funcionarios` | Administração | `{"login": "...", "senha": "...", "responsavel_id": "UUID"}` | 200, mesmo formato |
 
-`PUT` cria a conta se não existir e a troca se existir. A conta é um `usuario` comum com um `vinculos_condominio` de perfil `funcionario` (decisão 3 do DER). **A senha nunca volta numa resposta.** Trocar login ou senha **incrementa `sessao_versao`**, derrubando as sessões ativas da conta imediatamente (`sv` do token, matriz seção 4). Auditoria: `conta_compartilhada.trocar_acesso`, sem a senha em `antes`/`depois`. O `login` é um e-mail, assumido pelo DER; se a equipe decidir por nome de usuário, só o formato do campo muda.
+`PUT` cria a conta se não existir e a troca se existir. A conta é um `usuario` comum com um `vinculos_condominio` de perfil `funcionario` (decisão 3 do DER). **A senha nunca volta numa resposta.** Trocar login ou senha **incrementa `sessao_versao`**, derrubando as sessões ativas da conta imediatamente (`sv` do token, matriz seção 4). Auditoria: `conta_compartilhada.trocar_acesso`, sem a senha em `antes`/`depois`. O `login` é um e-mail.
+
+**Implementado na US-210:** login exclusivamente por e-mail normalizado. As duas rotas são
+restritas à Administração de condomínio ativo, com as permissões existentes de
+`contas_compartilhadas`. `PUT` exige responsável ativo do condomínio (ausente: 422;
+inexistente, inativo ou alheio: 404), rejeita extras e reutiliza as regras de senha do cadastro.
+
+Uma identidade e um vínculo de Funcionários são permanentes por condomínio, inclusive
+quando inativos. A conta tem `tipo_cadastro=NULL`, não é ADM, não possui telefone/documento
+pessoal nem unidade no vínculo, e não pode ter outros vínculos. Ela é distinta dos nomes
+de porteiros/seguranças. Um e-mail ocupado nunca é associado à conta: retorna 409
+`login_indisponivel`, inclusive se pertencer a conta inativa. A troca preserva os IDs.
+
+Conta ou vínculo inativos, sem senha ou incompatíveis retornam 409
+`conta_compartilhada_incompativel`, sem reativação, substituição ou correção automática.
+`GET` sem conta retorna 404. A migration `20261124_0009` recusa dados legados ambíguos
+com diagnóstico, sem excluir/consolidar registros. Seus índices únicos incluem inativos,
+por condomínio e por usuário de Funcionários. Os fluxos existentes de cadastro e vínculo
+não permitem vincular contas sem tipo próprio; a US-210 também revalida sua exclusividade.
+
+`atualizada_em` vem de `vinculos_condominio.credenciais_atualizadas_em`, gravada na criação
+e em cada mudança efetiva. Em legados sem data conhecida, é `null` até uma troca efetiva.
+Não há preenchimento com data presumida. Mesmos login normalizado e senha não mudam hash,
+data ou `sessao_versao`, nem geram auditoria. Alterar qualquer credencial soma exatamente 1
+à versão, invalidando access **e** refresh tokens anteriores. Não retorna novos tokens.
+
+Ordem de travas: condomínio (`FOR NO KEY UPDATE`), responsável (`FOR SHARE`) e conta
+(`FOR NO KEY UPDATE`). O estado do condomínio e da conta é recarregado após a espera.
+A gestão da lista usa a mesma trava de condomínio antes de bloquear o responsável,
+serializando também sua desativação em relação à troca. `NO KEY UPDATE` permite as
+referências por FK de operações que já validaram um responsável. Credenciais, vínculo,
+data, versão e auditoria confirmam ou revertem juntos. Auditoria contém somente login
+e versão, nunca senha, hash ou tokens. Esta entrega não implementa a US-208.
 
 ## 6. E-mail assíncrono (US-803, Should, Sprint 3)
+
+**Estado atual:** aprovação de condomínio, registro de encomenda e cancelamento
+administrativo de reserva já enfileiram eventos na outbox. Processamento assíncrono,
+entrega SMTP e reenvio não estão implementados; a TASK-50 foi integralmente adiada.
+As interfaces e rotas descritas abaixo são o contrato planejado. Solicitação de
+recuperação e entrega do e-mail ainda são necessárias para completar a US-102.
 
 ### 6.1 Eventos cobertos
 

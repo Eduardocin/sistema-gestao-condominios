@@ -11,7 +11,7 @@ from app.modules.condominios.router import router as condominios_router
 from app.modules.contas.router import router as contas_router
 from app.modules.encomendas.router import portaria_router as portaria_encomendas_router
 from app.modules.encomendas.router import router as encomendas_router
-from app.modules.funcionarios.router import responsaveis_router
+from app.modules.funcionarios.router import conta_router, responsaveis_router
 from app.modules.funcionarios.router import router as funcionarios_router
 from app.modules.ocorrencias.router import router as ocorrencias_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
@@ -19,6 +19,7 @@ from app.modules.reservas.router import router as reservas_router
 from app.modules.storage.router import router as storage_router
 from app.modules.unidades.router import router as unidades_router
 from app.modules.vinculos.router import router as vinculos_router
+from app.modules.visitantes.relatorios_router import router as relatorios_router
 from app.modules.visitantes.router import router as visitantes_router
 from app.modules.visitantes.veiculos_router import router as veiculos_router
 
@@ -37,12 +38,14 @@ router.include_router(encomendas_router)
 router.include_router(portaria_encomendas_router)
 router.include_router(funcionarios_router)
 router.include_router(responsaveis_router)
+router.include_router(conta_router)
 router.include_router(ocorrencias_router)
 router.include_router(permissoes_aba_router)
 router.include_router(reservas_router)
 router.include_router(storage_router)
 router.include_router(visitantes_router)
 router.include_router(veiculos_router)
+router.include_router(relatorios_router)
 
 
 class HealthResponse(BaseModel):

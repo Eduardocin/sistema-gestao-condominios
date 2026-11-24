@@ -92,7 +92,57 @@ fila, aprovação/rejeição administrativa e responsável principal; esses elem
 implementados, pois o modelo só prevê `ativo`/`desvinculado`. O primeiro morador recebe as
 permissões iniciais, sem nova entidade de responsável. Não há evento de e-mail para esse
 fluxo no contrato atual; não são criados notificações, SMTP ou mudanças em `EnvioEmail`.
-Convites e operações de desvinculação permanecem para as respectivas tasks.
+Convites permanecem fora deste recorte (US-303).
+
+## US-305 — desvinculação segura
+
+`POST /api/v1/unidades/{unidade_id}/moradores/{morador_unidade_id}/desvinculacao`
+usa `desvinculacoes_moradores:criar`, sem ampliar permissões genéricas de vínculos.
+Administração de condomínio ativo envia `{responsavel_id}` válido; Morador envia `{}`,
+com associação e aba Usuários ativas na mesma unidade. Morador não pode informar o
+responsável administrativo nem remover a si mesmo. Funcionário e ADM não têm acesso.
+Resposta 200: `{id,status,desvinculado_em,chave_revogada}`, com data em UTC.
+
+Altera somente a associação e os efeitos de acesso previstos. Preserva usuário, autores,
+permissões e registros operacionais. Sem outra associação em unidade ativa desse condomínio,
+desativa o vínculo global; não altera a conta, `sessao_versao` ou outros condomínios.
+JWT antigo perde o acesso na próxima requisição. Sem vínculo global, refresh com o `cid`
+antigo retorna 401 e seleção desse condomínio, 404; a identidade continua válida.
+
+Se permanecerem associações ativas, exige um gestor efetivo, contado pelo mesmo repository
+da US-304: conta e vínculo global ativos, perfil Morador, sem privilégio de plataforma,
+associação ativa e aba Usuários habilitada. Violação: 409 `ultimo_usuarios`. Transferência
+de aba continua sendo feita por Morador autorizado. Administração pode remover o último
+morador e deixar a unidade vazia; um novo primeiro vínculo recebe as sete abas da US-301.
+
+Revoga a chave vigente automaticamente, sem criar/expor outra; ausência de chave não impede
+a operação. Depois, a Administração usa `POST /api/v1/unidades/{id}/chave`, não regeneração,
+e fornece a nova chave somente a pessoas legitimamente autorizadas. Moradores restantes
+mantêm acesso. Repetição legítima: 409 `ja_desvinculado`; recurso alheio/inexistente: 404;
+perfil/aba negados: 403; unidade inativa para Administração: 409 `unidade_inativa`.
+
+Ordem de travas: conta do alvo SHARE, condomínio SHARE, responsável SHARE (Administração),
+unidade UPDATE, associação/vínculo. Compatível com vínculo por chave, US-210, estrutura,
+chaves e permissões. Após a espera, reconsulta autorização e contagens e recarrega entidades;
+não trava a conta do executor em ordem inversa nas remoções mútuas. A única transação inclui
+um evento `vinculo.desfazer`, com efeito no vínculo global e ID/indicador da chave revogada,
+sem código nem evento duplicado `chave.revogar`. SHARE na conta é compatível com as leituras
+de destinatários da portaria, evitando inversão conta/unidade com o recebimento de encomendas.
+Conflita com NO KEY UPDATE da vinculação; desvínculos paralelos do mesmo usuário decidem
+o vínculo global e contam as demais associações sob a trava desse vínculo. Falhas revertem todos os efeitos.
+
+Sem nova migration; permanece `20261124_0009`. Estados legados com unidade ocupada sem gestor
+ou associação sem vínculo global de perfil Morador exigem regularização explícita; não há
+permissão administrativa nova para corrigir abas nem reativação silenciosa. A US-303 segue
+pendente e a TASK-58 inteira não está concluída. O ajuste da matriz aguarda revisão técnica
+de Gabriel no PR. Testes: [US-305](../../../tests/us305/).
+
+A regressão de [históricos](../../../tests/us305/test_historicos.py) também verifica os
+fluxos integrados de encomendas filtradas/relatório, reservas, bloqueios e comentários/
+reabertura de ocorrências. O mesmo JWT mantém a outra unidade legítima, mas perde o
+acesso à unidade removida e aos arquivos exclusivos dela, inclusive quando foi o autor.
+O bloqueio administrativo ainda pode cancelar a reserva histórica e enfileirar o evento
+existente; isso não implementa processamento ou envio SMTP.
 
 ## Testes
 

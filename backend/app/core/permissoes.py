@@ -43,6 +43,8 @@ _LINHAS: dict[str, tuple[str, str, str, str]] = {
     # Morador: solicitar com a chave (C) e convidar. Administração: aprovar/rejeitar (E) e
     # desvincular (D).
     "vinculos": ("VC", "", "VED", ""),
+    # US-305: ação restrita, sem conceder edição/desativação genérica de vínculos ao Morador.
+    "desvinculacoes_moradores": ("C", "", "C", ""),
     "permissoes_aba": ("VE", "", "", ""),
     "funcionarios": ("", "V", "VCED", ""),
     "contas_compartilhadas": ("", "", "VCE", ""),

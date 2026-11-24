@@ -9,8 +9,8 @@ from app.core.errors import ApiError
 from app.core.tempo import Relogio, get_relogio
 from app.db.session import get_session
 from app.modules.auditoria.contexto import ip_do_cliente
-from app.modules.auth.autorizacao import require_permission
-from app.modules.auth.dependencies import UsuarioAutenticado, get_usuario_autenticado
+from app.modules.auth.autorizacao import require_aba, require_permission
+from app.modules.auth.dependencies import ContextoDep, UsuarioAutenticado, get_usuario_autenticado
 from app.modules.usuarios.models import Usuario
 from app.modules.vinculos import schemas, service
 
@@ -65,3 +65,31 @@ def detalhe(
     unidade_id: uuid.UUID, contexto: ContextoMorador, session: SessionDep
 ) -> schemas.MinhaUnidade:
     return service.MinhasUnidadesService(session, contexto).detalhe(unidade_id)
+
+
+@router.post(
+    "/unidades/{unidade_id}/moradores/{morador_unidade_id}/desvinculacao",
+    response_model=schemas.DesvinculacaoSaida,
+    dependencies=[
+        Depends(require_permission("desvinculacoes_moradores:criar")),
+        Depends(require_aba("usuarios")),
+    ],
+)
+def desvincular(
+    unidade_id: uuid.UUID,
+    morador_unidade_id: uuid.UUID,
+    dados: schemas.DesvinculacaoEntrada,
+    contexto: ContextoDep,
+    session: SessionDep,
+    request: Request,
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+) -> schemas.DesvinculacaoSaida:
+    return service.desvincular(
+        session,
+        contexto,
+        unidade_id,
+        morador_unidade_id,
+        dados,
+        ip=ip_do_cliente(request),
+        relogio=relogio,
+    )

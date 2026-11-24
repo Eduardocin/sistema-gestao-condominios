@@ -113,6 +113,7 @@ Mensagens de 403 e 404 são genéricas e não citam o recurso, o condomínio ou 
 | Proprietário da unidade | V (U) `[Unidades]` | — | V C E (C) | — |
 | Chave de acesso da unidade | — | — | V, gerar, regenerar, revogar (C) | — |
 | Vínculo morador–unidade | C (solicitar com a chave), V do próprio status; convidar (U) `[Usuários]` | — | V (C), aprovar, rejeitar, D desvincular (C) | — |
+| Desvinculação de morador — ação específica US-305 | C executar (U) `[Usuários]`, sem autodesvinculação | — | C executar (C), com responsável ativo | — |
 | Permissões por aba dos moradores | V E (U) `[Usuários]` | — | — | — |
 | Funcionários (lista de nomes, sem login) | — | V (C), só os nomes ativos | V C E D (C) | — |
 | Conta compartilhada de Funcionários e responsáveis da Administração | — | — | V C E (C) | — |
@@ -134,6 +135,10 @@ Regras que a tabela não mostra:
 - **Ocorrência:** o Funcionário não acessa o módulo.
 - **Auditoria:** ninguém edita nem desativa registros; a aplicação só insere.
 - **Chave de acesso:** o Morador a digita **uma vez**, para se vincular; ela nunca é devolvida a ele. Só a Administração a vê.
+- **US-305:** `desvinculacoes_moradores:criar` autoriza somente o POST de desvinculação.
+  O C desta linha executa a ação; não cria associação nem amplia `vinculos:editar/desativar`
+  para o Morador. A inclusão atende à US-305 e está sujeita à revisão técnica de Gabriel no PR.
+  Recurso de outra unidade/condomínio: 404; aba desabilitada: 403; autodesvinculação: 403.
 
 ## 8. Permissões por aba do Morador (US-304)
 
@@ -145,6 +150,17 @@ Abas: **Unidades, Visitantes, Veículos, Reserva de Áreas, Encomendas, Ocorrên
 - A mudança vale na próxima requisição (R6) e vai para a auditoria (quem mudou, para quem, de quê para quê).
 - **Proposta de padrão** (confirmar com o Paulo): o primeiro morador vinculado à unidade nasce com acesso a todas as abas. Quem entra depois nasce Com Acesso em todas **menos Usuários**, até o responsável liberar.
 - **Trava:** não é permitido retirar a aba Usuários de quem é o último a tê-la naquela unidade. Sem isso, ninguém mais consegue mudar permissões.
+- A contagem de gestores efetivos da US-304 é compartilhada com a US-305: associação ativa,
+  conta ativa sem privilégio de plataforma, vínculo global ativo de perfil Morador e aba
+  Usuários habilitada. Uma permissão antiga de conta/vínculo inativo não basta.
+- Desvincular deve preservar um gestor quando outras associações ativas permanecerem.
+  A Administração pode remover o último morador e deixar a unidade vazia. O Morador não
+  remove a si mesmo. Transfira previamente a aba pelo fluxo existente quando necessário;
+  esta regra não concede à Administração edição de permissões.
+- A desvinculação revoga a chave vigente atomicamente, preserva os históricos e desativa o
+  vínculo global apenas sem outras unidades ativas no condomínio. Não altera a conta global
+  ou sua versão de sessão. Após a revogação, a Administração gera uma nova chave pela rota
+  de geração e a entrega somente às pessoas legitimamente autorizadas.
 - Funcionário e Administração **não** têm permissão por aba: cada um enxerga os módulos da sua linha na matriz.
 
 ## 9. Contas compartilhadas e responsável pela ação

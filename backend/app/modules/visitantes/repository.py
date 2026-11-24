@@ -46,7 +46,13 @@ class RepositorioVisitantes(RepositorioDoCondominio[Visitante]):
             digitos = "".join(ch for ch in busca if ch.isdigit())
             criterio = Visitante.nome.icontains(busca, autoescape=True)
             if digitos:
-                criterio = or_(criterio, Visitante.cpf.icontains(digitos, autoescape=True))
+                criterio = or_(
+                    criterio,
+                    and_(
+                        Visitante.avulso.is_(False),
+                        Visitante.cpf.icontains(digitos, autoescape=True),
+                    ),
+                )
             consulta = consulta.where(criterio)
         if situacao == "cancelados":
             consulta = consulta.where(Visitante.cancelado_em.is_not(None))

@@ -339,6 +339,7 @@ Regras de edição e cancelamento (US-501: "editado ou cancelado antes da entrad
 - `PUT`: só enquanto **nenhuma visita foi registrada** para esse cadastro (senão 409, `reason: "visitante_ja_utilizado"`). Não troca de unidade.
 - `POST .../cancelamento`: aceito enquanto não houver visita em andamento. Repetir retorna 409. A proposta de permitir cancelar **depois** da primeira entrada vai além do texto da US-501 e está nas pendências.
 - O Morador só enxerga cadastros de unidades vinculadas a ele.
+- A busca por CPF do Morador considera apenas cadastros feitos por moradores. O histórico de visitantes avulsos continua disponível na busca por nome, com CPF omitido.
 - Implementação TASK-38 (recorte de visitantes): a aba Visitantes é obrigatória. Qualquer morador ativo da unidade com a aba habilitada consulta, edita (antes da primeira visita) e cancela cadastros da unidade. O cadastro permanece no histórico depois de cancelado. O cancelamento após uma saída é permitido enquanto não houver visita aberta.
 
 ### 6.3 Veículos (US-502)

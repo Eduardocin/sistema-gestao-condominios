@@ -184,6 +184,13 @@ def test_avulso_grava_entrada_e_preserva_dados_no_escopo(
     leitura = client.get(f"/api/v1/visitantes/{visitante}", headers=morador)
     assert leitura.status_code == 200, leitura.text
     assert leitura.json()["avulso"] is True and cpf not in leitura.text
+    for termo, esperado in ((cpf, []), ("Camila", [visitante])):
+        lista = client.get(
+            "/api/v1/visitantes", headers=morador, params={"unidade_id": unidade, "busca": termo}
+        )
+        assert lista.status_code == 200, lista.text
+        assert [item["id"] for item in lista.json()["items"]] == esperado
+        assert lista.json()["total"] == len(esperado)
     busca = client.get(
         "/api/v1/portaria/visitantes", headers=porteiro, params={"unidade_id": unidade}
     )

@@ -89,6 +89,7 @@ function PackagesWorkspace({ name }: { name: string }) {
   const [searchDraft, setSearchDraft] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<PackageStatus | ''>('')
+  const [unitFilter, setUnitFilter] = useState('')
   const [revision, setRevision] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -105,12 +106,14 @@ function PackagesWorkspace({ name }: { name: string }) {
   const [lookupRevision, setLookupRevision] = useState(0)
   const [residentsRevision, setResidentsRevision] = useState(0)
   const [lookupError, setLookupError] = useState<string | null>(null)
+  const [unitsLoadFailed, setUnitsLoadFailed] = useState(false)
   const [residentsError, setResidentsError] = useState<string | null>(null)
   const optionsError = lookupError ?? residentsError
   const [unitId, setUnitId] = useState('')
   const [residentId, setResidentId] = useState('')
   const [employeeId, setEmployeeId] = useState('')
   const [description, setDescription] = useState('')
+  const [carrier, setCarrier] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
   const [photoRecord, setPhotoRecord] = useState<{ fileId: string; url: string } | null>(null)
@@ -121,7 +124,7 @@ function PackagesWorkspace({ name }: { name: string }) {
   useEffect(() => {
     let current = true
     api
-      .list({ search, status, page })
+      .list({ search, status, unitId: unitFilter, page })
       .then((result) => {
         if (!current) return
         setItems(result.items)
@@ -137,23 +140,21 @@ function PackagesWorkspace({ name }: { name: string }) {
     return () => {
       current = false
     }
-  }, [api, page, revision, search, status])
+  }, [api, page, revision, search, status, unitFilter])
 
   useEffect(() => {
     let current = true
-    Promise.all([api.units(), api.employees()])
-      .then(([unitOptions, employeeOptions]) => {
-        if (!current) return
-        setUnits(unitOptions)
-        setEmployees(employeeOptions)
-        setLookupError(null)
-      })
-      .catch((error: unknown) => {
-        if (current) setLookupError(apiError(error))
-      })
-      .finally(() => {
-        if (current) setLookupsLoading(false)
-      })
+    void Promise.allSettled([api.units(), api.employees()]).then(([unitResult, employeeResult]) => {
+      if (!current) return
+      if (unitResult.status === 'fulfilled') setUnits(unitResult.value)
+      if (employeeResult.status === 'fulfilled') setEmployees(employeeResult.value)
+      setUnitsLoadFailed(unitResult.status === 'rejected')
+      const failedLookup = [unitResult, employeeResult].find(
+        (result) => result.status === 'rejected',
+      )
+      setLookupError(failedLookup ? apiError(failedLookup.reason) : null)
+      setLookupsLoading(false)
+    })
     return () => {
       current = false
     }
@@ -221,6 +222,7 @@ function PackagesWorkspace({ name }: { name: string }) {
     setResidentId('')
     setEmployeeId('')
     setDescription('')
+    setCarrier('')
     setPhoto(null)
     setPhotoError(null)
     setResidents([])
@@ -247,6 +249,7 @@ function PackagesWorkspace({ name }: { name: string }) {
 
   function retryLookups() {
     setLookupError(null)
+    setUnitsLoadFailed(false)
     setResidentsError(null)
     setLookupsLoading(true)
     setLookupRevision((value) => value + 1)
@@ -310,6 +313,7 @@ function PackagesWorkspace({ name }: { name: string }) {
         unidade_id: unitId,
         destinatario_morador_unidade_id: residentId,
         descricao: description,
+        transportadora: carrier,
         recebido_por_funcionario_id: employeeId,
         foto: photo,
       })
@@ -320,6 +324,7 @@ function PackagesWorkspace({ name }: { name: string }) {
       setSearch('')
       setSearchDraft('')
       setStatus('')
+      setUnitFilter('')
       setPage(1)
       reload()
     } catch (error) {
@@ -364,6 +369,10 @@ function PackagesWorkspace({ name }: { name: string }) {
   ]
   const selectedPhotoUrl =
     selected && photoRecord?.fileId === selected.foto_arquivo_id ? photoRecord.url : null
+  const unitOptions = units.map((unit) => ({
+    value: unit.id,
+    label: [unit.bloco, unit.andar, unit.identificacao].filter(Boolean).join(' / '),
+  }))
   const tools = (
     <div className={styles.tools}>
       {snapshot.condominiums.length > 1 && (
@@ -493,10 +502,31 @@ function PackagesWorkspace({ name }: { name: string }) {
               placeholder="Todos os status"
               disabled={loading}
             />
+            <Select
+              label="Unidade"
+              value={unitFilter || 'todas'}
+              onChange={(event) => {
+                setUnitFilter(event.target.value === 'todas' ? '' : event.target.value)
+                setPage(1)
+                reload()
+              }}
+              options={[{ value: 'todas', label: 'Todas as unidades' }, ...unitOptions]}
+              disabled={loading || lookupsLoading}
+            />
             <Button type="submit" variant="secondary" disabled={loading}>
               Buscar
             </Button>
           </form>
+          {unitsLoadFailed && (
+            <Notice tone="alert" role="alert">
+              Não foi possível carregar as unidades.
+              <div className={styles.retry}>
+                <Button variant="secondary" size="sm" onClick={retryLookups}>
+                  Recarregar unidades
+                </Button>
+              </div>
+            </Notice>
+          )}
           {loadError ? (
             <Notice tone="alert" role="alert">
               {loadError}
@@ -590,10 +620,7 @@ function PackagesWorkspace({ name }: { name: string }) {
                 required
                 value={unitId}
                 onChange={(event) => changeUnit(event.target.value)}
-                options={units.map((unit) => ({
-                  value: unit.id,
-                  label: [unit.bloco, unit.andar, unit.identificacao].filter(Boolean).join(' / '),
-                }))}
+                options={unitOptions}
                 disabled={pending}
                 hint={
                   !units.length && !lookupsLoading && !lookupError
@@ -626,6 +653,13 @@ function PackagesWorkspace({ name }: { name: string }) {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Ex.: caixa de livros"
+                disabled={pending}
+              />
+              <Input
+                label="Transportadora (opcional)"
+                maxLength={120}
+                value={carrier}
+                onChange={(event) => setCarrier(event.target.value)}
                 disabled={pending}
               />
               <Select
@@ -699,6 +733,11 @@ function PackagesWorkspace({ name }: { name: string }) {
               <Text size="sm" tone="secondary">
                 {selected.unidade.identificacao} · Destinatário: {selected.destinatario.nome}
               </Text>
+              {selected.transportadora && (
+                <Text size="sm" tone="secondary">
+                  <strong>Transportadora</strong> · {selected.transportadora}
+                </Text>
+              )}
             </div>
             <Badge variant={statusVariant(selected.status)} wrap>
               {statusLabels[selected.status]}
@@ -804,7 +843,9 @@ function PackagesWorkspace({ name }: { name: string }) {
                   <Button
                     type="submit"
                     loading={pending}
-                    disabled={!deliveryReceiver || !deliveryEmployee || lookupsLoading || !!optionsError}
+                    disabled={
+                      !deliveryReceiver || !deliveryEmployee || lookupsLoading || !!optionsError
+                    }
                   >
                     Registrar entrega
                   </Button>

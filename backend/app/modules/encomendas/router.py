@@ -62,11 +62,13 @@ async def dados_recebimento(
     descricao: Annotated[str, Form(min_length=1, max_length=200)],
     recebido_por_funcionario_id: Annotated[uuid.UUID, Form()],
     request: Request,
+    transportadora: Annotated[str | None, Form(max_length=120)] = None,
 ) -> EncomendaEntrada:
     campos_esperados = {
         "unidade_id",
         "destinatario_morador_unidade_id",
         "descricao",
+        "transportadora",
         "recebido_por_funcionario_id",
         "foto",
     }
@@ -80,6 +82,7 @@ async def dados_recebimento(
         unidade_id=unidade_id,
         destinatario_morador_unidade_id=destinatario_morador_unidade_id,
         descricao=descricao_normalizada,
+        transportadora=transportadora,
         recebido_por_funcionario_id=recebido_por_funcionario_id,
     )
 

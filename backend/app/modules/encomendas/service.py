@@ -132,6 +132,7 @@ class EncomendasService:
                 unidade_id=dados.unidade_id,
                 destinatario_morador_unidade_id=dados.destinatario_morador_unidade_id,
                 descricao=dados.descricao,
+                transportadora=dados.transportadora,
                 foto_nota_arquivo_id=uploaded_file.id,
                 recebido_por_funcionario_id=dados.recebido_por_funcionario_id,
             )
@@ -491,6 +492,7 @@ class EncomendasService:
             unidade=UnidadeResumo(id=linha.unidade_id, identificacao=linha.unidade_identificacao),
             destinatario=MoradorResumo(id=linha.destinatario_id, nome=linha.destinatario_nome),
             descricao=encomenda.descricao,
+            transportadora=encomenda.transportadora,
             foto_arquivo_id=encomenda.foto_nota_arquivo_id,
             status=StatusEncomenda(encomenda.status),
             recebimento=RecebimentoSaida(

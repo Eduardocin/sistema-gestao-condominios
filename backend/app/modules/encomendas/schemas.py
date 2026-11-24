@@ -18,6 +18,7 @@ class EncomendaEntrada(BaseModel):
     destinatario_morador_unidade_id: uuid.UUID
     descricao: str = Field(min_length=1, max_length=200)
     recebido_por_funcionario_id: uuid.UUID
+    transportadora: str | None = Field(default=None, max_length=120)
 
     @field_validator("descricao")
     @classmethod
@@ -26,6 +27,11 @@ class EncomendaEntrada(BaseModel):
         if not descricao:
             raise ValueError("Informe a descrição da encomenda.")
         return descricao
+
+    @field_validator("transportadora")
+    @classmethod
+    def normalizar_transportadora(cls, valor: str | None) -> str | None:
+        return (valor or "").strip() or None
 
 
 class EntregaEntrada(BaseModel):
@@ -76,6 +82,7 @@ class EncomendaSaida(BaseModel):
     unidade: UnidadeResumo
     destinatario: MoradorResumo
     descricao: str
+    transportadora: str | None
     foto_arquivo_id: uuid.UUID
     status: StatusEncomenda
     recebimento: RecebimentoSaida

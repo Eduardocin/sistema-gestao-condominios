@@ -98,6 +98,7 @@ class Encomenda(Base):
     unidade_id: Mapped[uuid.UUID]
     destinatario_morador_unidade_id: Mapped[uuid.UUID]
     descricao: Mapped[str] = mapped_column(String(200))
+    transportadora: Mapped[str | None] = mapped_column(String(120))
     foto_nota_arquivo_id: Mapped[uuid.UUID]
     recebido_por_funcionario_id: Mapped[uuid.UUID]
     status: Mapped[str] = mapped_column(String(40), server_default=text("'aguardando_retirada'"))

@@ -1,0 +1,33 @@
+.content,
+.form,
+.filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.filters {
+  align-items: end;
+}
+
+.tools,
+.actions,
+.pagination,
+.pagination > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pagination {
+  justify-content: space-between;
+}
+
+@media (min-width: 48rem) {
+  .filters {
+    grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  }
+}

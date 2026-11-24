@@ -12,10 +12,11 @@ import {
 import { useAuth } from './context'
 import { condominiumNotice, homePath, profileLabels } from './navigation'
 import { AccessDenied, RequireSession } from './SessionPages'
+import { residentNavigation } from '../resident/resident-navigation'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
-  morador: ['Encomendas', 'Visitantes', 'Reservas', 'Ocorrências'],
+  morador: ['Encomendas', 'Visitantes', 'Veículos', 'Reservas', 'Ocorrências'],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
   administracao: ['Unidades e moradores', 'Funcionários', 'Aprovações'],
   plataforma: ['Condomínios', 'Administração da plataforma'],
@@ -34,6 +35,12 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'morador' && label === 'Encomendas') {
     return { to: '/app/morador/encomendas', action: 'Acompanhar encomendas' }
+  }
+  if (area === 'morador' && label === 'Visitantes') {
+    return { to: '/app/morador/visitantes', action: 'Gerenciar visitantes' }
+  }
+  if (area === 'morador' && label === 'Veículos') {
+    return { to: '/app/morador/veiculos', action: 'Gerenciar veículos' }
   }
   return null
 }
@@ -82,9 +89,7 @@ export function WorkspacePage({ area }: { area: string }) {
           { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
         ]
       : []),
-    ...(area === 'morador'
-      ? [{ key: 'packages', label: 'Encomendas', to: '/app/morador/encomendas', symbol: '▣' }]
-      : []),
+    ...(area === 'morador' ? residentNavigation.slice(1) : []),
   ]
 
   return (

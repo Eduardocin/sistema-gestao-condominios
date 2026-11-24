@@ -114,6 +114,7 @@ test('consulta encomendas com filtros e paginação no contexto autenticado', as
     const page = await testApi.api.list({
       search: ' Caixa ',
       status: 'aguardando_retirada',
+      unitId: 'unit-a',
       page: 2,
     })
     assert.equal(page.total, 11)
@@ -124,6 +125,7 @@ test('consulta encomendas com filtros e paginação no contexto autenticado', as
     assert.deepEqual(request.params, {
       busca: 'Caixa',
       status: 'aguardando_retirada',
+      unidade_id: 'unit-a',
       page: 2,
       page_size: 20,
     })

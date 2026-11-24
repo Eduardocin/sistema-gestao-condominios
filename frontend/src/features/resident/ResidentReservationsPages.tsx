@@ -70,6 +70,7 @@ function AvailableAreas({ unit, api }: UnitProps) {
 function AreaSchedule({ area, unit, api }: UnitProps & { area: CommonArea }) {
   const [today] = useState(() => new Date(`${condoTime.format(new Date()).slice(0, 10)}T12:00:00`))
   const [day, setDay] = useState(today)
+  const [month, setMonth] = useState(() => dateKey(today).slice(0, 7))
   const [slot, setSlot] = useState<ReservationSlot>()
   const [pending, setPending] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -83,6 +84,30 @@ function AreaSchedule({ area, unit, api }: UnitProps & { area: CommonArea }) {
     ),
   )
   const agenda = result?.data
+  const calendar = useCommunityQuery(
+    useCallback(
+      (signal) => api.calendar(area.id, unit.id, month, signal),
+      [api, area.id, unit.id, month],
+    ),
+  )
+  const monthData = calendar.result?.data
+  const dayMarkers: NonNullable<React.ComponentProps<typeof Calendar>['dayMarkers']> = {}
+  if (monthData?.dias_disponiveis) {
+    const available = new Set(monthData.dias_disponiveis)
+    const booked = new Set(
+      monthData.dias.filter((item) => item.tem_reserva_da_minha_unidade).map((item) => item.data),
+    )
+    const [year, monthNumber] = month.split('-').map(Number)
+    for (let day = 1; day <= new Date(year, monthNumber, 0).getDate(); day += 1) {
+      const date = `${month}-${String(day).padStart(2, '0')}`
+      if (date < dateKey(today)) continue
+      dayMarkers[date] = booked.has(date)
+        ? { label: 'Sua reserva', variant: 'warning' }
+        : available.has(date)
+          ? { label: 'Com horários livres', variant: 'success' }
+          : { label: 'Sem horários livres', variant: 'neutral' }
+    }
+  }
 
   async function confirmReservation() {
     if (!slot || submitting.current) return
@@ -96,6 +121,7 @@ function AreaSchedule({ area, unit, api }: UnitProps & { area: CommonArea }) {
     } finally {
       setSlot(undefined)
       reload()
+      calendar.reload()
       setPending(false)
       submitting.current = false
     }
@@ -111,12 +137,22 @@ function AreaSchedule({ area, unit, api }: UnitProps & { area: CommonArea }) {
         <Calendar
           value={day}
           min={today}
+          onMonthChange={(date) => setMonth(dateKey(date).slice(0, 7))}
+          dayMarkers={dayMarkers}
           onChange={(value) => {
             setDay(value)
             setError('')
             setSuccess(false)
           }}
         />
+        {monthData?.dias_disponiveis && (
+          <Text size="sm" tone="secondary">
+            ● Com horários livres · ○ Sua reserva · — Sem horários livres
+          </Text>
+        )}
+        {calendar.result?.error && (
+          <CommunityLoadError retry={calendar.reload}>{calendar.result.error}</CommunityLoadError>
+        )}
       </div>
       {success && (
         <Notice tone="success" role="status">

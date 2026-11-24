@@ -28,6 +28,11 @@ interface Agenda {
   slots: ReservationSlot[]
 }
 
+interface CalendarMonth {
+  dias: { data: string; bloqueado: boolean; tem_reserva_da_minha_unidade: boolean }[]
+  dias_disponiveis?: string[]
+}
+
 export interface Reservation {
   id: string
   area: { nome: string }
@@ -80,6 +85,13 @@ export function createResidentCommunityClient(http: AxiosInstance) {
     async agenda(areaId: string, unitId: string, date: string, signal?: AbortSignal) {
       const { data } = await http.get<Agenda>(`/areas-comuns/${slug(areaId)}/agenda`, {
         params: { unidade_id: unitId, data: date },
+        signal,
+      })
+      return data
+    },
+    async calendar(areaId: string, unitId: string, month: string, signal?: AbortSignal) {
+      const { data } = await http.get<CalendarMonth>(`/areas-comuns/${slug(areaId)}/calendario`, {
+        params: { unidade_id: unitId, mes: month, incluir_disponibilidade: true },
         signal,
       })
       return data

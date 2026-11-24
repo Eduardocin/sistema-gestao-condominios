@@ -308,7 +308,13 @@ class ReservasService:
             slots=slots,
         )
 
-    def calendario(self, area_id: uuid.UUID, unidade_id: uuid.UUID, mes: str) -> CalendarioSaida:
+    def calendario(
+        self,
+        area_id: uuid.UUID,
+        unidade_id: uuid.UUID,
+        mes: str,
+        incluir_disponibilidade: bool = False,
+    ) -> CalendarioSaida:
         self._unidade(unidade_id)
         area = self._area_ativa(area_id)
         ano, numero = (int(parte) for parte in mes.split("-"))
@@ -324,7 +330,7 @@ class ReservasService:
         com_reserva = self.reservas.dias_com_reserva_ativa_da_unidade(
             area.id, unidade_id, inicio, fim
         )
-        return CalendarioSaida(
+        calendario = CalendarioSaida(
             mes=mes,
             dias=[
                 DiaDoCalendario(
@@ -335,6 +341,22 @@ class ReservasService:
                 for dia in sorted(bloqueados | com_reserva)
             ],
         )
+        if incluir_disponibilidade:
+            momento = no_fuso(self.relogio())
+            ocupados = self.reservas.horarios_ocupados(area.id, inicio, fim)
+            indisponiveis = bloqueados | com_reserva
+            horarios = [time(hora) for hora in range(area.abre_as.hour, area.fecha_as.hour)]
+            calendario.dias_disponiveis = [
+                dia
+                for numero_dia in range(1, fim.day + 1)
+                if (dia := inicio.replace(day=numero_dia)) >= momento.date()
+                and dia not in indisponiveis
+                and any(
+                    (dia, hora) not in ocupados and inicio_do_slot(dia, hora) > momento
+                    for hora in horarios
+                )
+            ]
+        return calendario
 
     # --- criar ----------------------------------------------------------------------------
 

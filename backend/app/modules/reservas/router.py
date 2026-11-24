@@ -245,7 +245,8 @@ def agenda(
 @areas_router.get(
     "/{area_id}/calendario",
     response_model=CalendarioSaida,
-    summary="Dias do mês com bloqueio ou com reserva da unidade (Morador)",
+    response_model_exclude_unset=True,
+    summary="Marcações e disponibilidade do mês (Morador)",
     dependencies=[Depends(somente_morador)],
     responses=_ERROS_UNIDADE,
 )
@@ -254,8 +255,9 @@ def calendario(
     unidade_id: uuid.UUID,
     mes: Annotated[str, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", examples=["2026-11"])],
     service: ReservasDep,
+    incluir_disponibilidade: bool = False,
 ) -> CalendarioSaida:
-    return service.calendario(area_id, unidade_id, mes)
+    return service.calendario(area_id, unidade_id, mes, incluir_disponibilidade)
 
 
 # --- reservas ---------------------------------------------------------------------------------

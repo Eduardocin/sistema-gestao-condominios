@@ -557,6 +557,42 @@ def test_calendario_com_mes_invalido_e_422(client, predio, morador, area, mes):
     assert client.get(url, headers=morador).status_code == 422
 
 
+def test_calendario_com_disponibilidade_respeita_horas_e_cancelamentos(
+    client, session, predio, morador, vizinho
+):
+    area = criar_area(session, predio, abre_as=time(9), fecha_as=time(10))
+    usuario_vizinho, _ = vizinho
+
+    def junho(dia: int) -> date:
+        return date(2030, 6, dia)
+
+    criar_reserva(
+        session,
+        predio,
+        area,
+        data=junho(12),
+        hora=9,
+        unidade=predio.unidade_102,
+        usuario=usuario_vizinho,
+    )
+    criar_reserva(session, predio, area, data=junho(13), hora=9, status="cancelada")
+    criar_reserva(session, predio, area, data=junho(14), hora=9)
+    criar_bloqueio(session, predio, area, junho(15), junho(15))
+    resposta = client.get(
+        f"/api/v1/areas-comuns/{area.id}/calendario",
+        params={
+            "unidade_id": str(predio.unidade_101.id),
+            "mes": "2030-06",
+            "incluir_disponibilidade": True,
+        },
+        headers=morador,
+    )
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()
+    assert dados["dias_disponiveis"][:3] == ["2030-06-11", "2030-06-13", "2030-06-16"]
+    assert "Vizinho Secreto" not in resposta.text
+
+
 # --- listas -----------------------------------------------------------------------------------
 
 

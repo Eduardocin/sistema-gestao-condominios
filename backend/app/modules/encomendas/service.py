@@ -317,14 +317,20 @@ class EncomendasService:
         *,
         busca: str | None,
         status: StatusEncomenda | None,
+        unidade_id: UUID | None = None,
         page: int,
         page_size: int,
     ) -> PaginaEncomendas:
+        if unidade_id is not None:
+            # Passo 4: unidade que não é do Morador, 404; da unidade sem a aba Encomendas, 403.
+            # Funcionário e Administração: unidade de outro condomínio também dá 404.
+            conferir_unidade(self.session, self.contexto, unidade_id, "encomendas")
         linhas, total = repository.listar(
             self.session,
             self.contexto,
             busca=busca,
             status=status.value if status is not None else None,
+            unidade_id=unidade_id,
             page=page,
             page_size=page_size,
         )

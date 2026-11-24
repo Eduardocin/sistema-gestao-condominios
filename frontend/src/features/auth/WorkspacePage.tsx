@@ -16,7 +16,14 @@ import { residentNavigation } from '../resident/resident-navigation'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
-  morador: ['Encomendas', 'Visitantes', 'Veículos', 'Reservas', 'Ocorrências'],
+  morador: [
+    'Encomendas',
+    'Visitantes',
+    'Veículos',
+    'Reservar área',
+    'Minhas reservas',
+    'Ocorrências',
+  ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
   administracao: ['Unidades e moradores', 'Funcionários', 'Aprovações'],
   plataforma: ['Condomínios', 'Administração da plataforma'],
@@ -41,6 +48,15 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'morador' && label === 'Veículos') {
     return { to: '/app/morador/veiculos', action: 'Gerenciar veículos' }
+  }
+  if (area === 'morador' && label === 'Reservar área') {
+    return { to: '/app/morador/areas-comuns', action: 'Consultar áreas e horários' }
+  }
+  if (area === 'morador' && label === 'Minhas reservas') {
+    return { to: '/app/morador/reservas', action: 'Acompanhar reservas' }
+  }
+  if (area === 'morador' && label === 'Ocorrências') {
+    return { to: '/app/morador/ocorrencias', action: 'Acompanhar ocorrências' }
   }
   return null
 }

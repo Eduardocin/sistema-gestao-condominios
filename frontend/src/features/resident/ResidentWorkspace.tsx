@@ -7,7 +7,7 @@ import { residentNavigation } from './resident-navigation'
 import styles from './ResidentWorkspace.module.css'
 
 interface Props {
-  activeKey: 'packages' | 'visitors' | 'vehicles'
+  activeKey: (typeof residentNavigation)[number]['key']
   children: ReactNode
 }
 

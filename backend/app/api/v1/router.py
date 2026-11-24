@@ -13,6 +13,7 @@ from app.modules.encomendas.router import portaria_router as portaria_encomendas
 from app.modules.encomendas.router import router as encomendas_router
 from app.modules.funcionarios.router import responsaveis_router
 from app.modules.funcionarios.router import router as funcionarios_router
+from app.modules.ocorrencias.router import router as ocorrencias_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
 from app.modules.reservas.router import router as reservas_router
 from app.modules.storage.router import router as storage_router
@@ -36,6 +37,7 @@ router.include_router(encomendas_router)
 router.include_router(portaria_encomendas_router)
 router.include_router(funcionarios_router)
 router.include_router(responsaveis_router)
+router.include_router(ocorrencias_router)
 router.include_router(permissoes_aba_router)
 router.include_router(reservas_router)
 router.include_router(storage_router)

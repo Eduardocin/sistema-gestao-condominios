@@ -2,9 +2,37 @@
 
 [![Quality](https://github.com/Eduardocin/sistema-gestao-condominios/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/Eduardocin/sistema-gestao-condominios/actions/workflows/ci.yaml)
 
-Plataforma de gestão de condomínios com áreas de Administração, Morador, Portaria e administração da plataforma.
+Plataforma de gestão de condomínios com áreas de Administração, Morador, Portaria e administração da plataforma. O objetivo é centralizar cadastros e rotinas que, quando dispersos, dificultam o acompanhamento de encomendas, acessos e uso dos espaços comuns, preservando o histórico e o isolamento dos dados de cada condomínio.
 
-Já estão disponíveis login com JWT, seleção de condomínio, restauração de sessão, navegação por perfil, isolamento entre condomínios, autorização central, armazenamento interno em MinIO e o esquema do banco com 36 tabelas. Os serviços HTTP de negócio, o cadastro e a gestão de funcionários ainda estão em desenvolvimento. As telas da portaria em `/prototipos/portaria` são uma demonstração com dados fictícios em memória.
+| Perfil | Responsabilidade |
+| --- | --- |
+| Administração | Gerir o próprio condomínio, sua estrutura, responsáveis e funcionários |
+| Morador | Acessar as unidades vinculadas e as operações liberadas por aba |
+| Portaria (`funcionario` na API) | Registrar operações de portaria; o funcionário selecionado é um cadastro distinto da conta autenticada |
+| ADM da plataforma | Analisar cadastros e consultar auditoria geral, sem acesso operacional aos condomínios |
+
+### Funcionalidades disponíveis nesta branch
+
+Esta relação descreve o código integrado nesta branch. Contratos, modelos, cards da página pública e PRs abertos também contêm funcionalidades planejadas; sua existência não significa entrega.
+
+| Área | Backend disponível | Frontend disponível |
+| --- | --- | --- |
+| Contas e sessão | Cadastro de Morador/Administração, consulta e edição da própria conta; JWT, refresh, logout, seleção de condomínio e autorização central | Cadastro, login, restauração de sessão, seleção de condomínio e navegação por perfil |
+| Cadastro de condomínio | Cadastro com estrutura, consulta, aprovação/rejeição pelo ADM e correção/reenvio de rejeitado (TASK-57 / US-204) | Sem tela de cadastro, análise ou reenvio de condomínio |
+| Dados e estrutura | Edição de dados e referência à logo; criação, edição e desativação/reativação lógica de blocos, andares e unidades (US-205/206) | Sem telas de gestão de dados, logo ou estrutura |
+| Unidades e moradores | Proprietário e chaves por unidade, vínculo por chave, consulta das próprias unidades e permissões por aba | Sem telas desses fluxos |
+| Funcionários (US-209) | Lista, cadastro, desligamento, consulta individual, edição e histórico restrito; cadastro/lista de responsáveis | Lista, cadastro e desligamento de funcionários; cadastro de responsáveis. Detalhe, edição e histórico ainda sem tela |
+| Encomendas | Recebimento com foto, entrega e confirmação pelo morador recebedor | Fluxos autenticados em `/app/portaria/encomendas` e `/app/morador/encomendas` |
+| Convivência | Áreas comuns, reservas, cancelamentos e avisos | Sem telas operacionais de reservas e avisos |
+| Arquivos e auditoria | Upload autorizado, bucket MinIO privado, download por URL assinada curta e auditoria transacional | Integração de fotos no fluxo de encomendas; sem tela geral de auditoria |
+
+Em US-205/206, as edições e a gestão da estrutura aceitam condomínios `pendente`, `rejeitado` e `ativo`; `desativado` bloqueia escritas. O reenvio continua exclusivo de `rejeitado`. As operações exigem responsável ativo do próprio condomínio e preservam IDs, vínculos e históricos. Unidade com morador ativo não pode ser desativada; bloco/andar com unidades ativas também não. A reativação exige pais ativos e não reativa filhos automaticamente. Desativar uma unidade revoga sua chave; criar/reativar em condomínio ativo gera chave se não houver vigente, preservando as anteriores.
+
+A logo usa o storage existente: referência omitida preserva, nula desassocia e UUID associa imagem de `fotos` enviada pela mesma conta no mesmo condomínio. O download da logo vinculada é permitido aos perfis locais, mantendo o isolamento. O upload exige condomínio ativo; cadastro inicial e condomínios pendentes/rejeitados ainda não têm esse fluxo.
+
+O histórico de funcionários é exclusivo da Administração do próprio condomínio ativo, inclusive para desligados. Expõe apenas ação, data, responsável e identificação do autor; a auditoria geral permanece exclusiva do ADM. Essa exceção restrita continua sujeita à revisão de autorização por Gabriel. Detalhes nos módulos de [condomínios](backend/app/modules/condominios/README.md), [funcionários](backend/app/modules/funcionarios/README.md) e nos [contratos](docs/api-contracts/).
+
+`/prototipos/portaria` é uma demonstração pública com dados fictícios em memória, sem persistência na API. As páginas gerais de cada perfil são pontos de navegação; não representam todos os fluxos concluídos. Visitantes e veículos ainda não possuem API integrada nesta branch; os PRs [#26](https://github.com/Eduardocin/sistema-gestao-condominios/pull/26)/[#27](https://github.com/Eduardocin/sistema-gestao-condominios/pull/27) estão pendentes, assim como troca/redefinição de senha do PR [#25](https://github.com/Eduardocin/sistema-gestao-condominios/pull/25). Consulte [Próximas entregas](#próximas-entregas) para os demais limites.
 
 **Primeira vez no projeto?** Siga o [Guia de primeira execução](#guia-de-primeira-execução) do início ao fim. Cada etapa termina com uma verificação; só avance quando ela passar. Se algo falhar, consulte [Solução de problemas](#solução-de-problemas).
 
@@ -23,8 +51,8 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 │   └── src/
 │       ├── app/          # Rotas e página 404
 │       ├── components/
-│       ├── features/     # auth, access (prévia de cadastro), home,
-│       │                # design-system e portaria (protótipo)
+│       ├── features/     # auth, access, employees, home,
+│       │                # design-system e portaria (API e protótipo)
 │       ├── hooks/
 │       ├── services/     # HTTP público; cliente autenticado em features/auth
 │       ├── styles/       # Tokens e estilos globais
@@ -35,8 +63,9 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 │   │   ├── api/v1/
 │   │   ├── core/         # Configuração, erros, contexto e permissões
 │   │   ├── db/           # Base, engine, sessões e registro de models
-│   │   ├── modules/      # auth, usuarios, condominios, unidades, funcionarios,
-│   │   │                # encomendas, visitantes, reservas, ocorrencias,
+│   │   ├── modules/      # auth, contas, condominios, unidades, funcionarios,
+│   │   │                # usuarios, vinculos, permissoes_aba, encomendas,
+│   │   │                # visitantes, reservas, ocorrencias,
 │   │   │                # avisos, auditoria, storage, suporte e notificacoes
 │   │   └── main.py
 │   ├── alembic/versions/
@@ -62,11 +91,12 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 
 Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/), [contratos HTTP](docs/api-contracts/), [autenticação do frontend](docs/frontend/autenticacao.md) e [armazenamento](docs/storage.md).
 
-No modo local descrito no guia detalhado, três processos estarão em execução:
+No modo local descrito no guia detalhado, API e frontend rodam no host; PostgreSQL e, para operações com arquivos, MinIO rodam em containers:
 
 | Componente | Endereço | Onde roda |
 | --- | --- | --- |
 | PostgreSQL 17 | `127.0.0.1:5432` (configurável) | Container Docker |
+| MinIO (arquivos) | `127.0.0.1:9000`; console em `:9001` | Container Docker |
 | API FastAPI | <http://127.0.0.1:8000> | Terminal 1, com `.venv` |
 | Frontend Vite | <http://127.0.0.1:5173> | Terminal 2, com Node |
 
@@ -90,7 +120,7 @@ Confira frontend em <http://127.0.0.1:5173>, health em
 <http://127.0.0.1:8000/api/v1/health> e console MinIO em <http://127.0.0.1:9001>.
 Credenciais locais estão no seu `.env`. Banco e arquivos têm volumes persistentes.
 Portas, limites, testes e integração estão em [Armazenamento](docs/storage.md).
-Rotas de arquivos ainda aguardam a autorização central.
+As rotas de arquivos já usam a autorização central e a política do recurso vinculado. No Compose, a API acessa `db:5432` e `storage:9000` internamente; o navegador usa os endereços públicos do `.env`. O Compose deixa `DATABASE_URL` vazia e utiliza os campos `POSTGRES_*` para a conexão interna.
 
 ## Guia de primeira execução
 
@@ -109,9 +139,9 @@ Blocos marcados `bash` valem para Linux e macOS. Quando um comando for igual nos
 | Ferramenta | Versão | Para quê |
 | --- | --- | --- |
 | Git | qualquer recente | Clonar e versionar |
-| Python | 3.12 ou 3.13 (não 3.11, não 3.14) | Backend |
+| Python | 3.12 ou 3.13 (3.13 no CI e Docker) | Backend |
 | Node.js + npm | 24 LTS (aceita 22.13+) | Frontend |
-| Docker + Compose v2 | Docker Desktop ou Docker Engine | PostgreSQL |
+| Docker + Compose v2.24+ | Docker Desktop ou Docker Engine | PostgreSQL e MinIO; opcionalmente API/frontend |
 
 Não é necessário instalar PostgreSQL na máquina.
 
@@ -185,8 +215,8 @@ Esperado: Python `3.12.x` ou `3.13.x`; Node `v24.x` (ou `v22.13+`); `docker comp
 ### Etapa 1 — Clonar e configurar o `.env`
 
 ```bash
-git clone <URL-DO-REPOSITÓRIO> "Gestão de Condomínios"
-cd "Gestão de Condomínios"
+git clone https://github.com/Eduardocin/sistema-gestao-condominios.git
+cd sistema-gestao-condominios
 ```
 
 > No Windows, prefira clonar **fora de pastas sincronizadas** (OneDrive, Google Drive, Dropbox), por exemplo em `C:\dev\`. A sincronização trava arquivos de `.venv` e `node_modules` e causa erros `EPERM`/`Access denied`. Veja [Pasta no OneDrive](#pasta-sincronizada-onedrive).
@@ -216,6 +246,16 @@ Os valores do exemplo funcionam sem alteração na maioria das máquinas. Edite 
 | `APP_NAME`, `LOG_LEVEL` | Nome da API e nível de logging |
 | `CORS_ORIGINS` | Array JSON de origens permitidas, com esquema e porta |
 | `VITE_API_BASE_URL` | Endereço da API usado pelo navegador, incluindo `/api/v1` |
+| `API_PORT`, `WEB_PORT` | Portas publicadas pelo Compose; no modo host, ajuste Uvicorn/Vite e CORS de forma correspondente |
+| `APP_ENV`, `JWT_SECRET_KEY` | Ambiente e segredo JWT; em `production`, o segredo padrão é recusado |
+| `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` | Validade das sessões |
+| `LOGIN_MAX_FAILURES`, `LOGIN_LOCKOUT_MINUTES` | Bloqueio por tentativas de login |
+| `STORAGE_ENDPOINT`, `STORAGE_PUBLIC_ENDPOINT` | Endpoint interno usado pela API e endpoint acessível ao navegador para URLs assinadas |
+| `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Credenciais locais do MinIO; use os valores do seu `.env` |
+| `STORAGE_BUCKET`, `STORAGE_REGION`, `STORAGE_URL_SECONDS` | Bucket privado, região S3 e validade da URL (1–300 segundos) |
+| `STORAGE_PORT`, `STORAGE_CONSOLE_PORT` | Portas do MinIO no host; mantenha os endpoints correspondentes |
+
+`TEST_DATABASE_URL` é definida separadamente no terminal para testes, nunca como banco operacional. `TEST_STORAGE_*` configura a integração MinIO dedicada, conforme [storage](docs/storage.md). As variáveis `EMAIL_BACKEND` e `SMTP_*` do exemplo são um contrato futuro: o worker de envio ainda não está implementado.
 
 Regras importantes:
 
@@ -241,6 +281,15 @@ docker compose up -d --wait db
 ```
 
 O primeiro `up` baixa a imagem `postgres:17` (~150 MB). `--wait` só retorna quando o health check passa.
+
+Para usar upload de fotos e encomendas com API local, prepare também o storage na raiz, depois de configurar o `.env`:
+
+```bash
+docker compose up -d --build --wait storage
+docker compose run --rm storage-init
+```
+
+O segundo comando prepara o bucket privado e termina. Mantenha PostgreSQL e MinIO em execução enquanto usar a API. Esses serviços não substituem os ambientes dedicados de testes.
 
 #### ✅ Verificação da etapa 2
 
@@ -318,6 +367,7 @@ Windows:
 ```powershell
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m alembic current
+.\.venv\Scripts\python.exe -m alembic heads
 .\.venv\Scripts\python.exe -c "from app.db.session import get_engine; from sqlalchemy import text; c=get_engine().connect(); print(c.scalar(text('SELECT 1'))); c.close()"
 ```
 
@@ -326,13 +376,14 @@ Linux / macOS:
 ```bash
 .venv/bin/python -m alembic upgrade head
 .venv/bin/python -m alembic current
+.venv/bin/python -m alembic heads
 .venv/bin/python -c "from app.db.session import get_engine; from sqlalchemy import text; c=get_engine().connect(); print(c.scalar(text('SELECT 1'))); c.close()"
 ```
 
 #### ✅ Verificação da etapa 4
 
-- `upgrade head` termina com `Running upgrade  -> 20261015_0001, ...` (ou sem saída, se já aplicada).
-- `alembic current` imprime `20261015_0001 (head)`.
+- `upgrade head` aplica as revisões pendentes (ou termina sem novas revisões, se já aplicadas).
+- `alembic current` corresponde a `alembic heads` e indica `(head)`. Nesta branch, a revisão atual é `20261119_0007`. TASK-57, complementos da US-209 e US-205/206 não acrescentam migrations.
 - O teste de conexão imprime `1`.
 
 Para ver as tabelas criadas:
@@ -398,14 +449,16 @@ npm run dev
 #### ✅ Verificação da etapa 6
 
 - O terminal mostra `Local: http://127.0.0.1:5173/`.
-- Abra <http://127.0.0.1:5173>: o card “Ambiente de desenvolvimento” deve mostrar **“API acessível”** com indicador verde.
+- Abra <http://127.0.0.1:5173> para a página pública e <http://127.0.0.1:5173/status> para o card “Ambiente de desenvolvimento”, que deve mostrar **“API acessível”** com indicador verde.
 - Acesse <http://127.0.0.1:5173/rota-inexistente>: deve aparecer a página 404 com link para o início.
 
 Se aparecer “API indisponível”, veja [frontend não acessa a API](#frontend-mostra-api-indisponível).
 
+Para começar a usar os fluxos reais, crie uma conta em `/cadastro/administracao` ou `/cadastro/morador`. O cadastro de condomínio, sua análise, correção e estrutura são feitos pela API em <http://127.0.0.1:8000/docs>, seguindo o [contrato do núcleo](docs/api-contracts/nucleo.md). Cadastre o condomínio, selecione-o na sessão e cadastre um responsável da Administração antes das operações que exigem `responsavel_id`. A aprovação requer conta ADM previamente provisionada: o cadastro público não concede esse papel e o script de primeiro ADM ainda é uma proposta. Login não cria condomínio nem vínculo automaticamente. O vínculo por chave está disponível no backend; a gestão da conta compartilhada da Portaria permanece pendente.
+
 ### Etapa 7 — Rodar as verificações de qualidade
 
-Confirma que seu ambiente produz os mesmos resultados do CI.
+Executa as verificações usadas pelo CI. O resultado depende dos serviços de teste configurados; registre separadamente aprovações, falhas e skips.
 
 Backend (dentro de `backend`), Windows:
 
@@ -429,28 +482,35 @@ Frontend (dentro de `frontend`):
 
 ```bash
 npm run lint
+npm run format:check
+npm run typecheck
+npm test
 npm run build
 ```
 
+No Windows, se `git ls-files --eol` mostrar `w/crlf` e o Prettier apontar os arquivos apenas pelos finais de linha, valide com `npm run format:check -- --end-of-line auto`. O comando padrão espera LF; o CI usa checkout Linux. Não é necessário reformatar os arquivos existentes para validar esse checkout.
+
+Na raiz: `git diff --check` e `docker compose --env-file .env.example config --quiet`. O Compose valida a configuração sem iniciar serviços. Após aplicar as migrations no banco escolhido, execute também `python -m alembic check` com o Python da `.venv`.
+
 #### ✅ Verificação da etapa 7
 
-- Pytest: todos passam; **4 testes `postgres` aparecem como `skipped`** sem `TEST_DATABASE_URL`. Isso é esperado — para executá-los, veja [Testes com PostgreSQL](#testes-com-postgresql).
+- Pytest: os testes executados devem passar. Sem `TEST_DATABASE_URL`, muitos testes de API, isolamento e regras são pulados; isso não equivale à validação completa. Veja [Testes com PostgreSQL](#testes-com-postgresql). A integração real de arquivos exige `TEST_STORAGE_*` e um MinIO dedicado; sem essa configuração, seus testes são pulados.
 - Ruff: `All checks passed!` e `... files already formatted`.
 - Mypy: `Success: no issues found`.
-- ESLint sem saída de erros; build termina com `✓ built in ...`.
+- ESLint, Prettier, TypeScript e testes Node sem erros; build termina com `✓ built in ...`. A formatação do frontend tem escopo gradual definido no [README do frontend](frontend/README.md).
 
 ### Checklist final
 
 | # | Verificação | Resultado esperado |
 | --- | --- | --- |
-| 0 | Versões das ferramentas | Python 3.12/3.13, Node 24 ou 22.13+, Compose v2 |
+| 0 | Versões das ferramentas | Python 3.12/3.13, Node 24 ou 22.13+, Compose v2.24+ |
 | 1 | `git status --short --ignored .env` | `!! .env` |
 | 2 | `docker compose ps` | `db` `(healthy)` |
 | 3 | `pip check` | `No broken requirements found.` |
-| 4 | `alembic current` | `20261015_0001 (head)` |
+| 4 | `alembic current` e `heads` | Mesma revisão, em `(head)` |
 | 5 | `GET /api/v1/health` | `{"status":"ok"}` |
-| 6 | Página em `:5173` | “API acessível” |
-| 7 | Pytest, Ruff, Mypy, ESLint, build | Tudo verde (4 skips sem banco de testes) |
+| 6 | Página em `:5173/status` | “API acessível” |
+| 7 | Testes, lint, formato, tipos, build e Alembic | Sem falhas; skips e serviços não validados registrados |
 
 Pronto: o ambiente está configurado.
 
@@ -466,6 +526,7 @@ docker compose start db          # ou: docker compose up -d --wait db
 
 Terminal 1 (`backend`): `alembic upgrade head` (caso alguém tenha adicionado migrações) e o comando do Uvicorn da etapa 5.
 Terminal 2 (`frontend`): `npm ci` (se o `package-lock.json` mudou) e `npm run dev`.
+Para operações com arquivos, use também `docker compose start storage`; o bucket precisa ter sido preparado na primeira execução.
 
 Depois de um `git pull`, reinstale dependências se `requirements-dev.lock`, `pyproject.toml` ou `package-lock.json` mudaram.
 
@@ -684,7 +745,7 @@ Depois, refaça o guia a partir da etapa 2. O `.env` é preservado.
 
 ## Migrações durante o desenvolvimento
 
-Dentro de `backend`, substituindo `python` pelo executável da `.venv`:
+Dentro de `backend`, substituindo `python` pelo executável da `.venv`. Faça testes de downgrade somente em banco dedicado e descartável:
 
 ```bash
 python -m alembic current
@@ -706,33 +767,37 @@ Não use `Base.metadata.create_all()` na aplicação. Nomes de constraints e ín
 
 ## Testes com PostgreSQL
 
-Sem `TEST_DATABASE_URL`, os testes que exigem PostgreSQL são pulados. Para executá-los, crie um banco de testes dedicado (nunca use o banco de desenvolvimento):
+Sem `TEST_DATABASE_URL`, os testes que exigem PostgreSQL são pulados. Para executá-los, use um banco de testes dedicado (nunca o banco de desenvolvimento, produção ou de outro worktree). Se ele já existe, reutilize-o sem recriar. Para um ambiente novo, o exemplo abaixo cria apenas o banco dedicado:
 
 ```bash
 docker compose exec db sh -c 'createdb -U "$POSTGRES_USER" condominios_test'
 ```
 
-Windows / PowerShell (dentro de `backend`; ajuste usuário, senha e porta conforme o `.env`):
+Windows / PowerShell (dentro de `backend`; substitua `USUARIO`, `SENHA` e a porta pelos dados do banco de testes dedicado):
 
 ```powershell
-$env:DATABASE_URL = 'postgresql+psycopg://condominios_dev:local_dev_only@127.0.0.1:5432/condominios_test'
+$env:DATABASE_URL = 'postgresql+psycopg://USUARIO:SENHA@127.0.0.1:5432/condominios_test'
 $env:TEST_DATABASE_URL = $env:DATABASE_URL
 .\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m alembic check
+.\.venv\Scripts\python.exe -m pytest -q -ra
 Remove-Item Env:DATABASE_URL, Env:TEST_DATABASE_URL
 ```
 
 Linux / macOS:
 
 ```bash
-export DATABASE_URL='postgresql+psycopg://condominios_dev:local_dev_only@127.0.0.1:5432/condominios_test'
+export DATABASE_URL='postgresql+psycopg://USUARIO:SENHA@127.0.0.1:5432/condominios_test'
 export TEST_DATABASE_URL="$DATABASE_URL"
 .venv/bin/python -m alembic upgrade head
-.venv/bin/python -m pytest -q
+.venv/bin/python -m alembic check
+.venv/bin/python -m pytest -q -ra
 unset DATABASE_URL TEST_DATABASE_URL
 ```
 
-Esperado: os testes de PostgreSQL são executados e passam. O teste de integração MinIO exige configuração própria; veja [storage](docs/storage.md). Os testes de banco revertem as transações ao final de cada caso. **Remova as variáveis ao terminar**, senão a API passará a usar o banco de testes. O CI fornece PostgreSQL limpo automaticamente.
+Esperado: os testes de PostgreSQL são executados e passam. O teste de integração MinIO exige configuração própria; veja [storage](docs/storage.md). Os testes usam rollback ou limpeza dos próprios registros; os de concorrência confirmam transações reais. Não execute suítes simultâneas de worktrees diferentes no mesmo banco. **Remova as variáveis ao terminar**, senão a API passará a usar o banco de testes. O CI fornece PostgreSQL limpo automaticamente.
+
+Os placeholders de conexão não são credenciais prontas; caracteres especiais no usuário/senha precisam de codificação de URL.
 
 Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `npm run typecheck` verifica só os tipos (o `build` já inclui essa etapa).
 
@@ -748,17 +813,27 @@ Para aplicar formatação no backend: `python -m ruff format .`. No frontend, `n
 
 ### Fluxo de branches e pull requests
 
-- Nada entra na `main` por push direto, só por pull request com **1 aprovação** e **CI verde** (regra de proteção configurada no GitHub).
+- Convenção do projeto: mudanças na `main` passam por pull request com **1 aprovação** e **CI verde**; confira as proteções vigentes no GitHub.
 - Crie uma branch a partir da `main` atualizada com o padrão `<tipo>/<US-id>-<descricao-curta>`, com a descrição em minúsculas e hífens. Exemplos: `feat/US-1001-login-jwt`, `fix/US-2003-conflito-reserva`, `docs/US-1006-der`. Sem story ligada (setup, infra), omita o ID: `chore/ci-mypy`.
 - Tipos: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`. Os mesmos prefixos valem para os commits (Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`).
-- PRs pequenos, preenchendo o template (o que mudou, story ligada, como testar). Antes de pedir revisão, atualize a branch com a `main` e rode os comandos da [etapa 7](#etapa-7--rodar-as-verificações-de-qualidade).
+- PRs pequenos, preenchendo o [template](.github/pull_request_template.md) (o que mudou, story ligada, como testar). Antes de pedir revisão, confira as diferenças com a `main` remota e combine a integração de mudanças concorrentes; rode os comandos da [etapa 7](#etapa-7--rodar-as-verificações-de-qualidade). Declare somente as stories efetivamente entregues.
 - Apague a branch depois do merge.
 
-O workflow `.github/workflows/ci.yaml` valida backend (Python 3.13, com PostgreSQL limpo), frontend (Node 24) e integração de arquivos com MinIO em pushes e PRs.
+Os responsáveis de referência por story estão nos [casos Must](docs/plano-de-testes/casos-must.md); decisões de autorização devem ser coordenadas com Gabriel, e mudanças de contratos/migrations com os responsáveis dos módulos afetados.
+
+O workflow [ci.yaml](.github/workflows/ci.yaml) valida backend (Python 3.13, com PostgreSQL limpo), frontend (Node 24) e integração de arquivos com MinIO em pushes e PRs.
 
 ## Próximas entregas
 
-Implementar cadastro e aprovação de condomínios, contas, funcionários e vínculo de moradores por unidade. Integrar as permissões por aba e os endpoints de arquivos; avançar nas APIs e telas operacionais de encomendas, visitantes e convivência sobre o banco e a autorização existentes.
+- US-208: desativação/reativação do condomínio pela plataforma. A gestão lógica dos elementos da estrutura não conclui essa story.
+- US-210: gestão da conta compartilhada. US-205/206 representam apenas parte da TASK-51; a TASK-51 não está integralmente concluída.
+- TASK-50: processamento e envio assíncrono de e-mail. Aprovação de condomínio e recebimento de encomenda gravam eventos pendentes, sem entrega SMTP.
+- TASK-52: relatórios, suporte e comunicados; TASK-58: convites e desvinculação de moradores. Modelos e contratos não significam APIs disponíveis.
+- Visitantes/entrada e saída ([PR #26](https://github.com/Eduardocin/sistema-gestao-condominios/pull/26)), veículos/visitantes avulsos ([PR #27](https://github.com/Eduardocin/sistema-gestao-condominios/pull/27), baseado no #26) e troca/redefinição de senha ([PR #25](https://github.com/Eduardocin/sistema-gestao-condominios/pull/25)) ainda aguardam integração. Revalidar migrations, autorização e regressões de unidades inativas e históricos ao integrar.
+- Telas para os fluxos hoje exclusivos do backend; upload de logo/documentos no cadastro inicial e em condomínio pendente/rejeitado; provisionamento inicial do ADM e revisão da exceção de histórico de funcionários.
+- TASK-59: revisão final e apresentação.
+
+O escopo documental da TASK-8 registra o estado implementado; não conclui essas pendências. O [escopo do MVP](docs/produto/escopo-mvp.md), as [regras de negócio](docs/produto/regras-de-negocio.md) e os [contratos HTTP](docs/api-contracts/) mantêm o planejamento detalhado.
 
 ## Referências técnicas
 

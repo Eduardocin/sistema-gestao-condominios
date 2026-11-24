@@ -1,11 +1,14 @@
 # Funcionários e responsáveis
 
-Recorte da TASK-31 baseado em `docs/api-contracts/plataforma.md`, seção 5. Um funcionário é uma pessoa que identifica ações da portaria e não recebe conta de login.
+Backend da TASK-31 com os complementos da US-209, baseado em `docs/api-contracts/plataforma.md`, seção 5. Um funcionário é uma pessoa que identifica ações da portaria e não recebe conta de login.
 
 | Rota | Acesso e resposta |
 | --- | --- |
 | `GET /api/v1/funcionarios` | Administração: dados completos; Funcionário: somente `id` e `nome` dos ativos |
 | `POST /api/v1/funcionarios` | Administração; `201` com o funcionário criado |
+| `GET /api/v1/funcionarios/{id}` | Administração; objeto com o mesmo schema do cadastro, inclusive desligados |
+| `PUT /api/v1/funcionarios/{id}` | Administração; corrige dados com as mesmas validações do cadastro |
+| `GET /api/v1/funcionarios/{id}/historico` | Administração; eventos limitados ao funcionário do próprio condomínio |
 | `POST /api/v1/funcionarios/{id}/desligamento` | Administração; `200` com `ativo=false` e `desligado_em` |
 | `GET /api/v1/responsaveis-administracao` | Administração; lista direta de `{id,nome,ativo}` |
 | `POST /api/v1/responsaveis-administracao` | Administração; `{nome}`; `201` com o responsável |
@@ -16,8 +19,33 @@ O cadastro de funcionário recebe `nome`, `funcao` (`porteiro` ou `seguranca`), 
 
 Responsáveis têm nome de 1 a 100 caracteres, único entre ativos do condomínio ignorando caixa e espaços repetidos. Duplicidade retorna `409` (`nome_duplicado`). A gestão da própria lista dispensa `responsavel_id`, permitindo o primeiro cadastro. Essa lista é acessível à Administração em condomínios `pendente`, `rejeitado` ou `ativo`; `desativado` é bloqueado. As operações de funcionários exigem condomínio `ativo`. A dependência especial dos responsáveis não relaxa o contexto das demais rotas.
 
-Todos os repositórios de negócio herdam de `RepositorioDoCondominio`: o condomínio vem do JWT validado e vínculo atual, jamais do cliente. Operação e auditoria compartilham transação e rollback. Eventos: `responsaveis.alterar`, `funcionario.cadastrar`, `funcionario.desativar`; guardam conta autenticada, perfil, condomínio, responsável quando aplicável, recurso, IP válido e alterações. Travas de linha protegem duplicidade de responsável e desligamentos concorrentes.
+Todos os repositórios de negócio herdam de `RepositorioDoCondominio`: o condomínio vem do JWT validado e vínculo atual, jamais do cliente. Operação e auditoria compartilham transação e rollback. Eventos: `responsaveis.alterar`, `funcionario.cadastrar`, `funcionario.editar`, `funcionario.desativar`; guardam conta autenticada, perfil, condomínio, responsável quando aplicável, recurso, IP válido e alterações. Travas de linha protegem duplicidade de responsável e desligamentos concorrentes.
 
-Ainda fora deste recorte: edição, detalhe e histórico HTTP de funcionários; edição/desativação de responsáveis; provisionamento e troca de senha da conta compartilhada. As linhas antigas continuam preservadas no banco.
+Nos complementos da US-209, detalhe, edição e histórico são exclusivos da Administração
+do condomínio ativo. A Portaria continua com a lista restrita de nomes ativos e recebe
+403 nas consultas novas. Funcionário inexistente ou de outro condomínio retorna 404,
+inclusive no histórico. Funcionários desligados continuam consultáveis e editáveis,
+preservando `ativo=false`, a data de desligamento, ID e referências anteriores.
+
+A edição usa `FuncionarioEntrada`, `FuncionarioSaida`, a validação existente de responsável
+e foto e a trava de linha já usada no desligamento. `PUT` exige todos os campos obrigatórios
+do cadastro; foto nula ou omitida limpa a referência. Não aceita campos protegidos nem
+funciona como PATCH. O evento central `funcionario.editar` guarda apenas os campos alterados,
+na mesma transação da atualização. Sem mudança efetiva, não há evento novo.
+
+Histórico: `{items,page,page_size,total}`, com `page>=1`, `page_size` de 1 a 100 (padrão 20),
+ordem `criado_em DESC, id DESC`. Cada item expõe somente `acao`, `criado_em`,
+`responsavel_nome` e `usuario` (`{id,nome}` ou nulo para autor ausente).
+Consulta apenas os eventos de cadastro, edição e desligamento com o condomínio, tipo de
+recurso e funcionário corretos; não carrega os metadados antes/depois. Um funcionário
+existente sem eventos retorna lista vazia. A auditoria geral permanece exclusiva do ADM.
+Esta exceção restrita de histórico continua sujeita à revisão de Gabriel, sem aprovação
+presumida ou ampliação das permissões globais.
+
+Ainda fora deste recorte: edição/desativação de responsáveis, provisionamento e troca
+de senha da conta compartilhada. Não há reativação, exclusão física, frontend ou nova
+migration.
 
 Verificação: `tests/test_contas_funcionarios_api.py` usa HTTP real, JWT e PostgreSQL migrado; cobre perfis, A/B, filtros, fotos, bootstrap, auditoria e rollback controlado.
+
+Os [testes dos complementos](../../../tests/test_funcionarios_complementos_api.py) cobrem detalhe, edição, histórico, validações, perfis, isolamento, preservação de desligados e encomendas, campos expostos e rollback após auditoria ou falha de commit.

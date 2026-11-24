@@ -21,7 +21,7 @@ recém-enviado; falha na compensação registra seu UUID para reconciliação.
 | encomendas | Funcionário | Foto registrada pela portaria |
 | ocorrencias | Morador ou Administração | Morador envia `unidade_id` e precisa da aba Ocorrências |
 | suporte | Administração | Anexos de chamados |
-| fotos | Administração | Fotos de funcionários |
+| fotos | Administração | Fotos de funcionários e logo do condomínio |
 
 `GET /api/v1/arquivos/{id}/download` exige Bearer e retorna `{"url": "...", "expires_in": 60}`,
 com `Cache-Control: no-store`. A URL assinada permite baixar diretamente do MinIO.
@@ -30,6 +30,9 @@ Arquivo de outro condomínio ou fora do escopo retorna o mesmo 404 de um ID inex
 Antes da vinculação, apenas quem enviou lê o upload. Depois, vale a autorização do
 recurso: encomendas e ocorrências respeitam unidade e aba do Morador, Administração
 consulta recursos do seu condomínio e Funcionário consulta fotos de encomendas.
+Logo associada ao condomínio pode ser lida por seus perfis locais; a associação usa
+imagem enviada pela própria Administração em `fotos` (US-206). Upload continua exigindo
+condomínio ativo; não cobre o cadastro inicial/pendente/rejeitado.
 Suporte/documentos do condomínio admitem a exceção de leitura pelo ADM da plataforma.
 Revogar a aba impede emitir novas URLs, inclusive para o autor do upload já vinculado.
 URLs já emitidas continuam válidas até expirar. Arquivos sem condomínio (foto da conta)

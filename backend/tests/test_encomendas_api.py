@@ -1,7 +1,7 @@
 """Consultas reais de encomendas com isolamento de condomínio e permissão por unidade."""
 
 import io
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
@@ -853,3 +853,383 @@ def test_transicao_de_outro_condominio_retorna_404(client, session):
     assert entrega.status_code == confirmacao.status_code == 404
     session.refresh(encomenda_b)
     assert encomenda_b.status == "entregue_aguardando_confirmacao"
+
+
+def test_morador_filtra_a_lista_por_unidade(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    da_unidade = criar_encomenda(session, predio, funcionario, descricao="Da 101")
+    criar_encomenda(
+        session, predio, funcionario, descricao="Da 102", unidade_id=predio.unidade_102.id
+    )
+
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"unidade_id": str(predio.unidade_101.id)},
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert [item["id"] for item in resposta.json()["items"]] == [str(da_unidade.id)]
+    assert resposta.json()["total"] == 1
+
+
+def test_morador_filtra_por_unidade_alheia_retorna_404(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    criar_encomenda(
+        session, predio, funcionario, descricao="Da 102", unidade_id=predio.unidade_102.id
+    )
+
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"unidade_id": str(predio.unidade_102.id)},
+    )
+    assert resposta.status_code == 404
+    assert "Da 102" not in resposta.text
+
+
+def test_morador_sem_aba_filtra_por_unidade_e_recebe_403(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    criar_encomenda(session, predio, funcionario, descricao="Da 101")
+
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"unidade_id": str(predio.unidade_101.id)},
+    )
+    assert resposta.status_code == 403
+    assert resposta.json()["error"]["code"] == "forbidden"
+
+
+def test_morador_filtra_por_unidade_de_outro_condominio_retorna_404(client, session):
+    a = montar_predio(session, "Residencial Aurora")
+    b = montar_predio(session, "Residencial Boreal")
+    permitir_aba_encomendas(session, a)
+
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=a.cabecalho_de("morador"),
+        params={"unidade_id": str(b.unidade_101.id)},
+    )
+    assert resposta.status_code == 404
+
+
+@pytest.mark.parametrize("perfil", ["funcionario", "administracao"])
+def test_equipe_filtra_a_lista_por_unidade_sem_exigi_la(client, session, perfil):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    da_101 = criar_encomenda(session, predio, funcionario, descricao="Da 101")
+    da_102 = criar_encomenda(
+        session, predio, funcionario, descricao="Da 102", unidade_id=predio.unidade_102.id
+    )
+    headers = predio.cabecalho_de(perfil)
+
+    todas = client.get("/api/v1/encomendas", headers=headers)
+    so_102 = client.get(
+        "/api/v1/encomendas", headers=headers, params={"unidade_id": str(predio.unidade_102.id)}
+    )
+    assert {i["id"] for i in todas.json()["items"]} == {str(da_101.id), str(da_102.id)}
+    assert [i["id"] for i in so_102.json()["items"]] == [str(da_102.id)]
+
+
+@pytest.mark.parametrize("perfil", ["funcionario", "administracao"])
+def test_equipe_filtra_por_unidade_de_outro_condominio_retorna_404(client, session, perfil):
+    a = montar_predio(session, "Residencial Aurora")
+    b = montar_predio(session, "Residencial Boreal")
+
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=a.cabecalho_de(perfil),
+        params={"unidade_id": str(b.unidade_101.id)},
+    )
+    assert resposta.status_code == 404
+
+
+def test_filtro_de_unidade_combina_com_status_e_busca(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    alvo = criar_encomenda(session, predio, funcionario, descricao="Caixa azul")
+    criar_encomenda(
+        session, predio, funcionario, descricao="Caixa vermelha", status="retirada_confirmada"
+    )
+    criar_encomenda(
+        session, predio, funcionario, descricao="Caixa azul", unidade_id=predio.unidade_102.id
+    )
+
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("funcionario"),
+        params={
+            "unidade_id": str(predio.unidade_101.id),
+            "status": "aguardando_retirada",
+            "busca": "azul",
+        },
+    )
+    assert [i["id"] for i in resposta.json()["items"]] == [str(alvo.id)]
+    assert resposta.json()["total"] == 1
+
+
+# --- período na lista e relatório (US-404) ----------------------------------------------------
+
+FUSO_SP = timezone(timedelta(hours=-3))
+
+
+def registrada_em(session, encomenda, momento: datetime):
+    encomenda.registrada_em = momento
+    session.flush()
+    return encomenda
+
+
+def test_lista_filtra_por_periodo_inclusivo_no_fuso_do_condominio(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    antes = registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Antes"),
+        datetime(2030, 6, 9, 23, 59, tzinfo=FUSO_SP),
+    )
+    no_dia_10 = registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Dia 10 à noite"),
+        # 23:30 em São Paulo já é dia 11 em UTC: tem de contar como dia 10.
+        datetime(2030, 6, 10, 23, 30, tzinfo=FUSO_SP),
+    )
+    no_dia_11 = registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Dia 11"),
+        datetime(2030, 6, 11, 0, 30, tzinfo=FUSO_SP),
+    )
+    headers = predio.cabecalho_de("funcionario")
+
+    def ids(**params):
+        resposta = client.get("/api/v1/encomendas", headers=headers, params=params)
+        assert resposta.status_code == 200, resposta.text
+        return {item["id"] for item in resposta.json()["items"]}
+
+    assert ids(data_de="2030-06-10", data_ate="2030-06-10") == {str(no_dia_10.id)}
+    assert ids(data_de="2030-06-10") == {str(no_dia_10.id), str(no_dia_11.id)}
+    assert ids(data_ate="2030-06-10") == {str(antes.id), str(no_dia_10.id)}
+    assert ids(data_de="2030-06-12") == set()
+
+
+def test_lista_com_periodo_invertido_retorna_422(client, session):
+    predio = montar_predio(session)
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("funcionario"),
+        params={"data_de": "2030-06-11", "data_ate": "2030-06-10"},
+    )
+    assert resposta.status_code == 422
+
+
+def test_morador_filtra_a_propria_lista_por_periodo(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    velha = registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Velha"),
+        datetime(2030, 1, 5, 12, tzinfo=FUSO_SP),
+    )
+    nova = registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Nova"),
+        datetime(2030, 6, 5, 12, tzinfo=FUSO_SP),
+    )
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"data_de": "2030-06-01"},
+    )
+    assert [i["id"] for i in resposta.json()["items"]] == [str(nova.id)]
+    assert str(velha.id) not in resposta.text
+
+
+@pytest.mark.parametrize(
+    ("perfil", "esperado"),
+    [("administracao", 200), ("morador", 403), ("funcionario", 403), ("plataforma", 403)],
+)
+def test_relatorio_e_so_da_administracao(client, session, perfil, esperado):
+    predio = montar_predio(session)
+    permitir_aba_encomendas(session, predio)
+    resposta = client.get("/api/v1/encomendas/relatorio", headers=predio.cabecalho_de(perfil))
+    assert resposta.status_code == esperado, resposta.text
+    if esperado == 403:
+        assert resposta.json()["error"]["code"] == "forbidden"
+
+
+def test_relatorio_sem_token_retorna_401(client):
+    assert client.get("/api/v1/encomendas/relatorio").status_code == 401
+
+
+def test_relatorio_conta_por_status_e_por_unidade(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    for _ in range(2):
+        criar_encomenda(session, predio, funcionario, descricao="Pendente 101")
+    criar_encomenda(
+        session,
+        predio,
+        funcionario,
+        descricao="Entregue 101",
+        status="entregue_aguardando_confirmacao",
+    )
+    criar_encomenda(
+        session, predio, funcionario, descricao="Retirada 101", status="retirada_confirmada"
+    )
+    criar_encomenda(
+        session, predio, funcionario, descricao="Pendente 102", unidade_id=predio.unidade_102.id
+    )
+
+    resposta = client.get(
+        "/api/v1/encomendas/relatorio", headers=predio.cabecalho_de("administracao")
+    )
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()
+    assert dados["periodo"] == {"de": None, "ate": None}
+    assert dados["totais"] == {
+        "registradas": 5,
+        "aguardando_retirada": 3,
+        "entregue_aguardando_confirmacao": 1,
+        "retirada_confirmada": 1,
+    }
+    # Mais encomendas primeiro.
+    assert [(i["unidade"]["identificacao"], i["registradas"]) for i in dados["por_unidade"]] == [
+        (predio.unidade_101.identificacao, 4),
+        (predio.unidade_102.identificacao, 1),
+    ]
+    da_101 = dados["por_unidade"][0]
+    assert da_101["unidade"]["id"] == str(predio.unidade_101.id)
+    assert (
+        da_101["aguardando_retirada"],
+        da_101["entregue_aguardando_confirmacao"],
+        da_101["retirada_confirmada"],
+    ) == (2, 1, 1)
+
+
+def test_relatorio_respeita_periodo_e_unidade(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Fora"),
+        datetime(2030, 1, 5, 12, tzinfo=FUSO_SP),
+    )
+    registrada_em(
+        session,
+        criar_encomenda(session, predio, funcionario, descricao="Dentro 101"),
+        datetime(2030, 6, 5, 12, tzinfo=FUSO_SP),
+    )
+    registrada_em(
+        session,
+        criar_encomenda(
+            session, predio, funcionario, descricao="Dentro 102", unidade_id=predio.unidade_102.id
+        ),
+        datetime(2030, 6, 6, 12, tzinfo=FUSO_SP),
+    )
+    headers = predio.cabecalho_de("administracao")
+
+    periodo = client.get(
+        "/api/v1/encomendas/relatorio",
+        headers=headers,
+        params={"data_de": "2030-06-01", "data_ate": "2030-06-30"},
+    ).json()
+    assert periodo["periodo"] == {"de": "2030-06-01", "ate": "2030-06-30"}
+    assert periodo["totais"]["registradas"] == 2
+
+    so_102 = client.get(
+        "/api/v1/encomendas/relatorio",
+        headers=headers,
+        params={"data_de": "2030-06-01", "unidade_id": str(predio.unidade_102.id)},
+    ).json()
+    assert so_102["totais"]["registradas"] == 1
+    assert [i["unidade"]["id"] for i in so_102["por_unidade"]] == [str(predio.unidade_102.id)]
+
+
+@pytest.mark.parametrize("recurso", ["/encomendas", "/encomendas/relatorio"])
+def test_consultas_aceitam_ultima_data_do_calendario(client, session, recurso):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    criar_encomenda(session, predio, funcionario, descricao="Caixa para consultar")
+    resposta = client.get(
+        f"/api/v1{recurso}",
+        headers=predio.cabecalho_de("administracao"),
+        params={"data_ate": "9999-12-31"},
+    )
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()
+    total = dados["totais"]["registradas"] if recurso.endswith("/relatorio") else dados["total"]
+    assert total == 1
+
+
+@pytest.mark.parametrize("perfil", ["morador", "funcionario"])
+def test_relatorio_registra_negacao_por_perfil(client, session, caplog, perfil):
+    predio = montar_predio(session)
+    resposta = client.get(
+        "/api/v1/encomendas/relatorio",
+        headers=predio.cabecalho_de(perfil),
+    )
+    assert resposta.status_code == 403
+    assert "permissao=encomendas:relatorio" in caplog.text
+
+
+def test_relatorio_vazio_devolve_zeros(client, session):
+    predio = montar_predio(session)
+    dados = client.get(
+        "/api/v1/encomendas/relatorio", headers=predio.cabecalho_de("administracao")
+    ).json()
+    assert dados["totais"] == {
+        "registradas": 0,
+        "aguardando_retirada": 0,
+        "entregue_aguardando_confirmacao": 0,
+        "retirada_confirmada": 0,
+    }
+    assert dados["por_unidade"] == []
+
+
+def test_relatorio_nunca_conta_encomenda_de_outro_condominio(client, session):
+    a = montar_predio(session, "Residencial Aurora")
+    b = montar_predio(session, "Residencial Boreal")
+    criar_encomenda(session, a, criar_funcionario(session, a), descricao="De A")
+    criar_encomenda(session, b, criar_funcionario(session, b), descricao="De B 1")
+    criar_encomenda(session, b, criar_funcionario(session, b), descricao="De B 2")
+
+    dados = client.get(
+        "/api/v1/encomendas/relatorio", headers=a.cabecalho_de("administracao")
+    ).json()
+    assert dados["totais"]["registradas"] == 1
+    assert str(b.unidade_101.id) not in str(dados)
+
+
+def test_relatorio_com_unidade_de_outro_condominio_retorna_404(client, session):
+    a = montar_predio(session, "Residencial Aurora")
+    b = montar_predio(session, "Residencial Boreal")
+    resposta = client.get(
+        "/api/v1/encomendas/relatorio",
+        headers=a.cabecalho_de("administracao"),
+        params={"unidade_id": str(b.unidade_101.id)},
+    )
+    assert resposta.status_code == 404
+
+
+def test_relatorio_com_periodo_invertido_retorna_422(client, session):
+    predio = montar_predio(session)
+    resposta = client.get(
+        "/api/v1/encomendas/relatorio",
+        headers=predio.cabecalho_de("administracao"),
+        params={"data_de": "2030-06-11", "data_ate": "2030-06-10"},
+    )
+    assert resposta.status_code == 422
+
+
+def test_relatorio_nao_engole_o_detalhe_por_id(client, session):
+    """`/relatorio` não pode ser lido como UUID, e um UUID continua indo para o detalhe."""
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    encomenda = criar_encomenda(session, predio, funcionario, descricao="Detalhe")
+    headers = predio.cabecalho_de("funcionario")
+    assert client.get(f"/api/v1/encomendas/{encomenda.id}", headers=headers).status_code == 200

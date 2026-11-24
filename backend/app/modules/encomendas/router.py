@@ -1,5 +1,6 @@
 import ipaddress
 import uuid
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
@@ -17,6 +18,7 @@ from app.modules.encomendas.schemas import (
     PaginaEncomendas,
     PaginaMoradores,
     PaginaUnidades,
+    RelatorioEncomendas,
     StatusEncomenda,
 )
 from app.modules.encomendas.service import EncomendasService
@@ -158,10 +160,37 @@ def listar(
     service: ServiceDep,
     busca: Annotated[str | None, Query(max_length=120)] = None,
     status: StatusEncomenda | None = None,
+    unidade_id: uuid.UUID | None = None,
+    data_de: date | None = None,
+    data_ate: date | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PaginaEncomendas:
-    return service.listar(busca=busca, status=status, page=page, page_size=page_size)
+    return service.listar(
+        busca=busca,
+        status=status,
+        unidade_id=unidade_id,
+        data_de=data_de,
+        data_ate=data_ate,
+        page=page,
+        page_size=page_size,
+    )
+
+
+# Declarada antes de `/{encomenda_id}`: "relatorio" não pode ser lido como um UUID.
+@router.get(
+    "/relatorio",
+    response_model=RelatorioEncomendas,
+    summary="Relatório de encomendas por status e por unidade (Administração)",
+    dependencies=[Depends(require_permission("encomendas:ver"))],
+)
+def relatorio(
+    service: ServiceDep,
+    unidade_id: uuid.UUID | None = None,
+    data_de: date | None = None,
+    data_ate: date | None = None,
+) -> RelatorioEncomendas:
+    return service.relatorio(unidade_id=unidade_id, data_de=data_de, data_ate=data_ate)
 
 
 @router.get(

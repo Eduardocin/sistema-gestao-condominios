@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -115,3 +115,27 @@ class PaginaMoradores(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class PeriodoRelatorio(BaseModel):
+    de: date | None
+    ate: date | None
+
+
+class TotaisPorStatus(BaseModel):
+    registradas: int = 0
+    aguardando_retirada: int = 0
+    entregue_aguardando_confirmacao: int = 0
+    retirada_confirmada: int = 0
+
+
+class UnidadeNoRelatorio(TotaisPorStatus):
+    unidade: UnidadeResumo
+
+
+class RelatorioEncomendas(BaseModel):
+    """Relatório da Administração (US-404): contagens por status, no total e por unidade."""
+
+    periodo: PeriodoRelatorio
+    totais: TotaisPorStatus
+    por_unidade: list[UnidadeNoRelatorio]

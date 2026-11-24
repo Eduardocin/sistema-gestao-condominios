@@ -8,6 +8,7 @@ import uuid
 from dataclasses import replace
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
@@ -17,8 +18,10 @@ from app.modules.auditoria import service as auditoria
 from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
 from app.modules.auth.autorizacao import garantir_aba_da_unidade
 from app.modules.funcionarios.repository import RepositorioResponsaveis
+from app.modules.ocorrencias.models import OcorrenciaAnexo
 from app.modules.ocorrencias.repository import (
     FiltrosOcorrencias,
+    InteracaoDetalhada,
     OcorrenciaDetalhada,
     RepositorioAnexos,
     RepositorioArquivos,
@@ -29,12 +32,14 @@ from app.modules.ocorrencias.repository import (
 from app.modules.ocorrencias.schemas import (
     AnexoSaida,
     AutorSaida,
+    ComentarioEntrada,
     InteracaoSaida,
     OcorrenciaEntrada,
     OcorrenciaResumo,
     OcorrenciaSaida,
     PaginaDeOcorrencias,
     PessoaResumo,
+    ReaberturaEntrada,
     ResolucaoEntrada,
     RespostaEntrada,
     UnidadeResumo,
@@ -44,6 +49,7 @@ ABA_OCORRENCIAS = "ocorrencias"
 MENSAGEM_UNIDADE_OBRIGATORIA = "Informe a unidade."
 MENSAGEM_ANEXO_INVALIDO = "Um ou mais anexos informados não existem neste condomínio."
 MENSAGEM_JA_RESOLVIDA = "A ocorrência já está resolvida."
+MENSAGEM_NAO_RESOLVIDA = "A ocorrência não está resolvida, então não pode ser reaberta."
 
 
 class OcorrenciasService:
@@ -197,6 +203,93 @@ class OcorrenciasService:
         self.session.commit()
         return self.obter(ocorrencia_id)
 
+    # --- participação do Morador (US-704) -------------------------------------------------
+
+    def _autorizada_do_morador(self, ocorrencia_id: uuid.UUID) -> OcorrenciaDetalhada:
+        detalhada = self.ocorrencias.obter_detalhada(ocorrencia_id)
+        if detalhada is None:
+            raise RecursoNaoEncontrado
+        # Ocorrência de outra unidade: 404. Da própria unidade sem a aba: 403.
+        self._unidade(detalhada.ocorrencia.unidade_id)
+        return detalhada
+
+    def comentar(self, ocorrencia_id: uuid.UUID, dados: ComentarioEntrada) -> InteracaoSaida:
+        """O Morador comenta em qualquer estado; comentar não muda o status."""
+        self._autorizada_do_morador(ocorrencia_id)
+        self._conferir_anexos(dados.anexos)
+        # A chave de `ocorrencia_anexos` é (ocorrência, arquivo): um arquivo só entra uma vez.
+        ja_anexados = {anexo.arquivo_id for anexo in self.ocorrencias.anexos(ocorrencia_id)}
+        if ja_anexados & set(dados.anexos):
+            raise ApiError(422, "validation_error", MENSAGEM_ANEXO_INVALIDO)
+        try:
+            with self.session.begin_nested():
+                interacao = self.interacoes.criar(
+                    {
+                        "ocorrencia_id": ocorrencia_id,
+                        "tipo": "comentario",
+                        "texto": dados.texto,
+                        "usuario_id": self.contexto.usuario_id,
+                    }
+                )
+                for arquivo_id in sorted(dados.anexos):
+                    self.anexos.criar(
+                        {
+                            "ocorrencia_id": ocorrencia_id,
+                            "arquivo_id": arquivo_id,
+                            "interacao_id": interacao.id,
+                        }
+                    )
+        except IntegrityError as erro:
+            restricao = getattr(getattr(erro.orig, "diag", None), "constraint_name", None)
+            if restricao != "pk_ocorrencia_anexos":
+                raise
+            raise ApiError(422, "validation_error", MENSAGEM_ANEXO_INVALIDO) from erro
+        interacao_id = interacao.id
+        self.session.commit()
+        return self._interacao(ocorrencia_id, interacao_id)
+
+    def reabrir(
+        self, ocorrencia_id: uuid.UUID, dados: ReaberturaEntrada, *, ip: str | None
+    ) -> OcorrenciaSaida:
+        """Só de `resolvida`. O histórico guarda a resolução; `resolvida_em` volta a nulo."""
+        self._autorizada_do_morador(ocorrencia_id)
+        ocorrencia = self.ocorrencias.bloquear(ocorrencia_id)  # duas reaberturas não passam juntas
+        if ocorrencia is None:
+            raise RecursoNaoEncontrado
+        if ocorrencia.status != "resolvida":
+            raise ApiError(
+                409, "conflict", MENSAGEM_NAO_RESOLVIDA, reason="ocorrencia_nao_resolvida"
+            )
+
+        self.ocorrencias.atualizar(ocorrencia.id, {"status": "em_aberto", "resolvida_em": None})
+        self.interacoes.criar(
+            {
+                "ocorrencia_id": ocorrencia.id,
+                "tipo": "reabertura",
+                "texto": dados.texto,
+                "usuario_id": self.contexto.usuario_id,
+            }
+        )
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+            acao="ocorrencia.reabrir",
+            recurso_tipo="ocorrencia",
+            recurso_id=ocorrencia.id,
+            antes={"status": "resolvida"},
+            depois={"status": "em_aberto"},
+        )
+        ocorrencia_id = ocorrencia.id
+        self.session.commit()
+        return self.obter(ocorrencia_id)
+
+    def _interacao(self, ocorrencia_id: uuid.UUID, interacao_id: uuid.UUID) -> InteracaoSaida:
+        anexos = self.ocorrencias.anexos(ocorrencia_id)
+        for interacao in self.ocorrencias.interacoes(ocorrencia_id):
+            if interacao.interacao.id == interacao_id:
+                return self._saida_da_interacao(interacao, anexos)
+        raise RecursoNaoEncontrado  # acabou de ser gravada: não acontece
+
     # --- apresentação ---------------------------------------------------------------------
 
     def _resumo(
@@ -215,22 +308,28 @@ class OcorrenciasService:
             aguardando_administracao=ultima is None or ultima.responsavel_id is None,
         )
 
+    @staticmethod
+    def _saida_da_interacao(
+        interacao: InteracaoDetalhada, anexos: list[OcorrenciaAnexo]
+    ) -> InteracaoSaida:
+        return InteracaoSaida(
+            id=interacao.interacao.id,
+            tipo=interacao.interacao.tipo,
+            texto=interacao.interacao.texto,
+            autor=AutorSaida(tipo=interacao.autor_tipo, nome=interacao.autor_nome),
+            em=interacao.interacao.criado_em,
+            anexos=[
+                AnexoSaida(arquivo_id=anexo.arquivo_id, interacao_id=anexo.interacao_id)
+                for anexo in anexos
+                if anexo.interacao_id == interacao.interacao.id
+            ],
+        )
+
     def _apresentar(self, detalhada: OcorrenciaDetalhada) -> OcorrenciaSaida:
         ocorrencia = detalhada.ocorrencia
         anexos = self.ocorrencias.anexos(ocorrencia.id)
         interacoes = [
-            InteracaoSaida(
-                id=interacao.interacao.id,
-                tipo=interacao.interacao.tipo,
-                texto=interacao.interacao.texto,
-                autor=AutorSaida(tipo=interacao.autor_tipo, nome=interacao.autor_nome),
-                em=interacao.interacao.criado_em,
-                anexos=[
-                    AnexoSaida(arquivo_id=anexo.arquivo_id, interacao_id=anexo.interacao_id)
-                    for anexo in anexos
-                    if anexo.interacao_id == interacao.interacao.id
-                ],
-            )
+            self._saida_da_interacao(interacao, anexos)
             for interacao in self.ocorrencias.interacoes(ocorrencia.id)
         ]
         return OcorrenciaSaida(

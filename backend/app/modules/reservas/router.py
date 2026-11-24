@@ -31,14 +31,18 @@ from app.modules.reservas.schemas import (
     AgendaSaida,
     AreaComumEntrada,
     AreaComumSaida,
+    BloqueioCriadoSaida,
+    BloqueioEntrada,
     CalendarioSaida,
     CancelamentoEntrada,
     PaginaDeAreas,
+    PaginaDeBloqueios,
     PaginaDeReservas,
+    PreviaDoBloqueio,
     ReservaEntrada,
     ReservaSaida,
 )
-from app.modules.reservas.service import AreasComunsService, ReservasService
+from app.modules.reservas.service import AreasComunsService, BloqueiosService, ReservasService
 
 areas_router = APIRouter(prefix="/areas-comuns", tags=["areas-comuns"])
 reservas_router = APIRouter(prefix="/reservas", tags=["reservas"])
@@ -59,7 +63,14 @@ def get_reservas_service(
     return ReservasService(session, contexto, relogio)
 
 
+def get_bloqueios_service(
+    session: Annotated[Session, Depends(get_session)], contexto: ContextoDep, relogio: RelogioDep
+) -> BloqueiosService:
+    return BloqueiosService(session, contexto, relogio)
+
+
 ServiceDep = Annotated[AreasComunsService, Depends(get_service)]
+BloqueiosDep = Annotated[BloqueiosService, Depends(get_bloqueios_service)]
 ReservasDep = Annotated[ReservasService, Depends(get_reservas_service)]
 
 
@@ -199,6 +210,15 @@ def reativar_area(
     return _saida(service.reativar(area_id))
 
 
+def somente_administracao(
+    contexto: Annotated[ContextoCondominio, Depends(require_permission("areas_comuns:editar"))],
+) -> None:
+    """Bloqueios são da Administração (US-602). `areas_comuns:editar` já exclui Morador,
+    Funcionário e ADM da plataforma na matriz; o perfil fica conferido de novo aqui."""
+    if contexto.perfil != Perfil.ADMINISTRACAO:
+        raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+
+
 # --- agenda e calendário (Morador) ------------------------------------------------------------
 
 _ERROS_UNIDADE: dict[int | str, dict[str, Any]] = {
@@ -332,3 +352,68 @@ def cancelar_reserva(
 router = APIRouter()
 router.include_router(areas_router)
 router.include_router(reservas_router)
+
+
+# --- bloqueio de datas (Administração) --------------------------------------------------------
+
+_ERROS_BLOQUEIO: dict[int | str, dict[str, Any]] = {
+    401: {"description": "Token ausente ou inválido (`not_authenticated`)."},
+    403: {"description": "Só a Administração (`forbidden`)."},
+    404: {"description": "Área ou responsável inexistente, ou de outro condomínio."},
+}
+
+
+@areas_router.get(
+    "/{area_id}/bloqueios",
+    response_model=PaginaDeBloqueios,
+    summary="Lista os bloqueios de datas da área (Administração)",
+    dependencies=[Depends(somente_administracao)],
+    responses=_ERROS_BLOQUEIO,
+)
+def listar_bloqueios(
+    area_id: uuid.UUID,
+    service: BloqueiosDep,
+    data_de: date | None = None,
+    data_ate: date | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PaginaDeBloqueios:
+    return service.listar(
+        area_id, data_de=data_de, data_ate=data_ate, page=page, page_size=page_size
+    )
+
+
+@areas_router.get(
+    "/{area_id}/bloqueios/previa",
+    response_model=PreviaDoBloqueio,
+    summary="Reservas que o bloqueio cancelaria (Administração)",
+    dependencies=[Depends(somente_administracao)],
+    responses={**_ERROS_BLOQUEIO, 422: {"description": "`data_fim` anterior a `data_inicio`."}},
+)
+def previa_do_bloqueio(
+    area_id: uuid.UUID, data_inicio: date, data_fim: date, service: BloqueiosDep
+) -> PreviaDoBloqueio:
+    if data_fim < data_inicio:
+        raise ApiError(422, "validation_error", "data_fim não pode ser anterior a data_inicio.")
+    return service.previa(area_id, data_inicio, data_fim)
+
+
+@areas_router.post(
+    "/{area_id}/bloqueios",
+    response_model=BloqueioCriadoSaida,
+    status_code=201,
+    summary="Bloqueia datas da área e cancela as reservas afetadas (Administração)",
+    dependencies=[Depends(somente_administracao)],
+    responses={
+        **_ERROS_BLOQUEIO,
+        409: {"description": "Há reservas no período e faltou confirmar (`reservas_afetadas`)."},
+        422: {"description": "Entrada inválida ou período já encerrado (`periodo_passado`)."},
+    },
+)
+def criar_bloqueio(
+    area_id: uuid.UUID,
+    dados: BloqueioEntrada,
+    service: BloqueiosDep,
+    request: Request,
+) -> BloqueioCriadoSaida:
+    return service.criar(area_id, dados, ip=ip_do_cliente(request))

@@ -1,6 +1,6 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado:** áreas comuns e reservas (TASK-84), aviso à unidade no cancelamento administrativo (TASK-48), API de encomendas (TASK-36), cadastro de visitantes e veículos do Morador (TASK-38) e ocorrências (TASK-40: abrir, consultar, responder e resolver). `reason` adicionais para áreas e reservas: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (as reservas já respeitam os bloqueios existentes), envio do e-mail `reserva_cancelada` no cancelamento administrativo e comentários/reabertura de ocorrências (US-704, TASK-63).
+Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-63):** bloqueio de datas com cancelamento das reservas afetadas (seção 3), e-mail `reserva_cancelada` no cancelamento pela Administração (seção 4.3), comentários e reabertura de ocorrências (seção 5) e relatório de encomendas (seção 6.1). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes (seção 6.2) e veículos (seção 6.3) do Morador, e o filtro `unidade_id` em `GET /encomendas` (seção 6.1, ainda opcional). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`, `periodo_passado`. **Pendentes:** remover bloqueios lançados por engano (seção 3), o worker que envia os e-mails da fila (a fila `envios_email` já recebe `reserva_cancelada`) e tornar `unidade_id` obrigatório para o Morador em `GET /encomendas` (seção 6.1). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
@@ -93,7 +93,17 @@ Objeto de área:
 
 Bloqueios sobrepostos para a mesma área são aceitos (não causam problema). A US pede que o bloqueio apareça "como indisponível" no calendário do Morador: o estado `bloqueado` da agenda (seção 4).
 
-**Remover um bloqueio** (errou a data, a manutenção foi cancelada) não existe no DER: `bloqueios_area` não tem coluna de remoção. Ver pendências.
+**Remover um bloqueio** (errou a data, a manutenção foi cancelada) ainda não tem rota: `bloqueios_area` já tem `removido_em` e `removido_por_usuario_id` (o bloqueio removido deixa de valer e some da lista), mas a rota de remoção continua pendente.
+
+Implementação (TASK-63):
+
+- **Só a Administração** (403 para os demais perfis). `GET .../bloqueios` lista os bloqueios ativos da área do mais recente ao mais antigo (`data_de` e `data_ate` filtram os que tocam o período); `GET .../bloqueios/previa` exige `data_inicio` e `data_fim` (422 se invertidas).
+- **`motivo` de 1 a 200 caracteres**, o tamanho da coluna do DER (o contrato falava em 300). O motivo gravado no cancelamento de cada reserva é "Bloqueio da área: {motivo}".
+- **Período já encerrado** (`data_fim` anterior a hoje): 422 `periodo_passado`. Um bloqueio que termina hoje vale.
+- **Reservas afetadas** são as `ativas` do período cujo horário **ainda não começou**; a que já começou não se cancela (`reserva_encerrada`) e fica de fora da prévia e do cancelamento. A resposta 201 traz `reservas_canceladas`.
+- **Um aviso por unidade afetada**, com todas as reservas dela no texto (até 20; as demais viram "e mais N"), e **um e-mail `reserva_cancelada` por reserva**, para quem reservou, na fila `envios_email`.
+- **Auditoria:** `area.bloquear` (com o número de reservas canceladas) e um `reserva.cancelar` por reserva. Tudo na mesma transação: uma falha em qualquer passo desfaz o bloqueio e os cancelamentos.
+- **Concorrência.** O bloqueio trava a linha da área em modo exclusivo e a criação de reserva, em modo compartilhado. Uma reserva em andamento faz o bloqueio esperar (e entrar na prévia dele); um bloqueio em andamento faz a reserva esperar e depois receber 409 `area_bloqueada`. Reservas entre si não se atrapalham.
 
 ## 4. Reservas
 
@@ -207,6 +217,7 @@ Regras do cancelamento:
 - **Morador:** cancela reservas da própria unidade. O DER guarda o morador que reservou (`usuario_id`) e quem cancelou (`cancelada_por_usuario_id`); a matriz diz "cancela só a própria". Ver pendências: "própria" significa a da unidade ou a que o próprio morador fez?
 - **Administração:** `motivo` obrigatório, de 1 a 300 caracteres, e `responsavel_id` obrigatório. Efeitos na mesma transação: grava `cancelada_responsavel_id`; cria **aviso para a unidade** com o motivo ([plataforma.md](plataforma.md) seção 1); enfileira o e-mail `reserva_cancelada` ao morador que reservou ([plataforma.md](plataforma.md) seção 6); registra o evento `reserva.cancelar`.
 - Cancelamento pelo Morador não gera aviso nem e-mail, mas fica registrado nas colunas `cancelada_*` da reserva.
+- **E-mail (TASK-63).** O `reserva_cancelada` entra em `envios_email` (`status = pendente`, `recurso_tipo = reserva`) na mesma transação do cancelamento, para o e-mail de quem fez a reserva (`usuario_id`), não do outro morador da unidade. Cancelamento recusado não enfileira nada.
 
 ## 5. Ocorrências
 
@@ -274,6 +285,13 @@ Regras:
 - O Morador comenta em qualquer estado (US-704: "enquanto a ocorrência existir"); comentar não muda o status.
 - Nenhuma ocorrência é apagada, nem a resolvida (US-703).
 
+Implementação de comentários e reabertura (TASK-63, US-704):
+
+- **Só o Morador** (403 para Funcionário, Administração e ADM), embora a matriz dê `editar` à Administração: responder e resolver continuam sendo dela. Unidade alheia: 404; aba Ocorrências Sem Acesso: 403.
+- **Comentário** (201): `texto` de 1 a 2000 caracteres e até 5 `anexos`, com as mesmas regras da abertura (arquivo do condomínio, enviado pela conta, imagem ou MP4). Cada anexo fica ligado à interação (`interacao_id`). Um arquivo que já está na ocorrência não entra de novo (422).
+- **Reabertura** (200): só de `resolvida` (senão 409 `ocorrencia_nao_resolvida`); a linha é travada, então duas reaberturas simultâneas geram uma. A ocorrência volta a `em_aberto`, `resolvida_em` volta a nulo, a interação `reabertura` guarda o texto e o evento `ocorrencia.reabrir` é auditado.
+- **Fila da Administração.** Depois de um comentário ou de uma reabertura, a última interação é do Morador, então `aguardando_administracao` fica `true` na lista.
+
 ## 6. Consultas e cadastros do Morador (encomendas, visitantes e veículos)
 
 ### 6.1 Encomendas (US-402)
@@ -282,6 +300,13 @@ A leitura da encomenda é do Vitor (US-402), mas o **recurso e os objetos** são
 
 1. Aceitar `unidade_id` como filtro e **exigi-lo quando quem chama é o Morador** (a US-402 abre com "seleciona a unidade"; sem o filtro, uma lista mista confunde). Funcionário e Administração continuam sem exigi-lo.
 2. A lista do Morador ordena da encomenda mais recente para a mais antiga e traz foto, data e hora, descrição, quem recebeu (`recebimento.funcionario`) e status. É o que `portaria.md` já devolve.
+
+**Implementação (US-402).** `GET /encomendas` aceita `unidade_id` para todos os perfis. Para o Morador, unidade que não é dele dá 404 e aba Encomendas Sem Acesso dá 403; para Funcionário e Administração, unidade de outro condomínio dá 404. O filtro combina com `status` e `busca`. **Ainda opcional:** o front atual da lista do Morador chama sem `unidade_id`, e tornar o parâmetro obrigatório (422 para o Morador, como o item 1 propõe) quebraria essa tela; a mudança é de uma linha no service quando a tela passar a enviar a unidade.
+
+**Período e relatório (US-404, proposta implementada na TASK-63).** A US-404 não tem texto detalhado no repositório, então o relatório segue a menor leitura útil e pode mudar quando a tela for desenhada (TASK-61):
+
+- `GET /encomendas` aceita `data_de` e `data_ate` (datas inclusivas no fuso do condomínio, sobre `registrada_em`; 422 se invertidas) para todos os perfis.
+- `GET /encomendas/relatorio` (só Administração; 403 para os demais) aceita `data_de`, `data_ate` e `unidade_id` e devolve `{"periodo": {"de", "ate"}, "totais": {...}, "por_unidade": [...]}`. Os totais e cada unidade trazem `registradas`, `aguardando_retirada`, `entregue_aguardando_confirmacao` e `retirada_confirmada`; `por_unidade` vem da unidade com mais encomendas para a com menos, sem paginação. Unidade de outro condomínio: 404.
 
 ### 6.2 Visitantes cadastrados pelo Morador (US-501)
 

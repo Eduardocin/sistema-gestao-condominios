@@ -11,8 +11,10 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, Select, and_, case, func, or_, select
 
+from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
 from app.modules.funcionarios.models import ResponsavelAdministracao
+from app.modules.notificacoes.models import EnvioEmail
 from app.modules.reservas.models import AreaComum, BloqueioArea, Reserva
 from app.modules.storage.models import Arquivo
 from app.modules.unidades.models import Unidade
@@ -27,6 +29,20 @@ class RepositorioAreasComuns(RepositorioDoCondominio[AreaComum]):
         if ativa is not None:
             consulta = consulta.where(AreaComum.ativa.is_(ativa))
         return consulta
+
+    def obter_travada(self, area_id: uuid.UUID, *, compartilhada: bool) -> AreaComum:
+        """A área travada até o commit, ou 404 (inexistente ou de outro condomínio).
+
+        Quem reserva trava em modo compartilhado e quem bloqueia datas, em modo exclusivo: os dois
+        não andam juntos. Assim a reserva criada durante um bloqueio entra na prévia dele, ou então
+        vê o bloqueio já gravado e recebe 409 `area_bloqueada`.
+        """
+        area = self.session.scalar(
+            self.consulta().where(AreaComum.id == area_id).with_for_update(read=compartilhada)
+        )
+        if area is None:
+            raise RecursoNaoEncontrado
+        return area
 
     def contar(self, *, ativa: bool | None) -> int:
         consulta = select(func.count()).select_from(self._filtradas(ativa).subquery())
@@ -56,7 +72,7 @@ class RepositorioArquivos(RepositorioDoCondominio[Arquivo]):
 
 
 class RepositorioBloqueios(RepositorioDoCondominio[BloqueioArea]):
-    """Só leitura: o cadastro de bloqueios é de outra task (US-602, Sprint 3)."""
+    """Bloqueios de datas da área (US-602). Removido (`removido_em`) não vale mais."""
 
     modelo = BloqueioArea
 
@@ -71,6 +87,40 @@ class RepositorioBloqueios(RepositorioDoCondominio[BloqueioArea]):
             BloqueioArea.data_inicio <= dia, BloqueioArea.data_fim >= dia
         )
         return self.session.scalar(select(consulta.exists())) or False
+
+    def pagina(
+        self,
+        area_id: uuid.UUID,
+        *,
+        data_de: date | None,
+        data_ate: date | None,
+        limite: int,
+        deslocamento: int,
+    ) -> tuple[list[tuple[BloqueioArea, str]], int]:
+        """Bloqueios ativos da área que tocam [data_de, data_ate], do mais recente ao mais antigo,
+        com o nome do responsável."""
+        condicoes: list[ColumnElement[bool]] = []
+        if data_de is not None:
+            condicoes.append(BloqueioArea.data_fim >= data_de)
+        if data_ate is not None:
+            condicoes.append(BloqueioArea.data_inicio <= data_ate)
+        base = self._ativos_da_area(area_id).where(*condicoes)
+        consulta = (
+            base.add_columns(ResponsavelAdministracao.nome)
+            .join(
+                ResponsavelAdministracao,
+                and_(
+                    ResponsavelAdministracao.id == BloqueioArea.responsavel_id,
+                    ResponsavelAdministracao.condominio_id == BloqueioArea.condominio_id,
+                ),
+            )
+            .order_by(BloqueioArea.data_inicio.desc(), BloqueioArea.id)
+            .limit(limite)
+            .offset(deslocamento)
+        )
+        itens = [(bloqueio, nome) for bloqueio, nome in self.session.execute(consulta)]
+        total = self.session.scalar(select(func.count()).select_from(base.subquery())) or 0
+        return itens, total
 
     def intervalos_entre(
         self, area_id: uuid.UUID, inicio: date, fim: date
@@ -147,6 +197,50 @@ class RepositorioReservas(RepositorioDoCondominio[Reserva]):
         )
         return {reserva.data for reserva in self.session.scalars(consulta)}
 
+    # --- bloqueio de datas (US-602) --------------------------------------------------------
+
+    def afetadas_por_bloqueio(
+        self, area_id: uuid.UUID, inicio: date, fim: date, *, hoje: date, hora_agora: time
+    ) -> list[ReservaDetalhada]:
+        """Reservas ativas da área entre `inicio` e `fim` (inclusive) que ainda não começaram.
+
+        A que já começou não se cancela (`reserva_encerrada`), então o bloqueio não a afeta.
+        """
+        ainda_nao_comecou = or_(
+            Reserva.data > hoje, and_(Reserva.data == hoje, Reserva.hora_inicio > hora_agora)
+        )
+        consulta = (
+            self._detalhada()
+            .where(
+                Reserva.area_id == area_id,
+                Reserva.status == "ativa",
+                Reserva.data.between(inicio, fim),
+                ainda_nao_comecou,
+            )
+            .order_by(Reserva.data, Reserva.hora_inicio, Reserva.id)
+        )
+        return [self._montar(linha) for linha in self.session.execute(consulta)]
+
+    # --- e-mail do cancelamento (US-803) ---------------------------------------------------
+
+    def enfileirar_cancelamento(self, reserva: Reserva) -> None:
+        """Entra na fila (outbox) junto com o cancelamento: se a transação cair, o e-mail some;
+        se confirmar, ele está garantido. Vai para quem fez a reserva."""
+        destinatario = self.session.scalar(
+            select(Usuario.email).where(Usuario.id == reserva.usuario_id)
+        )
+        if destinatario is None:  # a FK impede; sem e-mail não há o que enviar
+            return
+        self.session.add(
+            EnvioEmail(
+                condominio_id=self.contexto.condominio_id,
+                destinatario=destinatario,
+                evento="reserva_cancelada",
+                recurso_tipo="reserva",
+                recurso_id=reserva.id,
+            )
+        )
+
     # --- objeto completo -------------------------------------------------------------------
 
     def _detalhada(self) -> Select[Any]:
@@ -195,7 +289,12 @@ class RepositorioReservas(RepositorioDoCondominio[Reserva]):
     def bloquear(self, reserva_id: uuid.UUID) -> Reserva | None:
         """A reserva travada até o fim da transação: dois cancelamentos simultâneos não passam
         juntos pela checagem de status."""
-        consulta = self.consulta().where(Reserva.id == reserva_id).with_for_update()
+        consulta = (
+            self.consulta()
+            .where(Reserva.id == reserva_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         return self.session.scalar(consulta)
 
     def _contar(self, consulta: Select[Any]) -> int:

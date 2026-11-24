@@ -204,3 +204,58 @@ class DiaDoCalendario(BaseModel):
 class CalendarioSaida(BaseModel):
     mes: str
     dias: list[DiaDoCalendario]
+
+
+# --- bloqueio de datas (US-602) -------------------------------------------------------------
+
+
+class BloqueioEntrada(BaseModel):
+    """Corpo do POST de bloqueio. Datas inclusivas, no fuso do condomínio (regra 15)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data_inicio: date
+    data_fim: date
+    # O DER guarda até 200 caracteres (`bloqueios_area.motivo`).
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    responsavel_id: uuid.UUID
+    confirmar_cancelamentos: bool = False
+
+    @model_validator(mode="after")
+    def _intervalo(self) -> Self:
+        if self.data_fim < self.data_inicio:
+            raise ValueError("data_fim não pode ser anterior a data_inicio.")
+        return self
+
+
+class ReservaAfetada(BaseModel):
+    id: uuid.UUID
+    unidade: UnidadeRef
+    data: date
+    hora_inicio: HoraTexto
+
+
+class PreviaDoBloqueio(BaseModel):
+    reservas_afetadas: list[ReservaAfetada]
+    total: int
+
+
+class BloqueioSaida(BaseModel):
+    id: uuid.UUID
+    area_id: uuid.UUID
+    data_inicio: date
+    data_fim: date
+    motivo: str | None
+    responsavel: Referencia
+    criado_em: datetime
+
+
+class BloqueioCriadoSaida(BloqueioSaida):
+    reservas_canceladas: int
+
+
+class PaginaDeBloqueios(BaseModel):
+    items: list[BloqueioSaida]
+    page: int
+    page_size: int
+    total: int

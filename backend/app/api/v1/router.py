@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.modules.auditoria.router import router as auditoria_router
 from app.modules.auth.router import router as auth_router
 from app.modules.avisos.router import router as avisos_router
-from app.modules.condominios.router import cadastro_router, plataforma_router
+from app.modules.condominios.router import cadastro_router, estrutura_router, plataforma_router
 from app.modules.condominios.router import router as condominios_router
 from app.modules.contas.router import router as contas_router
 from app.modules.encomendas.router import portaria_router as portaria_encomendas_router
@@ -19,6 +19,8 @@ from app.modules.reservas.router import router as reservas_router
 from app.modules.storage.router import router as storage_router
 from app.modules.unidades.router import router as unidades_router
 from app.modules.vinculos.router import router as vinculos_router
+from app.modules.visitantes.router import router as visitantes_router
+from app.modules.visitantes.veiculos_router import router as veiculos_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
@@ -27,6 +29,7 @@ router.include_router(avisos_router)
 router.include_router(condominios_router)
 router.include_router(plataforma_router)
 router.include_router(cadastro_router)
+router.include_router(estrutura_router)
 router.include_router(unidades_router)
 router.include_router(vinculos_router)
 router.include_router(contas_router)
@@ -38,6 +41,8 @@ router.include_router(ocorrencias_router)
 router.include_router(permissoes_aba_router)
 router.include_router(reservas_router)
 router.include_router(storage_router)
+router.include_router(visitantes_router)
+router.include_router(veiculos_router)
 
 
 class HealthResponse(BaseModel):

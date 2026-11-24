@@ -78,10 +78,15 @@ class RepositorioOcorrencias(RepositorioDoCondominio[Ocorrencia]):
                 Ocorrencia.criado_em >= datetime.combine(filtros.de, time.min, FUSO_CONDOMINIO)
             )
         if filtros.ate is not None:
-            consulta = consulta.where(
-                Ocorrencia.criado_em
-                < datetime.combine(filtros.ate + timedelta(days=1), time.min, FUSO_CONDOMINIO)
-            )
+            if filtros.ate < date.max:
+                limite_fim = datetime.combine(
+                    filtros.ate + timedelta(days=1), time.min, FUSO_CONDOMINIO
+                )
+                consulta = consulta.where(Ocorrencia.criado_em < limite_fim)
+            else:
+                consulta = consulta.where(
+                    Ocorrencia.criado_em <= datetime.combine(date.max, time.max, FUSO_CONDOMINIO)
+                )
         return consulta
 
     @staticmethod
@@ -98,7 +103,10 @@ class RepositorioOcorrencias(RepositorioDoCondominio[Ocorrencia]):
     def bloquear(self, ocorrencia_id: uuid.UUID) -> Ocorrencia | None:
         """Trava a linha até o commit: duas resoluções simultâneas não passam juntas."""
         return self.session.scalar(
-            self.consulta().where(Ocorrencia.id == ocorrencia_id).with_for_update()
+            self.consulta()
+            .where(Ocorrencia.id == ocorrencia_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
 
     def pagina(

@@ -10,14 +10,15 @@ from app.modules.auditoria.contexto import identificar_contexto
 from app.modules.auth import repository
 from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO
 from app.modules.auth.dependencies import UsuarioAutenticado, get_usuario_autenticado
+from app.modules.condominios import repository as condominios
 from app.modules.condominios.models import Condominio
 
 
-def condominio_do_cadastro(
+def contexto_do_cadastro(
     autenticado: Annotated[UsuarioAutenticado, Depends(get_usuario_autenticado)],
     session: Annotated[Session, Depends(get_session)],
-) -> Condominio:
-    # Exceção R7 apenas para esta leitura. Não relaxa o contexto operacional.
+) -> ContextoCondominio:
+    # Exceção R7 restrita ao cadastro. Não relaxa o contexto operacional.
     if autenticado.condominio_id is None or autenticado.usuario.administrador_plataforma:
         raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
     linha = repository.obter_vinculo_ativo(
@@ -26,12 +27,18 @@ def condominio_do_cadastro(
     if linha is None or linha[0].perfil != "administracao":
         raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
     vinculo, condominio = linha
-    identificar_contexto(
-        ContextoCondominio(
-            usuario_id=autenticado.usuario.id,
-            condominio_id=condominio.id,
-            perfil=vinculo.perfil,
-            vinculo_id=vinculo.id,
-        )
+    contexto = ContextoCondominio(
+        usuario_id=autenticado.usuario.id,
+        condominio_id=condominio.id,
+        perfil=vinculo.perfil,
+        vinculo_id=vinculo.id,
     )
-    return condominio
+    identificar_contexto(contexto)
+    return contexto
+
+
+def condominio_do_cadastro(
+    contexto: Annotated[ContextoCondominio, Depends(contexto_do_cadastro)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Condominio:
+    return condominios.obter_do_cadastro(session, contexto)

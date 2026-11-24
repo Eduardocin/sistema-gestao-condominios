@@ -29,6 +29,9 @@ function availableModule(area: string, label: string) {
   if (area === 'portaria' && label === 'Recebimento e retirada de encomendas') {
     return { to: '/app/portaria/encomendas', action: 'Acessar encomendas' }
   }
+  if (area === 'portaria' && label === 'Entrada e saída de visitantes') {
+    return { to: '/app/portaria/visitantes', action: 'Acessar visitantes' }
+  }
   if (area === 'morador' && label === 'Encomendas') {
     return { to: '/app/morador/encomendas', action: 'Acompanhar encomendas' }
   }
@@ -74,7 +77,10 @@ export function WorkspacePage({ area }: { area: string }) {
         ]
       : []),
     ...(area === 'portaria'
-      ? [{ key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' }]
+      ? [
+          { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },
+          { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
+        ]
       : []),
     ...(area === 'morador'
       ? [{ key: 'packages', label: 'Encomendas', to: '/app/morador/encomendas', symbol: '▣' }]

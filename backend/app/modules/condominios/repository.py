@@ -11,7 +11,9 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
+from app.db.repositorio import RepositorioDoCondominio
 from app.modules.condominios.models import (
     Condominio,
     CondominioAnalise,
@@ -274,3 +276,59 @@ def enfileirar_aprovacao(session: Session, condominio: Condominio, momento: date
         )
     )
     session.flush()
+
+
+def obter_do_cadastro(
+    session: Session, contexto: ContextoCondominio, *, bloquear: bool = False
+) -> Condominio:
+    # Cadastro administrativo: o próprio condomínio usa id, não condominio_id.
+    # Reconfere o vínculo e nunca permite uma consulta administrativa global por ID.
+    consulta = (
+        select(Condominio)
+        .join(VinculoCondominio, VinculoCondominio.condominio_id == Condominio.id)
+        .where(
+            Condominio.id == contexto.condominio_id,
+            VinculoCondominio.id == contexto.vinculo_id,
+            VinculoCondominio.usuario_id == contexto.usuario_id,
+            VinculoCondominio.perfil == "administracao",
+            VinculoCondominio.ativo.is_(True),
+        )
+    )
+    if bloquear:
+        # Serializa a gestão sem bloquear KEY SHARE das FKs da portaria.
+        consulta = consulta.with_for_update(of=Condominio, key_share=True)
+    item = session.scalar(consulta.execution_options(populate_existing=True))
+    if item is None:
+        raise RecursoNaoEncontrado
+    return item
+
+
+class RepositorioBlocos(RepositorioDoCondominio[Bloco]):
+    modelo = Bloco
+
+    def tem_unidades_ativas(self, id_: uuid.UUID) -> bool:
+        consulta = (
+            select(Unidade.id)
+            .join(
+                Andar,
+                and_(Andar.id == Unidade.andar_id, Andar.condominio_id == Unidade.condominio_id),
+            )
+            .where(
+                Unidade.condominio_id == self.contexto.condominio_id,
+                Andar.bloco_id == id_,
+                Unidade.ativo.is_(True),
+            )
+        )
+        return bool(self.session.scalar(select(consulta.exists())))
+
+
+class RepositorioAndares(RepositorioDoCondominio[Andar]):
+    modelo = Andar
+
+    def tem_unidades_ativas(self, id_: uuid.UUID) -> bool:
+        consulta = select(Unidade.id).where(
+            Unidade.condominio_id == self.contexto.condominio_id,
+            Unidade.andar_id == id_,
+            Unidade.ativo.is_(True),
+        )
+        return bool(self.session.scalar(select(consulta.exists())))

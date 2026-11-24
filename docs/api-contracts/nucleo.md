@@ -124,13 +124,36 @@ Erros: 409 `conflict` com `reason` = `email_ja_cadastrado` ou `telefone_ja_cadas
 | --- | --- | --- | --- |
 | `GET /contas/me` | Qualquer conta | Dados da conta | US-103 |
 | `PUT /contas/me` | Cadastro global de Morador/Administração | Edita nome, telefone e e-mail; foto depende de storage global | US-103 (recorte TASK-27) |
-| `PUT /contas/me/senha` | Qualquer conta | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve um token novo | US-103, US-210 |
+| `PUT /contas/me/senha` | Cadastro global de Morador/Administração | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve tokens novos | US-103 |
 | `POST /contas/recuperacao-senha` | Público | `{"email"}`; **sempre 202**, exista ou não a conta; enfileira o e-mail `recuperacao_senha` | US-102 |
 | `POST /contas/redefinicao-senha` | Público | `{"token", "senha_nova"}`; token de uso único (`UPDATE ... WHERE usado_em IS NULL`) e com validade; incrementa `sessao_versao` | US-102 |
 
-**Implementado na TASK-27:** somente `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
-das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103; as rotas de senha
-da tabela continuam propostas. Os cadastros existentes e seu `LoginResponse` são preservados.
+**Implementado na TASK-27:** `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
+das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103. Os cadastros existentes e
+seu `LoginResponse` são preservados.
+
+**Implementado na TASK-53, parte A:** `PUT /contas/me/senha` e `POST /contas/redefinicao-senha`.
+`POST /contas/recuperacao-senha` continua proposta (parte B, depende do e-mail da TASK-50).
+
+- `PUT /contas/me/senha`: Bearer válido, sem exigir `cid`. Neste recorte, como no `PUT /contas/me`,
+  só cadastro global de Morador/Administração; conta compartilhada e ADM recebem 403 (o acesso
+  compartilhado troca pela US-210, com responsável). Senha atual errada: 422
+  `senha_atual_incorreta`, contada no limitador do login (chave por conta); no limite, 429
+  `too_many_attempts` com `Retry-After`. Senha nova com as regras do cadastro (3.1); igual à atual:
+  422 `senha_nova_igual_atual`. Grava o hash, soma 1 em `sessao_versao` (os tokens antigos caem),
+  inutiliza eventuais tokens pendentes de recuperação da conta e responde 200 com o mesmo
+  `LoginResponse` do login, preservando o `cid` do token quando o condomínio continua ativo e
+  liberado.
+- `POST /contas/redefinicao-senha`: público, `{"token", "senha_nova"}`. O banco guarda só o
+  SHA-256 hexadecimal do token. Uma transação localiza o dono, trava a conta (`FOR UPDATE`),
+  consome o token com um `UPDATE` condicional (`usado_em IS NULL` e `expira_em > now()`), grava a
+  senha, soma 1 em `sessao_versao`, inutiliza os outros tokens pendentes da conta e audita;
+  qualquer falha desfaz tudo e o token continua válido. Token inexistente, expirado, usado ou de
+  conta inativa/sem cadastro próprio: sempre o mesmo 422 `token_invalido`. Sucesso: 204, sem
+  sessão, liberando eventual bloqueio temporário de tentativas da conta no limitador do login.
+- Auditoria: `conta.senha_alterar` e `conta.senha_redefinir`, recurso `usuario`, com só a
+  `sessao_versao` em `antes`/`depois`. Senha, hash e token nunca entram na trilha, na resposta ou
+  no log.
 
 `GET` exige Bearer válido, inclusive sem `cid`, e retorna os dados da identidade autenticada:
 
@@ -194,7 +217,8 @@ Qualquer outra transição retorna 409 (`reason: "transicao_invalida"`). Não ex
 | Rota | `pendente` / `rejeitado` | `ativo` | `desativado` |
 | --- | --- | --- | --- |
 | `GET /condominio`, `GET /condominios/meus`, `GET /auth/me` | Sim | Sim | Sim |
-| `PUT /condominio`, edição da estrutura, `POST /condominio/documentos` | Sim (Administração) | Sim | 403 |
+| `PUT /condominio` e escritas de `/estrutura/...` (US-205/206) | Sim, Administração | Sim, Administração | 403 |
+| `POST /condominio/documentos` (proposta) | Sim (Administração) | Sim | 403 |
 | `POST /condominio/reenvio` | Só `rejeitado` | — | — |
 | Todas as demais (encomendas, reservas, vínculos, avisos...) | 403 | Conforme a matriz | 403 |
 
@@ -282,17 +306,19 @@ Erros do assistente: 422 com `error.details` apontando o campo (`blocos[0].andar
 | --- | --- | --- | --- |
 | `GET /condominios/meus` | Administração (sem `cid`) | — | 200, lista `{id, nome, status, perfil}` dos prédios com vínculo ativo, para "alternar entre prédios" |
 | `GET /condominio` | Morador e Funcionário: só `id` e `nome`. Administração: completo | — | 200, objeto |
-| `PUT /condominio` | Administração | `nome`, `cnpj`, `endereco`, `logo_arquivo_id` | 200, objeto |
-| `POST /condominio/reenvio` | Administração | `{}` | 200, objeto com `status = 'pendente'` |
+| `PUT /condominio` | Administração; pendente, rejeitado ou ativo | `nome`, `cnpj`, `endereco`, `responsavel_id`; `logo_arquivo_id` opcional | 200, objeto |
+| `POST /condominio/reenvio` | Administração; somente rejeitado (TASK-57) | `{"responsavel_id": "UUID"}` | 200, objeto com `status = 'pendente'` e `enviado_em` |
 | `GET /condominio/documentos` | Administração | — | 200, lista de documentos |
 | `POST /condominio/documentos` | Administração | `{"arquivo_id": "UUID"}` | 201, documento |
 
 `GET /api/v1/condominios/meus` está implementado na TASK-28: lista direta, sem paginação,
 ordenada por nome e ID, limitada aos vínculos ativos de perfil Administração da conta.
 Inclui todos os estados do condomínio; revogar o vínculo o remove da próxima consulta.
-`GET /condominio` para Administração foi implementado na TASK-29. As escritas restantes
-da tabela continuam fora dessas entregas. Selecionar um condomínio pendente
-não libera suas operações do dia a dia, que continuam sob a autorização central.
+`GET /condominio` para Administração foi implementado na TASK-29. A TASK-57 acrescenta
+`PUT /condominio` e `POST /condominio/reenvio`. A US-206 amplia a edição para pendente,
+rejeitado e ativo; reenvio continua exclusivo de rejeitado. As rotas de
+documentos e a leitura por Morador/Funcionário permanecem propostas. Selecionar um condomínio
+pendente ou rejeitado não libera suas operações do dia a dia, sob a autorização central.
 
 `GET /condominio` para a Administração:
 
@@ -311,14 +337,48 @@ não libera suas operações do dia a dia, que continuam sob a autorização cen
 ```
 
 - `motivo_rejeicao` só aparece em `rejeitado`; **a Administração consegue lê-lo** (US-203) e o painel o exibe (US-204). `analises` é o histórico de tentativas (US-204), em ordem cronológica.
-- `PUT /condominio`: nome, CNPJ, endereço e logo editáveis; o CNPJ continua **único** (409 `cnpj_ja_cadastrado`). Mudar o CNPJ de um condomínio `ativo` gera auditoria `condominio.editar` com `antes`/`depois`.
-- `reenvio`: só de `rejeitado` (senão 409). O motivo anterior fica no histórico. Dados e estrutura **continuam editáveis** antes do reenvio, pelo `PUT` e pelas rotas de estrutura.
+- `PUT /condominio` (US-206): nome, CNPJ e endereço editáveis em `pendente`, `rejeitado` e `ativo`; `desativado` retorna 403. O CNPJ continua **único** (409 `cnpj_ja_cadastrado`). Auditoria `condominio.editar` com os campos alterados. `logo_arquivo_id` omitido preserva a logo, nulo remove a associação e UUID substitui por imagem de `fotos` enviada pela própria conta administrativa no mesmo condomínio (404 para referência inválida). Documentos existentes são preservados. Upload usa o storage atual e exige condomínio ativo; upload de logo no cadastro inicial/pendente/rejeitado continua pendente, sem infraestrutura nova.
+- `reenvio`: só de `rejeitado` (senão 409 `transicao_invalida`). Atualiza `enviado_em` com a hora do servidor, limpa `motivo_rejeicao`, acrescenta `reenviado` ao histórico e registra `condominio.reenviar`. Rejeições anteriores não são alteradas. Dados e estrutura podem ser corrigidos antes e depois do reenvio, nos estados autorizados; isso não libera operações do dia a dia.
 - `GET /condominios/meus` mostra apenas os prédios do **próprio** vínculo. "Alternar" é chamar `selecionar-condominio` de novo (US-206: "tudo o que aparece pertence ao prédio escolhido").
 - Documento anexado nunca é apagado do condomínio no MVP; só se acrescenta.
 
+#### Precisões da correção e reenvio — TASK-57
+
+Todas as cinco escritas desta entrega exigem `responsavel_id` de responsável administrativo
+ativo do condomínio selecionado. Isso precisa o corpo `{}` proposto originalmente para
+reenvio e segue a auditoria central e as convenções de conta compartilhada. Ausente ou
+malformado: 422; inexistente, inativo ou de outro condomínio: 404. A lista já existente
+`/responsaveis-administracao` permite o primeiro cadastro também em condomínio rejeitado.
+
+`PUT /condominio` exige nome, CNPJ, endereço completo e responsável (não é PATCH).
+A associação opcional `logo_arquivo_id` segue a regra de omissão/nulo descrita acima:
+
+```json
+{
+  "nome": "Residencial Aurora",
+  "cnpj": "11222333000181",
+  "endereco": {
+    "cep": "50030230", "logradouro": "Rua da Aurora", "numero": "100",
+    "complemento": null, "bairro": "Boa Vista", "cidade": "Recife", "uf": "PE"
+  },
+  "responsavel_id": "UUID"
+}
+```
+
+Os campos seguem as validações do cadastro inicial; extras, IDs de destino, status e
+referências de documentos não são aceitos. O condomínio vem do JWT e do vínculo administrativo
+atual, nunca do corpo. Cada escrita confirma alteração e auditoria na mesma transação,
+ou reverte tudo. A gestão usa `FOR NO KEY UPDATE` na linha do condomínio, incompatível
+com a trava da aprovação/rejeição do ADM; o estado é revalidado após esperar. Essa trava
+permite o `KEY SHARE` das FKs de encomendas/portaria. Dois reenvios geram um 200 e um 409.
+Uma edição serializada depois do reenvio pode prosseguir em `pendente`.
+
+O reenvio retorna os campos de `GET /condominio` mais `enviado_em`. Não aprova o prédio,
+não gera chaves nem envia e-mail. Não cria rascunhos, estados ou novas tabelas.
+
 ### 4.4 Ler a estrutura
 
-`GET /condominio/estrutura` devolve a árvore Bloco → Andar → Unidade do condomínio do token. Administração vê tudo; Funcionário vê só nomes e identificação; Morador **não usa** esta rota (usa `/minhas-unidades`).
+`GET /condominio/estrutura` está implementado na TASK-57 para Administração com vínculo ativo no condomínio do token, em qualquer um dos quatro estados. Devolve a árvore existente Bloco → Andar → Unidade, incluindo itens inativos, com os campos abaixo. Não retorna proprietário, moradores ou chaves. A leitura por Funcionário permanece proposta; Morador usa `/minhas-unidades`.
 
 ```json
 {
@@ -332,7 +392,7 @@ não libera suas operações do dia a dia, que continuam sob a autorização cen
 }
 ```
 
-Para a Administração, cada unidade traz também `tem_proprietario` e `moradores_ativos`. Por padrão só aparecem itens ativos; `?incluir_inativos=true` mostra os desativados. A **edição** (renomear, adicionar, desativar) está em [plataforma.md](plataforma.md) seção 7.
+Contagens de moradores/proprietário e filtro de itens inativos permanecem propostas. A US-205 reaproveita as edições da TASK-57 em pendente, rejeitado e ativo, acrescentando criação individual, desativação lógica e reativação. Preserva IDs, pais, vínculos e registros históricos; não move nem exclui elementos. Rotas, campos e restrições: [plataforma.md](plataforma.md), seção 7.
 
 ## 5. Aprovação pelo ADM (US-203, Must, Sprint 1) e gestão de condomínios ativos (US-208)
 

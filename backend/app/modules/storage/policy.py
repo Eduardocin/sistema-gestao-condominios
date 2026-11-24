@@ -9,7 +9,7 @@ from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.modules.auth import repository
 from app.modules.auth.autorizacao import garantir_aba_no_condominio, garantir_acesso_a_unidade
-from app.modules.condominios.models import CondominioDocumento
+from app.modules.condominios.models import Condominio, CondominioDocumento
 from app.modules.encomendas.models import Encomenda
 from app.modules.funcionarios.models import Funcionario
 from app.modules.ocorrencias.models import Ocorrencia, OcorrenciaAnexo
@@ -127,6 +127,12 @@ def autorizar_download(
         raise RecursoNaoEncontrado
     if ctx is None or condominio != ctx.condominio_id:
         raise RecursoNaoEncontrado
+    # Logo vinculada é imagem do próprio condomínio, visível aos seus perfis locais.
+    logo = session.scalar(
+        select(Condominio.id).where(Condominio.id == condominio, Condominio.logo_arquivo_id == id)
+    )
+    if logo is not None:
+        return
     if ctx.perfil == "administracao" and (
         encomendas or ocorrencias or suporte or documento or foto or foto_proprietario or areas
     ):

@@ -1,6 +1,6 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (seção 3; as reservas já respeitam os bloqueios existentes), o e-mail `reserva_cancelada` no cancelamento pela Administração (serviço de e-mail assíncrono; fora da TASK-48), comentários e reabertura de ocorrências (US-704, TASK-63) e as consultas e cadastros do Morador. Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
+Status: rascunho para revisão no portão dos leads. **Implementado:** áreas comuns e reservas (TASK-84), aviso à unidade no cancelamento administrativo (TASK-48), API de encomendas (TASK-36), cadastro de visitantes e veículos do Morador (TASK-38) e ocorrências (TASK-40: abrir, consultar, responder e resolver). `reason` adicionais para áreas e reservas: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`. **Pendentes:** cadastro de bloqueios (as reservas já respeitam os bloqueios existentes), envio do e-mail `reserva_cancelada` no cancelamento administrativo e comentários/reabertura de ocorrências (US-704, TASK-63).
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
@@ -314,6 +314,7 @@ Regras de edição e cancelamento (US-501: "editado ou cancelado antes da entrad
 - `PUT`: só enquanto **nenhuma visita foi registrada** para esse cadastro (senão 409, `reason: "visitante_ja_utilizado"`). Não troca de unidade.
 - `POST .../cancelamento`: aceito enquanto não houver visita em andamento. Repetir retorna 409. A proposta de permitir cancelar **depois** da primeira entrada vai além do texto da US-501 e está nas pendências.
 - O Morador só enxerga cadastros de unidades vinculadas a ele.
+- Implementação TASK-38 (recorte de visitantes): a aba Visitantes é obrigatória. Qualquer morador ativo da unidade com a aba habilitada consulta, edita (antes da primeira visita) e cancela cadastros da unidade. O cadastro permanece no histórico depois de cancelado. O cancelamento após uma saída é permitido enquanto não houver visita aberta.
 
 ### 6.3 Veículos (US-502)
 
@@ -329,12 +330,13 @@ Regras de edição e cancelamento (US-501: "editado ou cancelado antes da entrad
 {"unidade_id": "UUID", "placa": "ABC1D23", "marca": "Fiat", "modelo": "Argo", "cor": "Prata"}
 ```
 
-Todos obrigatórios. A **placa** é normalizada pelo servidor (maiúsculas, sem hífen nem espaço) e validada pelo formato brasileiro antigo ou Mercosul, `^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$` (regra 13 do DER). `marca`, `modelo` e `cor` de 1 a 40 caracteres.
+Todos os campos são obrigatórios na criação. Na edição, `unidade_id` é opcional e, quando enviada, deve corresponder à unidade do cadastro. A **placa** é normalizada pelo servidor (maiúsculas, sem hífen nem espaço) e validada pelo formato brasileiro antigo ou Mercosul, `^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$` (regra 13 do DER). `marca`, `modelo` e `cor` têm de 1 a 40 caracteres.
 
 - Placa repetida **na mesma unidade**, entre veículos ativos: 409 (`reason: "placa_ja_cadastrada_na_unidade"`), regra 14.
-- Placa já cadastrada em **outra** unidade: **o cadastro é aceito** (regra 14: a story só pede aviso) e o Morador **não é informado** de que existe em outra unidade, para não vazar dados de terceiros. A Administração é avisada; a forma do aviso está nas pendências.
+- A unidade pode ter até **cinco veículos ativos**. O sexto retorna 409 (`reason: "limite_veiculos"`). Remover um veículo libera uma vaga.
+- O cadastro aceita placa repetida em outra unidade. A consulta administrativa retorna `placa_duplicada` quando há outra unidade ativa do mesmo condomínio com a mesma placa ativa. O campo é exclusivo da Administração.
 - `remocao` desativa (`ativo = false`, `removido_em` preenchido). A placa pode ser cadastrada de novo depois.
-- Funcionário (portaria): consulta `GET /veiculos` do condomínio inteiro para conferência no portão, só leitura (matriz: Veículos Funcionário "V (C)"). Alinhar com a US-505 (Eduardo, Sprint 3).
+- Funcionário (portaria): consulta `GET /veiculos` do condomínio para conferência no portão, com acesso de leitura (US-505).
 
 ## 7. Casos obrigatórios de teste
 
@@ -348,7 +350,7 @@ Além da matriz parametrizada e dos testes de isolamento (matriz, seção 11):
 - Ocorrência: Funcionário recebe 403; Morador de outra unidade recebe 404; resolver duas vezes retorna 409; reabrir uma `em_aberto` retorna 409; o histórico mantém resolução e reabertura em ordem; ninguém consegue apagar.
 - Morador com aba Sem Acesso: 403 em reservas, ocorrências, visitantes e veículos, mesmo que a tela seja burlada.
 - Visitante: edição depois de uma visita registrada retorna 409; CPF inválido retorna 422.
-- Veículo: placa fora do formato retorna 422; repetida na unidade retorna 409; repetida em outra unidade cria o veículo **sem** revelar isso na resposta ao Morador.
+- Veículo: placa fora do formato retorna 422, placa repetida na unidade retorna 409 e placa repetida em outra unidade é aceita, com indicação exclusiva na consulta da Administração. Se dois cadastros disputarem a quinta vaga, apenas um é aceito.
 
 ## 8. Pendências e responsáveis
 
@@ -361,7 +363,7 @@ Além da matriz parametrizada e dos testes de isolamento (matriz, seção 11):
 | Calendário e grade | Confirmar o formato da grade (estados `bloqueado` e `passado` incluídos) e se o `calendario` do mês é necessário | Matheus e Vitor |
 | Fuso do condomínio | Hoje não há coluna; proposta: `America/Sao_Paulo` fixo no MVP | Davi e Gabriel |
 | Antecedência da reserva | As stories não limitam quão à frente se reserva. Proposta: sem limite no MVP; revisar se houver abuso | Paulo (regra de negócio) |
-| Aviso à Administração por placa duplicada | A US-502 pede "aviso à Administração", mas `avisos` é voltado a moradores e funcionários. **Proposta:** o relatório de veículos da Administração (US-506) marca placas repetidas entre unidades; sem notificação ativa. | Vitor, Tude e Paulo |
+| Relatório da Administração | A consulta administrativa já informa placas repetidas entre unidades. A apresentação dessa indicação no relatório é parte da US-506. | Vitor, Tude e Paulo |
 | Cancelar visitante depois da primeira entrada | Com a autorização reutilizável (22/10), o Morador precisa poder **revogar** um cadastro em curso. A US-501 só permite cancelar "antes da entrada". **Proposta:** permitir enquanto não houver visita em andamento. | Vitor e Eduardo |
 | `unidade_id` em `GET /encomendas` | Ajuste em `portaria.md` (seção 6.1) | Eduardo e Vitor |
 | Anexos de ocorrência | Tipos, tamanhos, quantidade (5) e leitura protegida de vídeo | Eduardo (TASK-26) e Vitor |

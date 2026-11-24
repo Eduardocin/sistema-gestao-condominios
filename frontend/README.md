@@ -43,14 +43,16 @@ O build inclui a checagem de tipos. Os testes Node de autenticação abrem um se
 | `/selecionar-condominio` | Selecionar contexto autenticado |
 | `/app` | Direcionar para a área permitida |
 | `/app/administracao/funcionarios` | Administração de condomínio ativo: listar, cadastrar e desligar funcionários; cadastrar responsáveis |
+| `/app/portaria/encomendas` | Receber encomendas com foto e registrar entrega, usando a API autenticada |
+| `/app/morador/encomendas` | Consultar encomendas autorizadas e confirmar o recebimento |
 | `/app/morador`, `/app/portaria`, `/app/administracao`, `/app/plataforma` | Visão geral de cada perfil |
 | `/app/sem-condominio` | Conta autenticada sem condomínio disponível para operações |
 | `/prototipos/portaria` | Demonstração pública com dados fictícios locais |
 | `/status`, `/design-system` | Saúde do serviço e catálogo de componentes |
 
-Cadastros usam `POST /contas/morador` ou `POST /contas/administracao`, com os campos dos contratos em [núcleo](../docs/api-contracts/nucleo.md). Por exemplo, use `Ana Exemplo`, `ana@example.com`, telefone fictício `11987654321` e uma senha de teste com letras e números. A conta criada entra automaticamente; ela precisa de vínculo com um condomínio para realizar operações. O cadastro de prédios e o vínculo de unidades pertencem a entregas posteriores.
+Cadastros usam `POST /contas/morador` ou `POST /contas/administracao`, com os campos dos contratos em [núcleo](../docs/api-contracts/nucleo.md). Por exemplo, use `Ana Exemplo`, `ana@example.com`, telefone fictício `11987654321` e uma senha de teste com letras e números. A conta criada entra automaticamente; ela precisa de vínculo com um condomínio para realizar operações. As APIs de cadastro/análise/correção de condomínio e vínculo por chave já existem no backend; suas telas continuam pendentes. Veja as funcionalidades disponíveis no [README principal](../README.md#funcionalidades-disponíveis-nesta-branch).
 
-Em Funcionários, comece cadastrando um responsável da Administração se a lista estiver vazia. Depois, cadastre um nome da equipe com função, contato e responsável; a pessoa não recebe login individual. A lista permite busca, paginação e consulta de desligados. O desligamento exige confirmação e responsável e preserva os registros anteriores. O frontend envia o JWT pelo `client.http`, sem IDs de condomínio no formulário.
+Em Funcionários, comece cadastrando um responsável da Administração se a lista estiver vazia. Depois, cadastre um nome da equipe com função, contato e responsável; a pessoa não recebe login individual. A lista permite busca, paginação e consulta de desligados. O desligamento exige confirmação e responsável e preserva os registros anteriores. O frontend envia o JWT pelo `client.http`, sem IDs de condomínio no formulário. Consulta individual, edição e histórico restrito de funcionários estão disponíveis somente na API; essa tela ainda não os utiliza.
 
 ## Criar uma tela
 

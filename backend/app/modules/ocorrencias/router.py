@@ -17,7 +17,11 @@ from app.core.errors import ApiError
 from app.core.permissoes import Perfil
 from app.db.session import get_session
 from app.modules.auditoria.contexto import ip_do_cliente
-from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO, require_permission
+from app.modules.auth.autorizacao import (
+    MENSAGEM_SEM_PERMISSAO,
+    registrar_negacao,
+    require_permission,
+)
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.ocorrencias.repository import FiltrosOcorrencias
 from app.modules.ocorrencias.schemas import (
@@ -42,6 +46,12 @@ def exigir_administracao(
     não basta aqui. Roda antes da validação do corpo, como o resto da matriz.
     """
     if contexto.perfil != Perfil.ADMINISTRACAO:
+        registrar_negacao(
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            perfil=contexto.perfil,
+            permissao="ocorrencias:administracao",
+        )
         raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
 
 

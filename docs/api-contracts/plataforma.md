@@ -217,7 +217,7 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 
 | Dono | Ações |
 | --- | --- |
-| Contas (TASK-27) | `conta.criar`, `conta.editar` — operações globais de conta própria; [contrato](nucleo.md#33-perfil-recorte-task-27-e-demais-rotas-de-conta-us-103-gabriel-sprint-3) |
+| Contas (TASK-27, TASK-53) | `conta.criar`, `conta.editar`, `conta.senha_alterar`, `conta.senha_redefinir` — operações globais de conta própria; [contrato](nucleo.md#33-perfil-recorte-task-27-e-demais-rotas-de-conta-us-103-gabriel-sprint-3) |
 | Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login`, `seguranca.login_falho`, `seguranca.login_bloqueado`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
 | Paulo (condomínio, chaves, vínculos) | `condominio.enviar` *(proposta: cadastro inicial)*, `condominio.reenviar`, `condominio.aprovar`, `condominio.rejeitar` (com motivo), `condominio.desativar`, `condominio.reativar`, `condominio.editar`, `chave.gerar`, `chave.regenerar`, `chave.revogar`, `seguranca.chave_invalida` *(proposta: tentativas erradas, US-301)*, `vinculo.aprovar`, `vinculo.rejeitar`, `vinculo.desfazer`, `proprietario.editar` |
 | Vitor (convivência) | `reserva.cancelar`, `area.bloquear`, `ocorrencia.resolver`, `ocorrencia.reabrir` |
@@ -284,7 +284,7 @@ comando reproduzível: [evidência da TASK-49](../../backend/app/modules/auditor
 | `POST /funcionarios` | Administração | JSON abaixo | 201, objeto |
 | `PUT /funcionarios/{id}` | Administração | JSON abaixo | 200, objeto |
 | `POST /funcionarios/{id}/desligamento` | Administração | `{"responsavel_id": "UUID"}` | 200, objeto com `ativo = false` |
-| `GET /funcionarios/{id}/historico` | Administração | paginação | 200, eventos de cadastro e alteração |
+| `GET /funcionarios/{id}/historico` | Administração | paginação | 200, eventos de cadastro, edição e desligamento |
 
 ```json
 {
@@ -301,8 +301,30 @@ Obrigatórios: `nome` (1 a 120), `funcao` (`porteiro` ou `seguranca`, CHECK do D
 
 - **Desligado** deixa de aparecer em `GET /funcionarios` do Funcionário e da lista padrão da Administração (`ativo=true`), mas continua nos registros antigos (encomendas, visitas, auditoria). Grava `ativo = false` e `desligado_em`. Desligar de novo retorna 409.
 - Os formulários da portaria (`portaria.md`) já consomem `GET /portaria/funcionarios`; esta rota é a origem da mesma lista. Eduardo e Tude decidem se `/portaria/funcionarios` vira apelido de `/funcionarios` ou se uma das duas some.
-- **Histórico.** A US-209 pede "histórico de quem cadastrou ou alterou". O histórico vem de `registros_auditoria` (`funcionario.cadastrar`, `.editar`, `.desativar`) filtrado por `recurso_id`, devolvendo só `acao`, `criado_em`, `responsavel_nome` e `usuario` (sem `antes`/`depois`). Como a matriz nega a auditoria à Administração, esta rota é **uma exceção explícita** a aprovar pelo Gabriel (pendências).
+- **Histórico implementado nos complementos da US-209.** A consulta usa `registros_auditoria`, filtrando o próprio condomínio, `recurso_tipo=funcionario`, o ID consultado e somente `funcionario.cadastrar`, `funcionario.editar` e `funcionario.desativar`. Antes de consultar eventos, confirma a existência do funcionário no condomínio. Devolve só `acao`, `criado_em`, `responsavel_nome` e `usuario` (`{id,nome}`, ou nulo em registros legados sem autor). Não carrega nem expõe `antes`, `depois`, IP, perfil ou demais metadados. Como a matriz nega auditoria geral à Administração, esta rota permanece **uma exceção de acesso sujeita à revisão por Gabriel**; nenhuma aprovação foi presumida e a permissão global de auditoria não foi alterada.
 - Auditoria: `funcionario.cadastrar`, `funcionario.editar`, `funcionario.desativar`.
+
+**Consulta e edição implementadas nos complementos da US-209.** As três novas rotas exigem
+Administração com vínculo ativo e condomínio ativo. A Portaria mantém somente a listagem
+de nomes ativos; não consulta detalhe nem histórico. Funcionário inexistente ou de outro
+condomínio retorna 404 genérico, inclusive no histórico. Funcionários desligados podem ser
+consultados e ter seus dados corrigidos; `ativo`, `desligado_em`, ID e referências históricas
+são preservados, sem reativação.
+
+`PUT` recebe os mesmos campos e validações do cadastro: nome, função, telefone, e-mail e
+`responsavel_id` obrigatórios; foto opcional. Foto nula ou omitida remove a referência.
+Não há atualização parcial: campos obrigatórios ausentes retornam 422. Campos extras,
+inclusive estado, ID e condomínio, também são rejeitados. O responsável deve estar ativo
+no próprio condomínio; a foto passa pela validação existente de imagem, autor e módulo
+`fotos`. Referências inválidas retornam 404. Atualização e evento central
+`funcionario.editar` são confirmados juntos ou revertidos juntos; antes/depois contêm
+apenas os campos efetivamente alterados. Repetir os mesmos valores normalizados não gera
+outro evento de alteração.
+
+O histórico usa `{items,page,page_size,total}`, com `page>=1`, `page_size` de 1 a 100
+(padrão 20) e ordem `criado_em DESC, id DESC`. O ID da auditoria serve apenas ao desempate
+e não é exposto. Um funcionário existente sem eventos retorna lista vazia. Não há filtros
+livres de condomínio, recurso ou ação nem acesso a eventos de outros recursos.
 
 ### 5.2 Responsáveis pela Administração (US-210, Should, Sprint 3)
 
@@ -388,6 +410,15 @@ Variáveis no `.env.example`: `EMAIL_BACKEND` (`smtp` ou `console`), `SMTP_HOST`
 
 A **leitura** da árvore (`GET /condominio/estrutura`) e o cadastro inicial pelo assistente estão no [núcleo](nucleo.md). Aqui, a edição depois do cadastro:
 
+**Implementado na US-205, sobre a TASK-57:** as oito operações abaixo aceitam
+Administração de condomínio `pendente`, `rejeitado` ou `ativo`; `desativado` retorna
+403. Exigem responsável ativo do próprio condomínio. Bloco e unidade admitem renomeação;
+andar admite nome e ordem. As respostas são `{id,nome,ativo}`, `{id,nome,ordem,ativo}`
+e `{id,identificacao,ativo}`. Os três `POST` de criação retornam 201 e
+`Location: /api/v1/condominio/estrutura`. Extras, mudança de pais, transferência e
+criação em lote não são aceitos. Unicidade usa as constraints existentes
+(409 `nome_duplicado`); não há nova migration.
+
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
 | `POST /estrutura/blocos` | Administração | `{"nome": "Bloco C", "responsavel_id": "UUID"}` | 201, bloco |
@@ -403,11 +434,14 @@ Regras:
 
 - **Responsável obrigatório nas oito operações de escrita acima.** `responsavel_id` identifica um responsável ativo da Administração no condomínio do contexto. Ausente ou inválido no formato: 422; inexistente, inativo ou de outro condomínio: 404 genérico. O service valida antes de alterar a estrutura e passa `ResponsavelRef(tipo="administracao", id=responsavel_id)` para `registrar_acao`, na mesma transação. A auditoria preserva o nome e a identidade da conta autenticada. O responsável deve estar cadastrado pela seção 5.2 também quando a estrutura for corrigida em condomínio pendente ou rejeitado; a gestão dessa lista precisa estar liberada no mesmo fluxo de cadastro.
 - Nomes únicos: bloco no condomínio, andar no bloco, unidade no andar (regra 18 do DER). Repetir retorna 409 (`reason: "nome_duplicado"`). Nome de 1 a 50 caracteres. "101" pode existir em blocos diferentes.
-- **Desativar unidade:** retorna 409 (`reason: "unidade_com_vinculo_ativo"`) se houver morador vinculado ativo (matriz: "não remove unidade com vínculo"). Sem vínculo ativo, a unidade é desativada, **nunca apagada**, e seus registros antigos (encomendas, reservas, ocorrências) continuam. A chave de acesso vigente da unidade é **revogada** na mesma transação, para ninguém se vincular a uma unidade desativada.
+- **Desativar unidade:** retorna 409 (`reason: "unidade_com_vinculo_ativo"`) se houver morador vinculado ativo (matriz: "não remove unidade com vínculo"). Sem vínculo ativo, a unidade é desativada, **nunca apagada**, e seus registros antigos (encomendas, visitantes, registros de visita, veículos, reservas e ocorrências) continuam. A chave de acesso vigente da unidade é **revogada** na mesma transação, para ninguém se vincular a uma unidade desativada.
 - **Desativar andar ou bloco:** só se todas as suas unidades já estiverem desativadas (409, `reason: "estrutura_com_unidades_ativas"`).
-- **Unidade nova em condomínio `ativo`** recebe uma chave de acesso gerada na hora, pelo serviço de chaves do núcleo.
+- **Pais ativos:** criar andar exige bloco ativo; criar unidade ou reativá-la exige andar e bloco ativos. Reativar andar exige bloco ativo. Violação retorna 409 `estrutura_inativa`. Desativar/reativar não altera os flags dos filhos; repetir o estado retorna 409 `transicao_invalida`.
+- **Unidade nova ou reativada em condomínio `ativo`** recebe chave pelo serviço existente, se não houver vigente. Chaves revogadas permanecem no histórico e não são reutilizadas. Em pendente/rejeitado, a chave será gerada na aprovação. O índice parcial existente impede mais de uma chave vigente.
+- **Transação e concorrência:** gestão serializada por condomínio com `FOR NO KEY UPDATE`, compatível com `KEY SHARE` das FKs da portaria e conflitante com decisões do ADM. Alterar uma unidade também usa `FOR UPDATE` nela, como vínculo e regeneração de chaves. A verificação de moradores ocorre depois da trava; auditoria, status e chaves confirmam ou revertem juntos.
+- **Histórico e operação:** desativar não cancela visitas/reservas nem altera veículos/encomendas existentes. Os filtros operacionais de cada módulo continuam próprios; APIs dos PRs de visitantes/veículos ainda não incorporados precisam de regressão quando integradas.
 - Uma alteração por requisição gera **um** evento `estrutura.editar`, com `antes` e `depois` só dos campos mudados.
-- **Estado do condomínio.** A regra R7 diz que em `pendente` e `rejeitado` a Administração só vê e corrige o cadastro. Corrigir o cadastro inclui a estrutura (US-204), então estas rotas valem em `pendente`, `rejeitado` e `ativo`, e retornam 403 em `desativado`. A dependência de autorização precisa tratar essas rotas como "fluxo de cadastro" (pendências).
+- **Estado do condomínio.** A regra R7 diz que em `pendente` e `rejeitado` a Administração só vê e corrige o cadastro. Corrigir o cadastro inclui a estrutura (US-204), então estas rotas valem em `pendente`, `rejeitado` e `ativo`, e retornam 403 em `desativado`. A dependência específica existente trata essas rotas como fluxo de cadastro, sem liberar as operações normais.
 - Funcionário lê a estrutura só com a identificação das unidades; Morador não usa estas rotas (matriz).
 
 Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a lista "alternar entre prédios" estão no [núcleo](nucleo.md), seção 4, porque são do mesmo recurso do cadastro.

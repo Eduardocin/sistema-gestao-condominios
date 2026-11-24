@@ -69,6 +69,14 @@
   margin-top: var(--space-3);
 }
 
+.results {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 @media (max-width: 48rem) {
   .filters {
     grid-template-columns: minmax(0, 1fr);

@@ -576,7 +576,7 @@ O `vinculos_condominio` continua sendo **"esta conta atua neste condomínio com 
 - **Permissões iniciais do morador:** a regra proposta na matriz (primeiro morador com tudo, os seguintes sem a aba Usuários) ainda depende do Paulo.
 - **Documento comprobatório da conta da Administração** (US-201, opcional): este DER guarda os documentos por condomínio, em `condominio_documentos`, porque é isso que o ADM analisa na fila (US-203). Confirmar com o Paulo se o documento da US-201 é o mesmo.
 - **Comunicados lidos:** a US-804 não pede controle de leitura, então não há tabela para isso.
-- **Contatos da portaria sem entrada:** definir com Eduardo/Vitor a representação de negativas e ausência de resposta (entidade própria ou evento de auditoria consultável), preservando canal, morador consultado, funcionário e horário sem criar uma visita. O registro já aparece na prévia da TASK-12; esta revisão do DER ainda não cria uma tabela para ele.
+- **Contatos da portaria sem entrada:** a migração `20261121_0008` guarda negativas e ausência de resposta em `contatos_portaria`, com canal, morador consultado, funcionário e horário. O registro não cria uma visita. A mesma migração inclui a evidência de autorização nas visitas; registros anteriores podem ficar sem evidência.
 
 ## 8. Revisão por módulo
 
@@ -619,5 +619,5 @@ A `20261116_0006_indices_consultas` completa os índices das listagens dos contr
 
 - `vinculos_condominio.unidade_id` permanece no banco, mas a TASK-30 retirou sua leitura da autenticação: as associações vêm de `moradores_unidade`. O novo vínculo por chave não preenche a coluna legada; sua remoção física fica para uma migração futura.
 - Sem coluna de fuso: `America/Sao_Paulo` fixo no MVP (convencoes.md, seção 1).
-- Sem `D` em comunicados e sem tabela para contatos da portaria sem entrada (seção 7).
+- Sem `D` em comunicados. Os contatos da portaria sem entrada ganharam tabela própria na migração `20261121_0008`.
 

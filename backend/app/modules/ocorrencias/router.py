@@ -48,6 +48,12 @@ def exigir_morador(
     não basta aqui. Roda antes da validação do corpo.
     """
     if contexto.perfil != Perfil.MORADOR:
+        registrar_negacao(
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            perfil=contexto.perfil,
+            permissao="ocorrencias:morador",
+        )
         raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
 
 

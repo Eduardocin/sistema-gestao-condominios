@@ -71,13 +71,14 @@ def test_matriz_por_perfil(client, session, predio, rota, perfil, esperado):
 
 
 @pytest.mark.parametrize("rota", ["comentarios", "reabertura"])
-def test_403_de_perfil_vem_antes_de_422_e_404(client, predio, rota):
+def test_403_de_perfil_vem_antes_de_422_e_404(client, predio, rota, caplog):
     resposta = client.post(
         f"{URL}/{uuid.uuid4()}/{rota}",
         headers=predio.cabecalho_de(Perfil.ADMINISTRACAO),
         json={"x": 1},
     )
     assert resposta.status_code == 403
+    assert "permissao=ocorrencias:morador" in caplog.text
 
 
 @pytest.mark.parametrize("rota", ["comentarios", "reabertura"])

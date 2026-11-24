@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.modules.auditoria.models import RegistroAuditoria
-from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO
+from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO, registrar_negacao
 from app.modules.encomendas import repository
 from app.modules.encomendas.models import Encomenda
 from app.modules.encomendas.repository import LinhaEncomenda
@@ -360,6 +360,12 @@ class EncomendasService:
     ) -> RelatorioEncomendas:
         """Contagem de encomendas registradas no período, por status e por unidade (US-404)."""
         if self.contexto.perfil != "administracao":
+            registrar_negacao(
+                usuario_id=self.contexto.usuario_id,
+                condominio_id=self.contexto.condominio_id,
+                perfil=self.contexto.perfil,
+                permissao="encomendas:relatorio",
+            )
             raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
         self._conferir_periodo(data_de, data_ate)
         if unidade_id is not None:

@@ -1166,6 +1166,17 @@ def test_consultas_aceitam_ultima_data_do_calendario(client, session, recurso):
     assert total == 1
 
 
+@pytest.mark.parametrize("perfil", ["morador", "funcionario"])
+def test_relatorio_registra_negacao_por_perfil(client, session, caplog, perfil):
+    predio = montar_predio(session)
+    resposta = client.get(
+        "/api/v1/encomendas/relatorio",
+        headers=predio.cabecalho_de(perfil),
+    )
+    assert resposta.status_code == 403
+    assert "permissao=encomendas:relatorio" in caplog.text
+
+
 def test_relatorio_vazio_devolve_zeros(client, session):
     predio = montar_predio(session)
     dados = client.get(

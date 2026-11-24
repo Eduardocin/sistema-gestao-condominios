@@ -17,13 +17,16 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.contexto import ContextoCondominio
 from app.core.tempo import get_relogio
 from app.db.session import get_session
 from app.main import create_app
 from app.modules.condominios.models import Condominio, VinculoCondominio
 from app.modules.reservas.models import AreaComum, Reserva
+from app.modules.reservas.repository import RepositorioAreasComuns
 from app.modules.storage.models import Arquivo
 from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
@@ -243,3 +246,40 @@ def test_mesma_unidade_em_horarios_diferentes_grava_uma_reserva(app, engine, pre
         conflito = next(r for r in respostas if r.status_code == 409).json()["error"]
         assert conflito["reason"] == "reserva_duplicada_unidade"
         assert ativas(engine, predio, data=dia, unidade_id=predio.unidades[0]) == 1
+
+
+def test_bloqueio_de_datas_e_reserva_nao_andam_juntos(engine: Engine, predio: Predio) -> None:
+    """US-602: o bloqueio trava a área em modo exclusivo e a reserva, em modo compartilhado.
+
+    Uma reserva em andamento faz o bloqueio esperar (e entrar na prévia dele); um bloqueio em
+    andamento faz a reserva esperar (e depois enxergar o bloqueio, com 409 `area_bloqueada`). Duas
+    reservas entre si não se atrapalham.
+    """
+    contexto = ContextoCondominio(
+        usuario_id=predio.usuarios[0],
+        condominio_id=predio.condominio_id,
+        perfil="administracao",
+        vinculo_id=uuid.uuid4(),
+    )
+
+    def travar(session: Session, *, compartilhada: bool) -> None:
+        session.execute(text("SET LOCAL lock_timeout = '300ms'"))
+        RepositorioAreasComuns(session, contexto).obter_travada(
+            predio.area_id, compartilhada=compartilhada
+        )
+
+    with Session(engine) as reserva, Session(engine) as outra, Session(engine) as bloqueio:
+        travar(reserva, compartilhada=True)
+        travar(outra, compartilhada=True)  # reservas simultâneas convivem
+        with pytest.raises(OperationalError, match="lock timeout|LockNotAvailable"):
+            travar(bloqueio, compartilhada=False)  # o bloqueio espera as reservas
+        bloqueio.rollback()
+        reserva.rollback()
+        outra.rollback()
+
+    with Session(engine) as bloqueio, Session(engine) as reserva:
+        travar(bloqueio, compartilhada=False)
+        with pytest.raises(OperationalError, match="lock timeout|LockNotAvailable"):
+            travar(reserva, compartilhada=True)  # a reserva espera o bloqueio
+        reserva.rollback()
+        bloqueio.rollback()

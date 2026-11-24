@@ -25,16 +25,36 @@ from app.modules.auth.autorizacao import (
 from app.modules.auth.dependencies import ContextoDep
 from app.modules.ocorrencias.repository import FiltrosOcorrencias
 from app.modules.ocorrencias.schemas import (
+    ComentarioEntrada,
     InteracaoSaida,
     OcorrenciaEntrada,
     OcorrenciaSaida,
     PaginaDeOcorrencias,
+    ReaberturaEntrada,
     ResolucaoEntrada,
     RespostaEntrada,
 )
 from app.modules.ocorrencias.service import OcorrenciasService
 
 router = APIRouter(prefix="/ocorrencias", tags=["ocorrencias"])
+
+
+def exigir_morador(
+    contexto: Annotated[ContextoCondominio, Depends(require_permission("ocorrencias:editar"))],
+) -> None:
+    """Comentar e reabrir são só do Morador (US-704).
+
+    A matriz também dá `editar` à Administração (responder e resolver), então a permissão sozinha
+    não basta aqui. Roda antes da validação do corpo.
+    """
+    if contexto.perfil != Perfil.MORADOR:
+        registrar_negacao(
+            usuario_id=contexto.usuario_id,
+            condominio_id=contexto.condominio_id,
+            perfil=contexto.perfil,
+            permissao="ocorrencias:morador",
+        )
+        raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
 
 
 def exigir_administracao(
@@ -161,3 +181,39 @@ def resolver_ocorrencia(
     request: Request,
 ) -> OcorrenciaSaida:
     return service.resolver(ocorrencia_id, dados, ip=ip_do_cliente(request))
+
+
+@router.post(
+    "/{ocorrencia_id}/comentarios",
+    response_model=InteracaoSaida,
+    status_code=201,
+    summary="Comenta uma ocorrência, em qualquer estado (Morador)",
+    dependencies=[Depends(exigir_morador)],
+    responses={
+        **_ERROS,
+        422: {"description": "Texto inválido ou anexo inexistente/inválido."},
+    },
+)
+def comentar_ocorrencia(
+    ocorrencia_id: uuid.UUID, dados: ComentarioEntrada, service: ServiceDep
+) -> InteracaoSaida:
+    return service.comentar(ocorrencia_id, dados)
+
+
+@router.post(
+    "/{ocorrencia_id}/reabertura",
+    response_model=OcorrenciaSaida,
+    summary="Reabre uma ocorrência resolvida (Morador)",
+    dependencies=[Depends(exigir_morador)],
+    responses={
+        **_ERROS,
+        409: {"description": "Ocorrência não resolvida (`reason: ocorrencia_nao_resolvida`)."},
+    },
+)
+def reabrir_ocorrencia(
+    ocorrencia_id: uuid.UUID,
+    dados: ReaberturaEntrada,
+    service: ServiceDep,
+    request: Request,
+) -> OcorrenciaSaida:
+    return service.reabrir(ocorrencia_id, dados, ip=ip_do_cliente(request))

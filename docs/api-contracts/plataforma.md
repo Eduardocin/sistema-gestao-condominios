@@ -357,7 +357,7 @@ Há um ciclo a evitar: a lista começa vazia e as ações exigem um responsável
 | `recuperacao_senha` | Gabriel (US-102) | O e-mail da conta que pediu |
 | `condominio_aprovado` | Paulo (US-203) | A conta da Administração que enviou o cadastro |
 | `encomenda_registrada` | Eduardo (US-401) | O usuário do destinatário da encomenda |
-| `reserva_cancelada` | Vitor (US-605, US-602) | O morador que fez a reserva |
+| `reserva_cancelada` | Vitor (US-605, US-602) | O morador que fez a reserva. **Enfileirado** (TASK-63) no cancelamento pela Administração e no bloqueio de datas; o envio é do worker da fila |
 
 Só e-mail. Não há WhatsApp, SMS nem push no MVP (decisão do escopo).
 

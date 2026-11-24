@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import BinaryIO
 from uuid import UUID
 
@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.core.contexto import ContextoCondominio
 from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.modules.auditoria.models import RegistroAuditoria
-from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO
+from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO, registrar_negacao
 from app.modules.encomendas import repository
 from app.modules.encomendas.models import Encomenda
 from app.modules.encomendas.repository import LinhaEncomenda
@@ -23,8 +23,12 @@ from app.modules.encomendas.schemas import (
     PaginaEncomendas,
     PaginaMoradores,
     PaginaUnidades,
+    PeriodoRelatorio,
     RecebimentoSaida,
+    RelatorioEncomendas,
     StatusEncomenda,
+    TotaisPorStatus,
+    UnidadeNoRelatorio,
     UnidadeOpcao,
     UnidadeResumo,
 )
@@ -318,9 +322,12 @@ class EncomendasService:
         busca: str | None,
         status: StatusEncomenda | None,
         unidade_id: UUID | None = None,
+        data_de: date | None = None,
+        data_ate: date | None = None,
         page: int,
         page_size: int,
     ) -> PaginaEncomendas:
+        self._conferir_periodo(data_de, data_ate)
         if unidade_id is not None:
             # Passo 4: unidade que não é do Morador, 404; da unidade sem a aba Encomendas, 403.
             # Funcionário e Administração: unidade de outro condomínio também dá 404.
@@ -331,6 +338,8 @@ class EncomendasService:
             busca=busca,
             status=status.value if status is not None else None,
             unidade_id=unidade_id,
+            data_de=data_de,
+            data_ate=data_ate,
             page=page,
             page_size=page_size,
         )
@@ -339,6 +348,47 @@ class EncomendasService:
             page=page,
             page_size=page_size,
             total=total,
+        )
+
+    @staticmethod
+    def _conferir_periodo(data_de: date | None, data_ate: date | None) -> None:
+        if data_de is not None and data_ate is not None and data_ate < data_de:
+            raise ApiError(422, "validation_error", "data_ate não pode ser anterior a data_de.")
+
+    def relatorio(
+        self, *, unidade_id: UUID | None, data_de: date | None, data_ate: date | None
+    ) -> RelatorioEncomendas:
+        """Contagem de encomendas registradas no período, por status e por unidade (US-404)."""
+        if self.contexto.perfil != "administracao":
+            registrar_negacao(
+                usuario_id=self.contexto.usuario_id,
+                condominio_id=self.contexto.condominio_id,
+                perfil=self.contexto.perfil,
+                permissao="encomendas:relatorio",
+            )
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        self._conferir_periodo(data_de, data_ate)
+        if unidade_id is not None:
+            conferir_unidade(self.session, self.contexto, unidade_id, "encomendas")
+        linhas = repository.contagem_por_unidade_e_status(
+            self.session, self.contexto, unidade_id=unidade_id, data_de=data_de, data_ate=data_ate
+        )
+        totais = TotaisPorStatus()
+        por_unidade: dict[UUID, UnidadeNoRelatorio] = {}
+        for unidade, identificacao, status, quantidade in linhas:
+            item = por_unidade.setdefault(
+                unidade,
+                UnidadeNoRelatorio(unidade=UnidadeResumo(id=unidade, identificacao=identificacao)),
+            )
+            for alvo in (totais, item):
+                setattr(alvo, status, getattr(alvo, status) + quantidade)
+                alvo.registradas += quantidade
+        return RelatorioEncomendas(
+            periodo=PeriodoRelatorio(de=data_de, ate=data_ate),
+            totais=totais,
+            por_unidade=sorted(
+                por_unidade.values(), key=lambda i: (-i.registradas, i.unidade.identificacao)
+            ),
         )
 
     def obter(self, id_: UUID) -> EncomendaSaida:

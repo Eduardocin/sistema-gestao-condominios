@@ -196,6 +196,70 @@ def confirmar_encomenda(client, predio, encomenda: Encomenda, *, usuario=None):
     )
 
 
+@pytest.mark.parametrize(
+    ("informada", "esperada"),
+    [
+        (None, None),
+        ("   ", None),
+        ("  Entrega Expressa  ", "Entrega Expressa"),
+        ("A" * 120, "A" * 120),
+    ],
+)
+def test_recebimento_persiste_transportadora_opcional(client, session, informada, esperada):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    campos = {"transportadora": informada} if informada is not None else None
+    resposta = receber_encomenda(client, predio, funcionario, campos_extras=campos)
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["transportadora"] == esperada
+    dados = client.get(resposta.headers["Location"], headers=predio.cabecalho_de("funcionario"))
+    assert dados.status_code == 200, dados.text
+    assert dados.json()["transportadora"] == esperada
+
+
+def test_recebimento_rejeita_transportadora_acima_do_limite(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    resposta = receber_encomenda(
+        client, predio, funcionario, campos_extras={"transportadora": "A" * 121}
+    )
+    assert resposta.status_code == 422, resposta.text
+    assert contar(session, Encomenda) == 0
+    assert contar(session, Arquivo) == 0
+
+
+def test_portaria_registra_foto_e_morador_confirma_apos_entrega(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    cadastro = receber_encomenda(
+        client, predio, funcionario, campos_extras={"transportadora": "Entrega Expressa"}
+    )
+    assert cadastro.status_code == 201, cadastro.text
+    encomenda = cadastro.json()
+    assert encomenda["foto_arquivo_id"]
+
+    lista = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"unidade_id": str(predio.unidade_101.id), "status": "aguardando_retirada"},
+    )
+    assert lista.status_code == 200, lista.text
+    assert [(item["id"], item["transportadora"]) for item in lista.json()["items"]] == [
+        (encomenda["id"], "Entrega Expressa"),
+    ]
+
+    registro = session.get(Encomenda, UUID(encomenda["id"]))
+    assert registro is not None
+    entrega = entregar_encomenda(client, predio, registro, funcionario)
+    assert entrega.status_code == 200, entrega.text
+    assert entrega.json()["status"] == "entregue_aguardando_confirmacao"
+
+    confirmacao = confirmar_encomenda(client, predio, registro)
+    assert confirmacao.status_code == 200, confirmacao.text
+    assert confirmacao.json()["status"] == "retirada_confirmada"
+
+
 def test_listar_encomendas_filtra_status_busca_pagina_e_condominio(client, session):
     a = montar_predio(session, "Residencial Aurora")
     b = montar_predio(session, "Residencial Boreal")

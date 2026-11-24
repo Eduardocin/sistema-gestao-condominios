@@ -114,6 +114,7 @@ test('consulta encomendas com filtros e paginação no contexto autenticado', as
     const page = await testApi.api.list({
       search: ' Caixa ',
       status: 'aguardando_retirada',
+      unitId: 'unit-a',
       page: 2,
     })
     assert.equal(page.total, 11)
@@ -124,12 +125,19 @@ test('consulta encomendas com filtros e paginação no contexto autenticado', as
     assert.deepEqual(request.params, {
       busca: 'Caixa',
       status: 'aguardando_retirada',
+      unidade_id: 'unit-a',
       page: 2,
       page_size: 20,
     })
   } finally {
     await testApi.close()
   }
+})
+
+test('omite o filtro de unidade quando todas as unidades estão selecionadas', async () => {
+  const testApi = await startApi()
+  await testApi.api.list({ unitId: '' })
+  assert.deepEqual(testApi.requests[0].params, { page: 1, page_size: 20 })
 })
 
 test('consulta os detalhes de uma encomenda com a sessão autenticada', async () => {
@@ -148,6 +156,7 @@ test('registra campos e foto em uma única requisição multipart', async () => 
       unidade_id: 'unit-a',
       destinatario_morador_unidade_id: 'resident-a',
       descricao: '  Caixa de livros  ',
+      transportadora: '  Entregas Exemplo  ',
       recebido_por_funcionario_id: 'employee-a',
       foto: photo,
     })
@@ -168,9 +177,27 @@ test('registra campos e foto em uma única requisição multipart', async () => 
     }
     assert.equal((body.get('foto') as File).name, 'nota.png')
     assert.equal(body.get('descricao'), 'Caixa de livros')
+    assert.equal(body.get('transportadora'), 'Entregas Exemplo')
     assert.ok(!body.has('condominio_id'))
   } finally {
     await testApi.close()
+  }
+})
+
+test('omite a transportadora do multipart quando não é preenchida', async () => {
+  const testApi = await startApi()
+  const input = {
+    unidade_id: 'unit-a',
+    destinatario_morador_unidade_id: 'resident-a',
+    descricao: 'Caixa de livros',
+    recebido_por_funcionario_id: 'employee-a',
+    foto: new File(['foto'], 'nota.png', { type: 'image/png' }),
+  }
+  await testApi.api.register(input)
+  await testApi.api.register({ ...input, transportadora: '   ' })
+
+  for (const request of testApi.requests) {
+    assert.equal((request.body as FormData).has('transportadora'), false)
   }
 })
 

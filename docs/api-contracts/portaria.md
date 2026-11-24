@@ -40,13 +40,15 @@ Retornar apenas `id` e identificação/nome necessários ao formulário, com pag
 | `GET /encomendas` | Funcionário e Administração (condomínio); morador (suas unidades com aba ativa) | Query `busca`, `status`, `unidade_id` (opcional), `data_de`, `data_ate` (opcionais), `page`, `page_size` | 200, lista |
 | `GET /encomendas/relatorio` | Administração | Query `data_de`, `data_ate`, `unidade_id` (opcionais) | 200, contagem por status e por unidade (proposta, ver `convivencia.md` §6.1) |
 | `GET /encomendas/{id}` | Mesmo escopo de leitura | — | 200, objeto com histórico |
-| `POST /encomendas` | Funcionário ativo | `multipart/form-data`: `unidade_id`, `destinatario_morador_unidade_id`, `descricao`, `recebido_por_funcionario_id`, `foto` | 201, objeto; `Location` do recurso |
+| `POST /encomendas` | Funcionário ativo | `multipart/form-data`: `unidade_id`, `destinatario_morador_unidade_id`, `descricao`, `recebido_por_funcionario_id`, `foto` e `transportadora` (opcional) | 201, objeto; `Location` do recurso |
 | `POST /encomendas/{id}/entrega` | Funcionário ativo | JSON `recebedor_morador_unidade_id`, `entregue_por_funcionario_id` | 200, objeto atualizado |
 | `POST /encomendas/{id}/confirmacao` | Morador que recebeu | `{}`; identidade vem do contexto | 200, objeto atualizado |
 
 No recebimento, a foto é enviada no mesmo `multipart/form-data` que os demais campos. Aceita JPG/JPEG, PNG ou WebP até 5 MiB. O backend valida a imagem e a envia ao storage privado; a transação registra os metadados do arquivo, a encomenda, auditoria e o evento de e-mail na outbox. `condominio_id` e identidade do funcionário vêm do contexto autenticado, não do formulário. O evento `encomenda_registrada` fica pendente em `envios_email`; o worker de envio da US-803 ainda não está implementado, portanto o sucesso do recebimento não significa que o e-mail foi enviado.
 
 `descricao` aceita de 1 a 200 caracteres após trim. A unidade, o morador destinatário e o funcionário informado devem estar ativos e pertencer ao condomínio autenticado; o morador deve ter vínculo ativo com a unidade. Campos extras, inclusive `condominio_id`, são rejeitados.
+
+`transportadora` aceita até 120 caracteres. Os espaços nas pontas são removidos. Quando o campo está vazio ou ausente, a encomenda retorna `transportadora: null`.
 
 Objeto de encomenda:
 
@@ -56,6 +58,7 @@ Objeto de encomenda:
   "unidade": {"id": "UUID", "identificacao": "Bloco A / 101"},
   "destinatario": {"id": "UUID", "nome": "Ana Martins"},
   "descricao": "Caixa pequena · Livraria",
+  "transportadora": "Entrega Expressa",
   "foto_arquivo_id": "UUID",
   "status": "aguardando_retirada",
   "recebimento": {"em": "2026-10-20T15:00:00Z", "funcionario_id": "UUID", "funcionario_nome": "Carlos Silva"},

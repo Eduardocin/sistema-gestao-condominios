@@ -10,6 +10,7 @@ export interface PackageRecord {
   unidade: { id: string; identificacao: string }
   destinatario: { id: string; nome: string }
   descricao: string
+  transportadora?: string | null
   foto_arquivo_id: string
   status: PackageStatus
   recebimento: { em: string; funcionario_id: string; funcionario_nome: string }
@@ -52,6 +53,7 @@ export interface RegisterPackage {
   unidade_id: string
   destinatario_morador_unidade_id: string
   descricao: string
+  transportadora?: string
   recebido_por_funcionario_id: string
   foto: File
 }
@@ -95,6 +97,7 @@ export function createEncomendasClient(http: AxiosInstance) {
     filters: {
       search?: string
       status?: PackageStatus | ''
+      unitId?: string
       page?: number
     } = {},
   ): Promise<PackagePage> {
@@ -102,6 +105,7 @@ export function createEncomendasClient(http: AxiosInstance) {
       params: {
         ...(filters.search?.trim() ? { busca: filters.search.trim() } : {}),
         ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.unitId ? { unidade_id: filters.unitId } : {}),
         page: filters.page ?? 1,
         page_size: 20,
       },
@@ -119,6 +123,8 @@ export function createEncomendasClient(http: AxiosInstance) {
     form.set('unidade_id', input.unidade_id)
     form.set('destinatario_morador_unidade_id', input.destinatario_morador_unidade_id)
     form.set('descricao', input.descricao.trim())
+    const carrier = input.transportadora?.trim()
+    if (carrier) form.set('transportadora', carrier)
     form.set('recebido_por_funcionario_id', input.recebido_por_funcionario_id)
     form.set('foto', input.foto)
     const { data } = await http.post<PackageRecord>('/encomendas', form)

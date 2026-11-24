@@ -109,3 +109,18 @@ def test_datas_extremas_validas_e_resultado_vazio(client, session, caso, rota):
     assert consultar(client, caso, rota, de="0001-01-01", ate="9999-12-30")["total"] == 1
     assert consultar(client, caso, rota, ate="0001-01-01")["items"] == []
     assert consultar(client, caso, rota, de="9999-12-30")["items"] == []
+
+
+@pytest.mark.parametrize("rota", ROTAS)
+@pytest.mark.parametrize("page_size", [1, 100])
+def test_offset_no_limite_bigint_e_overflow_rejeitado(client, caso, rota, page_size):
+    ultima_pagina = (2**63 - 1) // page_size + 1
+    pagina = consultar(client, caso, rota, page=ultima_pagina, page_size=page_size)
+    assert pagina["items"] == [] and pagina["total"] == 0
+    resposta = client.get(
+        rota,
+        headers=caso.a.cabecalho_de("administracao"),
+        params={"page": ultima_pagina + 1, "page_size": page_size},
+    )
+    assert resposta.status_code == 422
+    assert resposta.json()["error"]["code"] == "validation_error"

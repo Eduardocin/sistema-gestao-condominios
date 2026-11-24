@@ -17,6 +17,13 @@ class FiltrosRelatorio(Entrada):
     page_size: int = Field(default=20, ge=1, le=100)
 
     @model_validator(mode="after")
+    def paginacao_valida(self) -> Self:
+        # OFFSET é bigint no PostgreSQL; inteiros maiores devem falhar como entrada inválida.
+        if (self.page - 1) * self.page_size > 2**63 - 1:
+            raise ValueError("Página fora do limite suportado.")
+        return self
+
+    @model_validator(mode="after")
     def periodo_valido(self) -> Self:
         if self.de == date.max or self.ate == date.max:
             raise ValueError("Informe datas anteriores a 9999-12-31.")

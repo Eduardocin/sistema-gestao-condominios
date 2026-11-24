@@ -109,7 +109,9 @@ class RepositorioChaves(RepositorioDoCondominio[ChaveAcesso]):
 
     def vigente(self, id_: uuid.UUID) -> ChaveAcesso | None:
         return self.session.scalar(
-            self.consulta().where(ChaveAcesso.unidade_id == id_, ChaveAcesso.revogada_em.is_(None))
+            self.consulta()
+            .where(ChaveAcesso.unidade_id == id_, ChaveAcesso.revogada_em.is_(None))
+            .execution_options(populate_existing=True)
         )
 
 

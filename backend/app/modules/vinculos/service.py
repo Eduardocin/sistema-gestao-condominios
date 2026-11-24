@@ -7,15 +7,20 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.contexto import ContextoCondominio
-from app.core.errors import ApiError
+from app.core.errors import ApiError, RecursoNaoEncontrado
 from app.core.tempo import Relogio, agora
 from app.modules.auditoria import service as auditoria
-from app.modules.auditoria.schemas import ContextoAuditoria
-from app.modules.auth.autorizacao import garantir_aba_da_unidade
+from app.modules.auditoria.schemas import ContextoAuditoria, ResponsavelRef
+from app.modules.auth.autorizacao import MENSAGEM_SEM_PERMISSAO, garantir_aba_da_unidade
+from app.modules.funcionarios.repository import RepositorioResponsaveis
 from app.modules.permissoes_aba.repository import RepositorioMoradores as MoradoresDaUnidade
 from app.modules.permissoes_aba.repository import RepositorioPermissoes
 from app.modules.unidades.models import ABAS_MORADOR, Unidade
-from app.modules.unidades.repository import RepositorioProprietarios
+from app.modules.unidades.repository import (
+    RepositorioChaves,
+    RepositorioProprietarios,
+    RepositorioUnidades,
+)
 from app.modules.usuarios.models import TentativaChaveAcesso, Usuario
 from app.modules.vinculos import repository, schemas
 
@@ -197,3 +202,109 @@ class MinhasUnidadesService:
         return self.saida(
             unidade, schemas.ReferenciaCondominio(id=condominio.id, nome=condominio.nome)
         )
+
+
+def desvincular(
+    session: Session,
+    contexto: ContextoCondominio,
+    unidade_id: uuid.UUID,
+    morador_unidade_id: uuid.UUID,
+    dados: schemas.DesvinculacaoEntrada,
+    *,
+    ip: str | None,
+    relogio: Relogio = agora,
+) -> schemas.DesvinculacaoSaida:
+    try:
+        if contexto.perfil not in {"morador", "administracao"}:
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        if contexto.perfil == "morador" and dados.model_fields_set:
+            raise ApiError(422, "validation_error", "Morador deve enviar um corpo vazio.")
+        if contexto.perfil == "administracao" and dados.responsavel_id is None:
+            raise ApiError(422, "validation_error", "Informe o responsável pela ação.")
+
+        moradores = repository.RepositorioMoradores(session, contexto)
+        usuario_id = moradores.usuario_do_alvo(unidade_id, morador_unidade_id)
+        # Não travar a conta do executor: em remoções mútuas isso inverteria a ordem.
+        # SHARE é compatível com SHARE da portaria e KEY SHARE das FKs de autor/auditoria.
+        # Conflita com a vinculação; desvínculos paralelos serializam a decisão no vínculo global.
+        repository.bloquear_conta(session, usuario_id, compartilhada=True)
+        condominio = repository.bloquear_condominio(session, contexto)
+        if condominio.status != "ativo":
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        responsavel = None
+        if contexto.perfil == "administracao":
+            assert dados.responsavel_id is not None
+            RepositorioResponsaveis(session, contexto).obter_ativo(dados.responsavel_id)
+            responsavel = ResponsavelRef("administracao", dados.responsavel_id)
+        # A validação do responsável precede a unidade, como na gestão de chaves.
+        unidade = RepositorioUnidades(session, contexto).bloquear(unidade_id)
+        if not unidade.ativo:
+            raise ApiError(409, "conflict", "Unidade inativa.", reason="unidade_inativa")
+        if not repository.executor_habilitado(session, contexto):
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        garantir_aba_da_unidade(session, contexto, unidade_id, "usuarios")
+        alvo = moradores.associacao(unidade_id, morador_unidade_id)
+        if alvo.usuario_id != usuario_id:
+            raise RecursoNaoEncontrado
+        if alvo.status == "desvinculado":
+            raise ApiError(409, "conflict", "Morador já desvinculado.", reason="ja_desvinculado")
+        if contexto.perfil == "morador" and alvo.usuario_id == contexto.usuario_id:
+            raise ApiError(403, "forbidden", MENSAGEM_SEM_PERMISSAO)
+        restantes = MoradoresDaUnidade(session, contexto).contar_da_unidade(
+            unidade_id, excluindo=alvo.id
+        )
+        if (
+            restantes
+            and RepositorioPermissoes(session, contexto).contar_com_usuarios(
+                unidade_id, excluindo=alvo.id
+            )
+            == 0
+        ):
+            raise ApiError(
+                409,
+                "conflict",
+                "Transfira o acesso à aba Usuários antes da desvinculação.",
+                reason="ultimo_usuarios",
+            )
+        vinculo = repository.obter_vinculo(session, usuario_id, contexto.condominio_id)
+        if vinculo is None or vinculo.perfil != "morador":
+            raise ApiError(409, "conflict", "Vínculo incompatível.", reason="perfil_incompativel")
+        ativo_antes = vinculo.ativo
+        if not moradores.tem_outra_unidade_ativa(usuario_id, excluindo=alvo.id):
+            vinculo.ativo = False
+        momento = relogio().astimezone(UTC)
+        alvo.status = "desvinculado"
+        alvo.desvinculado_em = momento
+        alvo.desvinculado_por_usuario_id = contexto.usuario_id
+        chave = RepositorioChaves(session, contexto).vigente(unidade_id)
+        if chave is not None:
+            chave.revogada_em = momento
+        auditoria.registrar_acao(
+            session,
+            ctx=ContextoAuditoria.do_condominio(contexto, ip=ip),
+            acao="vinculo.desfazer",
+            recurso_tipo="morador_unidade",
+            recurso_id=alvo.id,
+            responsavel=responsavel,
+            antes={"status": "ativo", "vinculo_condominio_ativo": ativo_antes},
+            depois={
+                "status": alvo.status,
+                "unidade_id": unidade_id,
+                "desvinculado_em": momento,
+                "vinculo_condominio_ativo": vinculo.ativo,
+                "vinculo_condominio_desativado": ativo_antes and not vinculo.ativo,
+                "chave_revogada": chave is not None,
+                "chave_id": chave.id if chave is not None else None,
+            },
+        )
+        saida = schemas.DesvinculacaoSaida(
+            id=alvo.id, desvinculado_em=momento, chave_revogada=chave is not None
+        )
+        session.commit()
+        return saida
+    except SQLAlchemyError:
+        session.rollback()
+        raise ApiError(500, "internal_error", "Não foi possível desvincular o morador.") from None
+    except Exception:
+        session.rollback()
+        raise

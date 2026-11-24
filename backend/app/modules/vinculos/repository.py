@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
+from app.core.contexto import ContextoCondominio
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
 from app.modules.condominios.models import Condominio, VinculoCondominio
@@ -11,12 +12,14 @@ from app.modules.unidades.models import ChaveAcesso, MoradorUnidade, PermissaoAb
 from app.modules.usuarios.models import TentativaChaveAcesso, Usuario
 
 
-def bloquear_conta(session: Session, id_: uuid.UUID) -> Usuario:
-    # Serializa tentativas e a criação do vínculo global, mesmo entre unidades diferentes.
+def bloquear_conta(session: Session, id_: uuid.UUID, *, compartilhada: bool = False) -> Usuario:
+    # O vínculo mantém NO KEY UPDATE: serializa tentativas/criação do vínculo global.
+    # O desvínculo usa SHARE, compatível com a leitura de destinatários da portaria;
+    # conflita com o vínculo e serializa a decisão global em obter_vinculo(), após a unidade.
     usuario = session.scalar(
         select(Usuario)
         .where(Usuario.id == id_)
-        .with_for_update(key_share=True)
+        .with_for_update(read=compartilhada, key_share=not compartilhada)
         .execution_options(populate_existing=True)
     )
     if usuario is None:
@@ -106,6 +109,38 @@ def criar_vinculo(
     return vinculo
 
 
+def bloquear_condominio(session: Session, contexto: ContextoCondominio) -> Condominio:
+    # Mesma ordem do vínculo por chave: conta -> condomínio (SHARE) -> unidade.
+    item = session.scalar(
+        select(Condominio)
+        .where(Condominio.id == contexto.condominio_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    if item is None:
+        raise RecursoNaoEncontrado
+    return item
+
+
+def executor_habilitado(session: Session, contexto: ContextoCondominio) -> bool:
+    return (
+        session.scalar(
+            select(VinculoCondominio.id)
+            .join(Usuario, Usuario.id == VinculoCondominio.usuario_id)
+            .where(
+                VinculoCondominio.id == contexto.vinculo_id,
+                VinculoCondominio.usuario_id == contexto.usuario_id,
+                VinculoCondominio.condominio_id == contexto.condominio_id,
+                VinculoCondominio.perfil == contexto.perfil,
+                VinculoCondominio.ativo.is_(True),
+                Usuario.ativo.is_(True),
+                Usuario.administrador_plataforma.is_(False),
+            )
+        )
+        is not None
+    )
+
+
 class RepositorioMinhasUnidades(RepositorioDoCondominio[Unidade]):
     modelo = Unidade
 
@@ -165,6 +200,55 @@ class RepositorioMinhasUnidades(RepositorioDoCondominio[Unidade]):
 
 class RepositorioMoradores(RepositorioDoCondominio[MoradorUnidade]):
     modelo = MoradorUnidade
+
+    def usuario_do_alvo(self, unidade_id: uuid.UUID, id_: uuid.UUID) -> uuid.UUID:
+        # Descoberta restrita ao escopo autorizado antes de travar a conta do alvo.
+        # Não adota associações legadas ligadas a perfil global incompatível.
+        usuario_id = self.session.scalar(
+            select(MoradorUnidade.usuario_id)
+            .join(
+                VinculoCondominio,
+                (VinculoCondominio.usuario_id == MoradorUnidade.usuario_id)
+                & (VinculoCondominio.condominio_id == MoradorUnidade.condominio_id),
+            )
+            .where(
+                self._do_condominio(),
+                MoradorUnidade.id == id_,
+                MoradorUnidade.unidade_id == unidade_id,
+                VinculoCondominio.perfil == "morador",
+            )
+        )
+        if usuario_id is None:
+            raise RecursoNaoEncontrado
+        return usuario_id
+
+    def associacao(self, unidade_id: uuid.UUID, id_: uuid.UUID) -> MoradorUnidade:
+        item = self.session.scalar(
+            self.consulta()
+            .where(MoradorUnidade.id == id_, MoradorUnidade.unidade_id == unidade_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if item is None:
+            raise RecursoNaoEncontrado
+        return item
+
+    def tem_outra_unidade_ativa(self, usuario_id: uuid.UUID, *, excluindo: uuid.UUID) -> bool:
+        consulta = (
+            self.consulta()
+            .join(
+                Unidade,
+                (Unidade.id == MoradorUnidade.unidade_id)
+                & (Unidade.condominio_id == MoradorUnidade.condominio_id),
+            )
+            .where(
+                MoradorUnidade.usuario_id == usuario_id,
+                MoradorUnidade.id != excluindo,
+                MoradorUnidade.status == "ativo",
+                Unidade.ativo.is_(True),
+            )
+        )
+        return bool(self.session.scalar(select(consulta.exists())))
 
     def ja_vinculado(self, unidade_id: uuid.UUID) -> bool:
         return (

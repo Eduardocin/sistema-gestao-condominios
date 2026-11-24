@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
+from app.modules.condominios.models import VinculoCondominio
 from app.modules.unidades.models import MoradorUnidade, PermissaoAba, Unidade
 from app.modules.usuarios.models import Usuario
 
@@ -41,8 +42,13 @@ class RepositorioMoradores(RepositorioDoCondominio[MoradorUnidade]):
             MoradorUnidade.unidade_id == unidade_id, MoradorUnidade.status == "ativo"
         )
 
-    def contar_da_unidade(self, unidade_id: uuid.UUID) -> int:
-        consulta = select(func.count()).select_from(self._ativos_da_unidade(unidade_id).subquery())
+    def contar_da_unidade(
+        self, unidade_id: uuid.UUID, *, excluindo: uuid.UUID | None = None
+    ) -> int:
+        ativos = self._ativos_da_unidade(unidade_id)
+        if excluindo is not None:
+            ativos = ativos.where(MoradorUnidade.id != excluindo)
+        consulta = select(func.count()).select_from(ativos.subquery())
         return self.session.scalar(consulta) or 0
 
     def listar_da_unidade(
@@ -105,7 +111,11 @@ class RepositorioPermissoes(RepositorioDoCondominio[PermissaoAba]):
         return self.dos_moradores([morador_unidade_id])[morador_unidade_id]
 
     def contar_com_usuarios(self, unidade_id: uuid.UUID, *, excluindo: uuid.UUID) -> int:
-        """Quantos OUTROS moradores ativos da unidade estão Com Acesso à aba Usuários."""
+        """Gestores efetivos restantes, compartilhado por US-304 e US-305.
+
+        Linha de permissão sem conta e vínculo global habilitados não mantém a gestão.
+        Consultas escalares leem o estado atual, sem reutilizar entidades do identity map.
+        """
         consulta = (
             select(func.count())
             .select_from(PermissaoAba)
@@ -114,11 +124,21 @@ class RepositorioPermissoes(RepositorioDoCondominio[PermissaoAba]):
                 (MoradorUnidade.id == PermissaoAba.morador_unidade_id)
                 & (MoradorUnidade.condominio_id == PermissaoAba.condominio_id),
             )
+            .join(Usuario, Usuario.id == MoradorUnidade.usuario_id)
+            .join(
+                VinculoCondominio,
+                (VinculoCondominio.usuario_id == MoradorUnidade.usuario_id)
+                & (VinculoCondominio.condominio_id == MoradorUnidade.condominio_id),
+            )
             .where(
                 self._do_condominio(),
                 MoradorUnidade.unidade_id == unidade_id,
                 MoradorUnidade.status == "ativo",
                 MoradorUnidade.id != excluindo,
+                Usuario.ativo.is_(True),
+                Usuario.administrador_plataforma.is_(False),
+                VinculoCondominio.ativo.is_(True),
+                VinculoCondominio.perfil == "morador",
                 PermissaoAba.aba == "usuarios",
                 PermissaoAba.com_acesso.is_(True),
             )

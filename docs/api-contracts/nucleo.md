@@ -570,10 +570,65 @@ O convite vai por e-mail com um token de uso único e validade (`convites_morado
 
 `POST /unidades/{unidade_id}/moradores/{morador_unidade_id}/desvinculacao` — Administração, ou Morador com `[Usuários]` na mesma unidade. Corpo da Administração: `{"responsavel_id": "UUID"}`.
 
-- Marca `status = 'desvinculado'`, `desvinculado_em` e `desvinculado_por_usuario_id`. O que o morador **já registrou** continua na unidade (encomendas, reservas, ocorrências ficam ligados à unidade).
-- Se era o último vínculo ativo da conta no condomínio, o `vinculos_condominio` também fica `ativo = false`. O acesso cai **na hora** (R6).
-- O Morador **não pode desvincular a si mesmo** (proposta; sair da unidade não é um caso das stories).
-- Auditoria `vinculo.desfazer`. Depois, a Administração pode regenerar a chave (seção 6.2).
+**Implementado na US-305**, com prefixo `/api/v1` e permissão específica
+`desvinculacoes_moradores:criar`. Não libera edição/desativação genérica de vínculos ao
+Morador. Esse ajuste decorre da US-305 e fica sujeito à revisão técnica de Gabriel no PR.
+
+- Administração: condomínio ativo e responsável ativo do próprio condomínio. Morador:
+  associação ativa e aba Usuários habilitada na unidade, corpo `{}`. Qualquer campo
+  `responsavel_id` enviado pelo Morador (inclusive nulo) é rejeitado com 422. Extras são
+  rejeitados para ambos. Funcionário e ADM não executam a operação.
+- Marca `status='desvinculado'`, `desvinculado_em` e `desvinculado_por_usuario_id`.
+  Associação, usuário, permissões e registros operacionais anteriores permanecem, com os
+  mesmos autores. Consultar o histórico continua exigindo as permissões atuais.
+- Se não restar outra associação ativa em unidade ativa desse condomínio, desativa o
+  vínculo global. Não desativa a conta, não altera `sessao_versao` e preserva vínculos em
+  outros condomínios. A próxima requisição com o mesmo JWT já perde o acesso removido;
+  sem vínculo global, selecionar o condomínio retorna 404 e renovar token com esse `cid`
+  retorna 401. Tokens de identidade sem `cid` não concedem acesso ao condomínio removido.
+- O Morador não pode desvincular a si mesmo (403). Havendo associações ativas restantes,
+  deve existir pelo menos um gestor efetivo: associação ativa, aba Usuários habilitada,
+  usuário ativo que não seja ADM e vínculo global ativo de perfil Morador. Caso contrário,
+  409 `ultimo_usuarios`; transfira antes o acesso pelo fluxo de permissões existente.
+  A mesma contagem é usada pela US-304. A Administração pode remover o último morador,
+  deixando a unidade vazia. Não existe entidade nova de responsável principal.
+- Toda desvinculação revoga a chave vigente, se houver, na mesma transação. Não gera nem
+  revela outra chave. Os moradores restantes mantêm seus acessos. Depois, a Administração
+  usa **`POST /unidades/{id}/chave`** para gerar outra e a fornece somente às pessoas
+  legitimamente autorizadas. A regeneração continua exigindo chave vigente e não é a
+  operação adequada imediatamente após essa revogação.
+- Um evento `vinculo.desfazer` registra associação, unidade, executor/perfil, responsável
+  quando aplicável, estado, efeito no vínculo global e ID/indicador da chave revogada.
+  Não há evento adicional `chave.revogar` para esse efeito automático nem código na trilha.
+  Falha na auditoria ou persistência reverte associação, vínculo global e chave juntos.
+
+Sucesso 200:
+
+```json
+{"id":"UUID","status":"desvinculado","desvinculado_em":"2026-11-24T15:00:00Z","chave_revogada":true}
+```
+
+Sem chave vigente, `chave_revogada=false` e a operação continua válida. Datas são do servidor
+em UTC. Associação já desvinculada dentro do escopo autorizado: 409 `ja_desvinculado`.
+Unidade inativa: 409 `unidade_inativa` para Administração; para Morador, a checagem de
+associação/unidade ativa pode retornar 404 antes disso. IDs inexistentes, alheios ou de
+outra unidade: 404 genérico. Aba/perfil sem acesso: 403. Responsável ausente/formato inválido:
+422; inexistente/inativo/alheio: 404.
+
+Concorrência: conta do alvo `FOR SHARE`, condomínio `FOR SHARE`, responsável
+administrativo `FOR SHARE` quando aplicável, unidade `FOR UPDATE`, associação e vínculo.
+Segue a ordem da vinculação por chave e valida o responsável antes da unidade, como as
+operações de chave. Após esperar, recarrega estado e reconsulta autorização do executor,
+gestores, demais associações e chave vigente. Não trava a conta do executor em ordem
+inversa, inclusive em remoções mútuas. A leitura compartilhada da conta é compatível com
+o recebimento de encomendas e conflitante com o bloqueio da vinculação por chave.
+Desvinculações do mesmo usuário em unidades distintas serializam a decisão e a contagem
+das demais associações pela trava do vínculo global. Não há commits intermediários ou nova migration.
+
+Limitações legadas: unidade ocupada sem qualquer gestor efetivo pode exigir regularização
+explícita; a Administração não ganha edição de abas por este endpoint. Associação sem
+vínculo global de perfil Morador não é adotada (404), e vínculos inativos não são reativados
+silenciosamente. A US-303 continua pendente; a TASK-58 inteira não está concluída.
 
 ## 8. Permissões por aba (US-304, Must, Sprint 1; Gabriel)
 

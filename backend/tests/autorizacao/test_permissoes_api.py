@@ -13,6 +13,9 @@ PERFIS_DE_CONDOMINIO = [Perfil.MORADOR, Perfil.FUNCIONARIO, Perfil.ADMINISTRACAO
 # A tabela de casos da task: (perfil, permissão, status esperado). Cada linha vem da seção 7
 # da matriz e foi escrita à mão, de propósito, para não repetir o código que está sendo testado.
 CASOS = [
+    (Perfil.MORADOR, "desvinculacoes_moradores:criar", 200),
+    (Perfil.ADMINISTRACAO, "desvinculacoes_moradores:criar", 200),
+    (Perfil.FUNCIONARIO, "desvinculacoes_moradores:criar", 403),
     # Encomendas: só o Funcionário registra; Morador vê e confirma; Administração só vê.
     (Perfil.FUNCIONARIO, "encomendas:criar", 200),
     (Perfil.MORADOR, "encomendas:criar", 403),
@@ -83,7 +86,7 @@ def test_tabela_de_casos(client, predio, perfil, permissao, esperado):
 
 @pytest.mark.parametrize("perfil", PERFIS_DE_CONDOMINIO)
 def test_todas_as_rotas_obedecem_a_matriz(client, predio, perfil):
-    """80 rotas × cada perfil: o que a matriz libera dá 200, o resto dá 403. Nada fica de fora."""
+    """Todas as combinações de recurso/ação são verificadas para cada perfil."""
     cabecalho = predio.cabecalho_de(perfil)
     for recurso in sorted(permissoes.RECURSOS):
         for acao in sorted(permissoes.NOMES_DAS_ACOES):

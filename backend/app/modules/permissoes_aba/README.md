@@ -26,6 +26,11 @@ service                                       último com a aba Usuários       
 
 - **Tranca da unidade:** o `PUT` tranca a linha da unidade (`FOR NO KEY UPDATE`) antes de contar quem tem a aba Usuários. Sem isso, duas pessoas tirando a aba uma da outra ao mesmo tempo deixariam a unidade sem ninguém. Foi verificado com duas conexões reais: com a tranca, um pedido passa e o outro recebe 409; sem ela, os dois passam.
 - **Auditoria central (TASK-82):** o service chama `auditoria.service.registrar_acao` na mesma transação. O módulo não mantém gravador próprio; repetir valores não gera evento.
+- **Gestor efetivo (US-305):** `contar_com_usuarios` é compartilhado com a desvinculação e
+  exige associação ativa, usuário ativo sem privilégio de plataforma, vínculo global ativo
+  de perfil Morador e aba Usuários habilitada. Contas/vínculos inativos não mantêm a gestão.
+  A US-304 continua impedindo retirar a última aba; a US-305 permite à Administração remover
+  o último morador quando a unidade ficar vazia, sem conceder edição administrativa de abas.
 - **IP:** vem de `request.client.host`. Atrás de um proxy reverso será o IP do proxy, até o uvicorn ser configurado com `--proxy-headers`.
 - **Permissões iniciais:** quem cria o `MoradorUnidade` (fluxo de vínculo, US-301) também cria as 7 linhas de `permissoes_aba`: primeiro morador com tudo, os seguintes sem `usuarios` (proposta a confirmar com o Paulo).
 

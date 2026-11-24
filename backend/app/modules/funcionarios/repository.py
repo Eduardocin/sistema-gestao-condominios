@@ -92,6 +92,7 @@ class RepositorioResponsaveis(RepositorioDoCondominio[ResponsavelAdministracao])
             self.consulta()
             .where(ResponsavelAdministracao.id == id_, ResponsavelAdministracao.ativo.is_(True))
             .with_for_update(read=True)
+            .execution_options(populate_existing=True)
         )
         if item is None:
             raise RecursoNaoEncontrado

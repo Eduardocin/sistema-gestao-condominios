@@ -25,6 +25,7 @@ npm run dev
 ```sh
 npm run lint
 npm run format:check
+npm run typecheck
 npm test
 npm run build
 ```
@@ -51,6 +52,13 @@ O build inclui a checagem de tipos. Os testes Node de autenticação abrem um se
 | `/status`, `/design-system` | Saúde do serviço e catálogo de componentes |
 
 Cadastros usam `POST /contas/morador` ou `POST /contas/administracao`, com os campos dos contratos em [núcleo](../docs/api-contracts/nucleo.md). Por exemplo, use `Ana Exemplo`, `ana@example.com`, telefone fictício `11987654321` e uma senha de teste com letras e números. A conta criada entra automaticamente; ela precisa de vínculo com um condomínio para realizar operações. As APIs de cadastro/análise/correção de condomínio e vínculo por chave já existem no backend; suas telas continuam pendentes. Veja as funcionalidades disponíveis no [README principal](../README.md#funcionalidades-disponíveis-nesta-branch).
+
+US-210 (gestão da conta compartilhada e edição/desativação de responsáveis), US-305
+(desvinculação de moradores) e US-506 (relatórios de visitantes/veículos) estão
+disponíveis somente no backend. Também permanecem sem telas integradas os fluxos de
+visitantes/veículos, troca/redefinição de senha, reservas/bloqueios, ocorrências e os
+relatórios administrativos de encomendas. A solicitação de recuperação de senha e a
+entrega SMTP ainda não estão disponíveis; enfileirar eventos não conclui esse serviço.
 
 Em Funcionários, comece cadastrando um responsável da Administração se a lista estiver vazia. Depois, cadastre um nome da equipe com função, contato e responsável; a pessoa não recebe login individual. A lista permite busca, paginação e consulta de desligados. O desligamento exige confirmação e responsável e preserva os registros anteriores. O frontend envia o JWT pelo `client.http`, sem IDs de condomínio no formulário. Consulta individual, edição e histórico restrito de funcionários estão disponíveis somente na API; essa tela ainda não os utiliza.
 

@@ -89,7 +89,9 @@ outras operações. Falhas de auditoria ou persistência revertem a transação 
 
 Testes da entrega: [US-210](../../../tests/us210/), com HTTP/JWT reais, isolamento,
 tokens antigos, idempotência, legados, rollback, índices no PostgreSQL e concorrência
-por conexões independentes. Não há frontend, reativação ou exclusão física. A US-208
+por conexões independentes. Gestão da conta compartilhada e edição/desativação de
+responsáveis ainda não têm telas; o frontend existente permite cadastrar responsáveis.
+Não há reativação ou exclusão física. A US-208
 permanece fora do escopo; esta entrega não conclui a TASK-51 inteira.
 
 Verificação: `tests/test_contas_funcionarios_api.py` usa HTTP real, JWT e PostgreSQL migrado; cobre perfis, A/B, filtros, fotos, bootstrap, auditoria e rollback controlado.

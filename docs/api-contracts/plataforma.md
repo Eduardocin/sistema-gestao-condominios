@@ -394,6 +394,12 @@ e versão, nunca senha, hash ou tokens. Esta entrega não implementa a US-208.
 
 ## 6. E-mail assíncrono (US-803, Should, Sprint 3)
 
+**Estado atual:** aprovação de condomínio, registro de encomenda e cancelamento
+administrativo de reserva já enfileiram eventos na outbox. Processamento assíncrono,
+entrega SMTP e reenvio não estão implementados; a TASK-50 foi integralmente adiada.
+As interfaces e rotas descritas abaixo são o contrato planejado. Solicitação de
+recuperação e entrega do e-mail ainda são necessárias para completar a US-102.
+
 ### 6.1 Eventos cobertos
 
 | `evento` | Disparado por | Destinatário |

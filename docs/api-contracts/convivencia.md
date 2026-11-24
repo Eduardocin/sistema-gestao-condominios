@@ -1,6 +1,6 @@
 # Convivência — proposta de contrato REST (TASK-10)
 
-Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-63):** bloqueio de datas com cancelamento das reservas afetadas (seção 3), e-mail `reserva_cancelada` no cancelamento pela Administração (seção 4.3), comentários e reabertura de ocorrências (seção 5) e relatório de encomendas (seção 6.1). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes (seção 6.2) e veículos (seção 6.3) do Morador, e o filtro `unidade_id` em `GET /encomendas` (seção 6.1, ainda opcional). `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`, `periodo_passado`. **Pendentes:** remover bloqueios lançados por engano (seção 3), o worker que envia os e-mails da fila (a fila `envios_email` já recebe `reserva_cancelada`) e tornar `unidade_id` obrigatório para o Morador em `GET /encomendas` (seção 6.1). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
+Status: rascunho para revisão no portão dos leads. **Implementado (TASK-84):** áreas comuns (seção 2) e reservas (seção 4: agenda, calendário, criar, consultar e cancelar). **Implementado (TASK-63):** bloqueio de datas com cancelamento das reservas afetadas (seção 3), enfileiramento de `reserva_cancelada` no cancelamento pela Administração (seção 4.3), comentários e reabertura de ocorrências (seção 5) e relatório de encomendas (seção 6.1). **Implementado (TASK-48):** aviso à unidade no cancelamento administrativo, na mesma transação da reserva e da auditoria. **Implementado (TASK-40):** ocorrências (seção 5: abrir, consultar, responder e resolver). **Implementado (TASK-38):** visitantes (seção 6.2) e veículos (seção 6.3) do Morador, e o filtro `unidade_id` em `GET /encomendas` (seção 6.1, ainda opcional). **Implementado (US-506 simplificada):** relatórios administrativos de visitantes e veículos (seção 6.4), sem CSV. `reason` adicionais além dos do contrato: `nome_duplicado`, `foto_invalida`, `area_ja_desativada`, `area_ja_ativa`, `hora_invalida`, `fora_do_funcionamento`, `horario_passado`, `reserva_ja_cancelada`, `periodo_passado`. **Pendentes:** remover bloqueios lançados por engano (seção 3), o worker que envia os e-mails da fila (a fila `envios_email` já recebe `reserva_cancelada`) e tornar `unidade_id` obrigatório para o Morador em `GET /encomendas` (seção 6.1). Cobre áreas comuns, bloqueios, reservas, ocorrências e as consultas e cadastros do Morador (visitantes e veículos), mais a leitura de encomendas que a US-402 atribui ao mesmo módulo.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, arquivos, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seção 3.4 (convivência) e seção 4 (regras 1, 2, 3, 9 e 12 a 16). Permissões: [matriz](../permissoes-e-multitenant.md), seções 7 e 8.
 
@@ -384,7 +384,7 @@ Parâmetros comuns de query, todos opcionais:
 | --- | --- |
 | `unidade_id` | UUID; sem ele, todas as unidades do condomínio. Aceita unidade inativa. Unidade inexistente ou alheia: mesmo 404 genérico |
 | `de`, `ate` | Datas `AAAA-MM-DD` inclusivas em `America/Sao_Paulo`; cada limite pode ser informado sozinho. Período invertido: 422 |
-| `page` | Inteiro >= 1, padrão 1 |
+| `page` | Inteiro >= 1, padrão 1; o deslocamento `(page - 1) * page_size` deve caber no `bigint` do PostgreSQL (máximo `2^63 - 1`); acima: 422 |
 | `page_size` | Inteiro de 1 a 100, padrão 20 |
 
 Os limites são início de `de` (inclusivo) e início do dia seguinte a `ate` (exclusivo),
@@ -430,12 +430,15 @@ Limites intencionais: sem CSV, Excel, PDF, gráficos ou estatísticas; o relató
 veículos **não representa circulação**, pois não existem registros de entrada/saída
 de veículos. Suporte, comunicados e e-mails não integram esta entrega.
 
-Integração futura: as branches dos PRs #30 e #31 também alteram o módulo de visitantes,
-o registro de routers e este contrato. Os relatórios ficam em arquivos próprios e
+Integração futura: o PR #30 altera a busca de CPF de visitantes avulsos, testes e este
+contrato; o PR #31 sobrepõe repositories, services, schemas, routers operacionais e
+documentação de visitantes/veículos. Os relatórios ficam em arquivos próprios e
 reutilizam `RepositorioVisitas.detalhada()`; a consulta de veículos é específica para
 históricos e duplicidade atual, seguindo as mesmas regras de ativos da operacional.
-Não houve alteração dos endpoints/services/repositories operacionais. A conciliação
-dessas branches deve ser verificada na revisão integrada, sem incorporá-las nesta etapa.
+Esta entrega não altera endpoints/services/repositories operacionais. A simulação da
+revisão integrada não encontrou conflito textual com o PR #30; o PR #31 requer resolução
+explícita nos arquivos operacionais, registro de routers e documentação. Nenhuma dessas
+branches foi incorporada; a conciliação permanece uma etapa própria.
 
 ## 7. Casos obrigatórios de teste
 

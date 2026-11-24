@@ -137,6 +137,13 @@ permissão administrativa nova para corrigir abas nem reativação silenciosa. A
 pendente e a TASK-58 inteira não está concluída. O ajuste da matriz aguarda revisão técnica
 de Gabriel no PR. Testes: [US-305](../../../tests/us305/).
 
+A regressão de [históricos](../../../tests/us305/test_historicos.py) também verifica os
+fluxos integrados de encomendas filtradas/relatório, reservas, bloqueios e comentários/
+reabertura de ocorrências. O mesmo JWT mantém a outra unidade legítima, mas perde o
+acesso à unidade removida e aos arquivos exclusivos dela, inclusive quando foi o autor.
+O bloqueio administrativo ainda pode cancelar a reserva histórica e enfileirar o evento
+existente; isso não implementa processamento ou envio SMTP.
+
 ## Testes
 
 [Vínculo/rollback](../../../tests/task30/test_vinculos.py),

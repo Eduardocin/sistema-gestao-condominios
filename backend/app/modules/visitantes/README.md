@@ -2,7 +2,7 @@
 
 Modelos SQLAlchemy em [models.py](models.py): `Visitante, RegistroVisita e Veiculo`. Eles representam cadastros vinculados à unidade, histórico de entrada/saída e veículos e estão registrados em `app/db/models.py`. O esquema é criado pelas migrações oficiais em `backend/alembic/versions/`.
 
-O módulo disponibiliza cadastro, consulta, edição e cancelamento de visitantes pelo Morador (`/visitantes`), além da busca, autorização, entrada, saída e contatos da Portaria (`/portaria/visitantes`, `/portaria/autorizacoes`, `/visitas` e `/portaria/contatos`). O cadastro é a fonte da autorização reutilizável. A migração `20261121_0008` guarda a evidência da entrada e os contatos sem visita. O cadastro avulso e as operações de veículos ficam em entregas próprias.
+O módulo disponibiliza cadastro, consulta, edição e cancelamento de visitantes pelo Morador (`/visitantes`), além da busca, autorização, entrada, saída e contatos da Portaria (`/portaria/visitantes`, `/portaria/autorizacoes`, `/visitas` e `/portaria/contatos`). O cadastro é a fonte da autorização reutilizável. A migração `20261121_0008` guarda a evidência da entrada e os contatos sem visita. O cadastro avulso (`/portaria/visitantes/avulsos`) e as operações de veículos (`/veiculos`) também estão integrados; a consulta operacional de veículos só inclui cadastros e unidades ativos.
 
 Consulte o [modelo de dados](../../../../docs/modelo-de-dados.md), o [contrato da API](../../../../docs/api-contracts/portaria.md) e as [convenções de arquitetura](../../../../docs/architecture.md). Os testes das restrições do banco ficam em `backend/tests/test_banco_constraints.py`.
 
@@ -21,6 +21,7 @@ com fim exclusivo no dia seguinte; datas invertidas, inválidas, `9999-12-31` e 
 extras retornam 422. Unidade inexistente/alheia retorna 404; unidade inativa é admitida.
 A resposta é `{items,total,page,page_size}`; ordenação por instante decrescente e ID
 crescente, com filtros, total e paginação no banco. Não há seleção livre de condomínio.
+Paginação cujo deslocamento ultrapassa o `bigint` do PostgreSQL retorna 422 antes da consulta.
 
 Visitantes reutiliza `RepositorioVisitas.detalhada()` e filtra a entrada **efetiva**,
 preservando saídas posteriores ao período, avulsos, visitas repetidas, cancelados e

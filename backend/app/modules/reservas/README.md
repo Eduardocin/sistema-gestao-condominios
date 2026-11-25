@@ -44,12 +44,13 @@ Contrato: seções 2 e 4 de [convivencia.md](../../../../docs/api-contracts/conv
 | `GET /areas-comuns/{id}/bloqueios` | Administração (`areas_comuns:editar` e perfil conferido) |
 | `GET /areas-comuns/{id}/bloqueios/previa?data_inicio&data_fim` | Administração |
 | `POST /areas-comuns/{id}/bloqueios` | Administração |
+| `POST /areas-comuns/{id}/bloqueios/{bloqueio_id}/remocao` | Administração |
 
 - **Fluxo.** Sem reservas afetadas, cria direto. Com reservas e `confirmar_cancelamentos = false`, 409 `reservas_afetadas` sem gravar nada. Com a confirmação, uma transação cria o bloqueio, cancela as reservas (motivo "Bloqueio da área: ..."), publica um aviso por unidade, enfileira um e-mail por reserva e audita `area.bloquear` mais um `reserva.cancelar` por reserva.
 - **Afetada** = reserva `ativa` do período cujo horário ainda não começou.
 - **Concorrência.** `RepositorioAreasComuns.obter_travada`: o bloqueio trava a área em modo exclusivo; `POST /reservas` trava em modo compartilhado antes de checar o bloqueio. Ver `test_bloqueio_de_datas_e_reserva_nao_andam_juntos`.
 - **Motivo** de 1 a 200 caracteres (tamanho da coluna). Período que já terminou: 422 `periodo_passado`.
-- **Pendente.** Remover um bloqueio (as colunas `removido_*` já existem; falta a rota).
+- **Remoção.** Lógica (`removido_em`, `removido_por_usuario_id`), com `responsavel_id` no corpo e auditoria `area.desbloquear`. Trava a linha do bloqueio: a segunda remoção recebe 409 `bloqueio_ja_removido`. Não desfaz reservas canceladas nem avisos.
 
 Testes: `backend/tests/reservas/`. `test_reservas_concorrencia.py` usa conexões reais com commit (sem a fixture de rollback) e apaga o que criou.
 

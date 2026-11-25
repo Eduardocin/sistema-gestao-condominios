@@ -33,12 +33,14 @@ from app.modules.reservas.schemas import (
     AreaComumSaida,
     BloqueioCriadoSaida,
     BloqueioEntrada,
+    BloqueioRemovidoSaida,
     CalendarioSaida,
     CancelamentoEntrada,
     PaginaDeAreas,
     PaginaDeBloqueios,
     PaginaDeReservas,
     PreviaDoBloqueio,
+    RemocaoDeBloqueioEntrada,
     ReservaEntrada,
     ReservaSaida,
 )
@@ -419,3 +421,23 @@ def criar_bloqueio(
     request: Request,
 ) -> BloqueioCriadoSaida:
     return service.criar(area_id, dados, ip=ip_do_cliente(request))
+
+
+@areas_router.post(
+    "/{area_id}/bloqueios/{bloqueio_id}/remocao",
+    response_model=BloqueioRemovidoSaida,
+    summary="Remove um bloqueio de datas lançado por engano (Administração)",
+    dependencies=[Depends(somente_administracao)],
+    responses={
+        **_ERROS_BLOQUEIO,
+        409: {"description": "O bloqueio já foi removido (`bloqueio_ja_removido`)."},
+    },
+)
+def remover_bloqueio(
+    area_id: uuid.UUID,
+    bloqueio_id: uuid.UUID,
+    dados: RemocaoDeBloqueioEntrada,
+    service: BloqueiosDep,
+    request: Request,
+) -> BloqueioRemovidoSaida:
+    return service.remover(area_id, bloqueio_id, dados, ip=ip_do_cliente(request))

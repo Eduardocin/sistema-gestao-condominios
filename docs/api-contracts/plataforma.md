@@ -220,11 +220,11 @@ Formato `grupo.verbo`, em minúsculas. Cobre a lista da seção 10 da matriz, e 
 | Contas (TASK-27, TASK-53) | `conta.criar`, `conta.editar`, `conta.senha_alterar`, `conta.senha_redefinir` — operações globais de conta própria; [contrato](nucleo.md#33-perfil-recorte-task-27-e-demais-rotas-de-conta-us-103-gabriel-sprint-3) |
 | Gabriel (acesso e autorização) | `permissao_aba.alterar`, `seguranca.login`, `seguranca.login_falho`, `seguranca.login_bloqueado`, `seguranca.acesso_negado`, `seguranca.acesso_cross_tenant` |
 | Paulo (condomínio, chaves, vínculos) | `condominio.enviar` *(proposta: cadastro inicial)*, `condominio.reenviar`, `condominio.aprovar`, `condominio.rejeitar` (com motivo), `condominio.desativar`, `condominio.reativar`, `condominio.editar`, `chave.gerar`, `chave.regenerar`, `chave.revogar`, `seguranca.chave_invalida` *(proposta: tentativas erradas, US-301)*, `vinculo.aprovar`, `vinculo.rejeitar`, `vinculo.desfazer`, `proprietario.editar` |
-| Vitor (convivência) | `reserva.cancelar`, `area.bloquear`, `ocorrencia.resolver`, `ocorrencia.reabrir` |
+| Vitor (convivência) | `reserva.cancelar`, `area.bloquear`, `area.desbloquear`, `ocorrencia.resolver`, `ocorrencia.reabrir` |
 | Eduardo (portaria) | `encomenda.entregar`, `encomenda.confirmar` |
 | Tude (plataforma e pessoas) | `estrutura.editar`, `funcionario.cadastrar`, `funcionario.editar`, `funcionario.desativar`, `responsaveis.alterar`, `conta_compartilhada.trocar_acesso`, `aviso.publicar`, `aviso.editar`, `aviso.encerrar`, `comunicado.enviar`, `chamado.atender`, `chamado.encerrar` |
 
-`area.bloquear`, `ocorrencia.reabrir`, `aviso.encerrar` e as duas `seguranca.*` marcadas como proposta não estão literalmente na matriz, mas decorrem dos itens "bloquear data", "alterar status de ocorrência" e "publicar ou editar aviso". Confirmar na revisão.
+`area.bloquear`, `area.desbloquear`, `ocorrencia.reabrir`, `aviso.encerrar` e as duas `seguranca.*` marcadas como proposta não estão literalmente na matriz, mas decorrem dos itens "bloquear data", "alterar status de ocorrência" e "publicar ou editar aviso". Confirmar na revisão.
 
 ### 4.3 Consulta (US-903)
 

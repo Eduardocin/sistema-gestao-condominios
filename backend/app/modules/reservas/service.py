@@ -39,6 +39,7 @@ from app.modules.reservas.schemas import (
     AreaComumEntrada,
     BloqueioCriadoSaida,
     BloqueioEntrada,
+    BloqueioRemovidoSaida,
     BloqueioSaida,
     CalendarioSaida,
     CancelamentoEntrada,
@@ -48,6 +49,7 @@ from app.modules.reservas.schemas import (
     PaginaDeReservas,
     PreviaDoBloqueio,
     Referencia,
+    RemocaoDeBloqueioEntrada,
     ReservaAfetada,
     ReservaEntrada,
     ReservaSaida,
@@ -85,6 +87,7 @@ MENSAGEM_PERIODO_PASSADO = "O bloqueio precisa terminar hoje ou depois."
 MENSAGEM_RESERVAS_AFETADAS = (
     "Há reservas ativas nesse período. Confirme o cancelamento delas para bloquear as datas."
 )
+MENSAGEM_BLOQUEIO_JA_REMOVIDO = "Esse bloqueio já foi removido."
 LIMITE_DE_DATAS_NO_AVISO = 20
 MENSAGEM_CANCELAMENTO_ADM = "Informe o motivo e o responsável pelo cancelamento."
 MENSAGEM_CANCELAMENTO_MORADOR = "O cancelamento pelo morador não aceita motivo nem responsável."
@@ -730,6 +733,58 @@ class BloqueiosService:
         self._avisar_unidades(area, canceladas, dados, responsavel.id, ip)
         self.session.commit()
         return self._criado(bloqueio, responsavel.nome, len(canceladas))
+
+    # --- remover --------------------------------------------------------------------------
+
+    def remover(
+        self,
+        area_id: uuid.UUID,
+        bloqueio_id: uuid.UUID,
+        dados: RemocaoDeBloqueioEntrada,
+        *,
+        ip: str | None,
+    ) -> BloqueioRemovidoSaida:
+        """Remoção lógica: o bloqueio deixa de valer e some da lista, mas a linha fica.
+
+        Não desfaz o que o bloqueio já fez: as reservas canceladas e os avisos continuam como
+        estão, e as datas voltam a aceitar reserva a partir de agora.
+        """
+        self.areas.obter(area_id)  # 404 se a área não existir ou for de outro condomínio
+        responsavel = self.responsaveis.obter_ativo(dados.responsavel_id)  # 404 genérico
+        bloqueio = self.bloqueios.obter_travado(area_id, bloqueio_id)
+        if bloqueio is None:
+            raise RecursoNaoEncontrado
+        if bloqueio.removido_em is not None:
+            raise ApiError(
+                409, "conflict", MENSAGEM_BLOQUEIO_JA_REMOVIDO, reason="bloqueio_ja_removido"
+            )
+
+        removido = self.bloqueios.atualizar(
+            bloqueio.id,
+            {"removido_em": func.now(), "removido_por_usuario_id": self.contexto.usuario_id},
+        )
+        auditoria.registrar_acao(
+            self.session,
+            ctx=ContextoAuditoria.do_condominio(self.contexto, ip=ip),
+            acao="area.desbloquear",
+            recurso_tipo="area_comum",
+            recurso_id=area_id,
+            responsavel=ResponsavelRef("administracao", responsavel.id),
+            antes={
+                "bloqueio_id": str(bloqueio.id),
+                "data_inicio": bloqueio.data_inicio.isoformat(),
+                "data_fim": bloqueio.data_fim.isoformat(),
+                "motivo": bloqueio.motivo,
+            },
+            depois={"bloqueio_id": str(bloqueio.id), "removido": True},
+        )
+        self.session.commit()
+        autor = self.responsaveis.obter(removido.responsavel_id)
+        if removido.removido_em is None:  # acabou de ser gravado: não acontece
+            raise RecursoNaoEncontrado
+        return BloqueioRemovidoSaida(
+            **self._saida(removido, autor.nome).model_dump(), removido_em=removido.removido_em
+        )
 
     def _cancelar(
         self,

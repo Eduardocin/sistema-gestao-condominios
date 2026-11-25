@@ -14,6 +14,10 @@ ROOT = Path(__file__).resolve().parents[3]
 DEV_JWT_SECRET = "dev-only-jwt-secret-troque-em-producao-0000"
 # HS256 pede uma chave com pelo menos 32 bytes; abaixo disso a assinatura fica fraca.
 JWT_SECRET_MIN_LENGTH = 32
+# Credenciais locais de desenvolvimento (as mesmas do .env.example). Proibidas em produção.
+DEV_POSTGRES_PASSWORD = "local_dev_only"
+DEV_STORAGE_ACCESS_KEY = "condominios_storage_dev"
+DEV_STORAGE_SECRET_KEY = "storage_local_dev_only"
 
 
 class Settings(BaseSettings):
@@ -26,14 +30,14 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     database_url: SecretStr | None = None
     postgres_user: str = "condominios_dev"
-    postgres_password: SecretStr = SecretStr("local_dev_only")
+    postgres_password: SecretStr = SecretStr(DEV_POSTGRES_PASSWORD)
     postgres_db: str = "condominios"
     postgres_host: str = "127.0.0.1"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
     storage_endpoint: str = "http://127.0.0.1:9000"
     storage_public_endpoint: str = "http://127.0.0.1:9000"
-    storage_access_key: SecretStr = SecretStr("condominios_storage_dev")
-    storage_secret_key: SecretStr = SecretStr("storage_local_dev_only")
+    storage_access_key: SecretStr = SecretStr(DEV_STORAGE_ACCESS_KEY)
+    storage_secret_key: SecretStr = SecretStr(DEV_STORAGE_SECRET_KEY)
     storage_bucket: str = "condominios-arquivos"
     storage_region: str = "us-east-1"
     storage_url_seconds: int = Field(default=60, ge=1, le=300)
@@ -78,6 +82,34 @@ class Settings(BaseSettings):
             )
         if self.app_env == "production" and segredo == DEV_JWT_SECRET:
             raise ValueError("Defina um JWT_SECRET_KEY próprio: o padrão não vale em produção.")
+        return self
+
+    @model_validator(mode="after")
+    def _validar_producao(self) -> Self:
+        """Em produção, nada de credencial de desenvolvimento nem CORS aberto (TASK-54)."""
+        if self.app_env != "production":
+            return self
+        for origem in self.cors_origins:
+            if origem.strip() == "*":
+                raise ValueError("CORS_ORIGINS não pode conter '*' em produção.")
+            if origem.strip().lower().startswith("http://"):
+                raise ValueError(
+                    f"CORS_ORIGINS só aceita origens https:// em produção (recebido: {origem})."
+                )
+        sem_database_url = not (self.database_url and self.database_url.get_secret_value())
+        if sem_database_url and self.postgres_password.get_secret_value() == DEV_POSTGRES_PASSWORD:
+            raise ValueError(
+                "Defina POSTGRES_PASSWORD ou DATABASE_URL próprios: a senha padrão do banco "
+                "não vale em produção."
+            )
+        if (
+            self.storage_access_key.get_secret_value() == DEV_STORAGE_ACCESS_KEY
+            or self.storage_secret_key.get_secret_value() == DEV_STORAGE_SECRET_KEY
+        ):
+            raise ValueError(
+                "Defina STORAGE_ACCESS_KEY e STORAGE_SECRET_KEY próprios: as chaves padrão do "
+                "storage não valem em produção."
+            )
         return self
 
     @property

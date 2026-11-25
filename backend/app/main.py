@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +10,19 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.db.session import get_engine
 from app.modules.auditoria.contexto import auditar_requisicao
+from app.modules.notificacoes.worker import laco
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.getLogger(__name__).info("API iniciada")
+    settings = get_settings()
+    worker = asyncio.create_task(laco(settings)) if settings.email_worker_ativo else None
     yield
+    if worker is not None:
+        worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
     get_engine().dispose()
 
 

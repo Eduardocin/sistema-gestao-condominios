@@ -9,8 +9,9 @@ TODOS = [Perfil.MORADOR, Perfil.FUNCIONARIO, Perfil.ADMINISTRACAO, Perfil.PLATAF
 
 
 def test_a_matriz_tem_os_21_recursos_do_documento():
-    # US-305 acrescenta um recurso restrito, sem ampliar os privilégios de vínculos.
-    assert len(permissoes.RECURSOS) == 21
+    # US-305 acrescenta um recurso restrito, sem ampliar os privilégios de vínculos; US-803
+    # acrescenta o acompanhamento da fila de e-mails, só do ADM.
+    assert len(permissoes.RECURSOS) == 22
 
 
 @pytest.mark.parametrize("perfil", TODOS)

@@ -171,6 +171,26 @@ export function createSessionClient(baseURL: string, storage?: SessionStorage) {
     await acceptLogin(data, epoch)
   }
 
+  /** Troca a senha logado: o servidor invalida os tokens antigos e devolve uma sessão nova. */
+  async function changePassword(current: string, next: string, onChanged?: () => void) {
+    const expected = epoch
+    const { data } = await http.put<LoginResponse>('/contas/me/senha', { senha_atual: current, senha_nova: next })
+    assertCurrent(expected)
+    onChanged?.()
+    epoch++
+    publish({ status: 'loading', identity: null, condominiums: data.condominios, message: null })
+    await acceptLogin(data, epoch)
+  }
+
+  /** Sempre 202 no servidor, exista a conta ou não. */
+  async function requestPasswordReset(email: string) {
+    await publicHttp.post('/contas/recuperacao-senha', { email: email.trim() })
+  }
+
+  async function resetPassword(token: string, newPassword: string) {
+    await publicHttp.post('/contas/redefinicao-senha', { token, senha_nova: newPassword })
+  }
+
   function restore(): Promise<void> {
     if (restoring?.epoch === epoch) return restoring.promise
     if (!credentials) { logout(snapshot.message); return Promise.resolve() }
@@ -184,7 +204,7 @@ export function createSessionClient(baseURL: string, storage?: SessionStorage) {
   }
 
   return {
-    http, login, register, selectCondominium, restore, logout,
+    http, login, register, selectCondominium, changePassword, requestPasswordReset, resetPassword, restore, logout,
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
   }

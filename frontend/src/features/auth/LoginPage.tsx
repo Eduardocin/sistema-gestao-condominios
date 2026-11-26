@@ -33,6 +33,7 @@ export function LoginPage() {
         <Input label="Senha" name="password" type="password" autoComplete="current-password" maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} disabled={pending} />
         {(error || snapshot.message) && <Notice tone="alert" role="alert">{error || snapshot.message}</Notice>}
         <Button type="submit" loading={pending}>Entrar</Button>
+        <Text size="sm" className={styles.link}><Link to="/recuperar-senha">Esqueci minha senha</Link></Text>
       </form>
       <Text size="sm" className={styles.link}>Ainda não tem conta? <Link to="/cadastro">Cadastre-se</Link></Text>
     </Card><Link to="/">← Voltar à apresentação</Link>

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
 import { Button, ButtonLink, Card, Heading, Input, Notice, Page } from '../../components'
 import { useAuth } from '../auth/context'
+import { changePasswordError, passwordHint, passwordRuleError } from '../auth/password'
 import styles from '../resident/ResidentWorkspace.module.css'
 import { saveFlash, takeFlash } from './flash'
 
@@ -10,7 +11,9 @@ const FLASH = 'perfil-atualizado'
 type Account = { nome: string; email: string; telefone: string | null }
 
 export function ProfilePage() {
-  const { client } = useAuth()
+  const { client, snapshot } = useAuth()
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordPending, setPasswordPending] = useState(false)
   const [account, setAccount] = useState<Account>()
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(() => takeFlash(FLASH))
@@ -25,6 +28,37 @@ export function ProfilePage() {
       })
     return () => controller.abort()
   }, [client])
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (passwordPending) return
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const next = String(data.get('senha_nova') ?? '')
+    const problem = passwordRuleError(
+      next,
+      String(data.get('confirmacao') ?? ''),
+      snapshot.identity?.usuario.email,
+    )
+    if (problem) {
+      setPasswordError(problem)
+      return
+    }
+    setPasswordError('')
+    setSuccess('')
+    setPasswordPending(true)
+    try {
+      await client.changePassword(String(data.get('senha_atual') ?? ''), next, () =>
+        saveFlash(FLASH, 'Senha alterada. Os outros acessos à sua conta foram encerrados.'),
+      )
+      form.reset()
+      setSuccess('Senha alterada. Os outros acessos à sua conta foram encerrados.')
+    } catch (failure) {
+      setPasswordError(changePasswordError(failure))
+    } finally {
+      setPasswordPending(false)
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!account || pending) return
@@ -98,6 +132,53 @@ export function ProfilePage() {
             </div>
           </form>
         )}
+      </Card>
+      <Card className={styles.content}>
+        <Heading level={2} size="md">
+          Trocar senha
+        </Heading>
+        <form className={styles.form} onSubmit={(event) => void changePassword(event)}>
+          <Input
+            label="Senha atual"
+            name="senha_atual"
+            type="password"
+            autoComplete="current-password"
+            required
+            maxLength={128}
+            disabled={passwordPending}
+          />
+          <Input
+            label="Nova senha"
+            name="senha_nova"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            maxLength={128}
+            hint={passwordHint}
+            disabled={passwordPending}
+          />
+          <Input
+            label="Confirmar nova senha"
+            name="confirmacao"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            maxLength={128}
+            disabled={passwordPending}
+          />
+          {passwordError && (
+            <Notice tone="alert" role="alert">
+              {passwordError}
+            </Notice>
+          )}
+          <div>
+            <Button type="submit" loading={passwordPending}>
+              Trocar senha
+            </Button>
+          </div>
+        </form>
       </Card>
       <ButtonLink to="/app" variant="secondary">
         Voltar à minha área

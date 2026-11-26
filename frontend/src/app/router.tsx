@@ -6,6 +6,7 @@ import { DesignSystemPage } from '../features/design-system/DesignSystemPage'
 import { NotFoundPage } from './NotFoundPage'
 import { PortariaPage } from '../features/portaria/PortariaPage'
 import { LoginPage } from '../features/auth/LoginPage'
+import { ForgotPasswordPage, ResetPasswordPage } from '../features/auth/RecoveryPages'
 import { RegistrationPage } from '../features/auth/RegistrationPage'
 import { EmployeesPage } from '../features/employees/EmployeesPage'
 import {
@@ -48,6 +49,8 @@ import {
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
   { path: '/login', element: <LoginPage /> },
+  { path: '/recuperar-senha', element: <ForgotPasswordPage /> },
+  { path: '/redefinir-senha', element: <ResetPasswordPage /> },
   { path: '/cadastro', element: <AccessPage /> },
   { path: '/cadastro/morador', element: <RegistrationPage key="morador" profile="morador" /> },
   {

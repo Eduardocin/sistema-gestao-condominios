@@ -36,6 +36,13 @@ import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrence
 import { AdminAreasPage } from '../features/admin-areas/AdminAreasPage'
 import { AdminReservationsPage } from '../features/admin-areas/AdminReservationsPage'
 import { AdminOccurrencesPage } from '../features/admin-occurrences/AdminOccurrencesPage'
+import {
+  AdminAnnouncementsPage,
+  AdminSupportPage,
+  PackageReportPage,
+  PlatformAnnouncementsPage,
+  PlatformSupportPage,
+} from '../features/suporte/SupportPages'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -178,6 +185,20 @@ export const router = createBrowserRouter([
     { path: '/app/administracao/areas-comuns', Page: AdminAreasPage },
     { path: '/app/administracao/reservas', Page: AdminReservationsPage },
     { path: '/app/administracao/ocorrencias', Page: AdminOccurrencesPage },
+  ].map(({ path, Page }) => ({
+    path,
+    element: (
+      <RequireSession>
+        <Page />
+      </RequireSession>
+    ),
+  })),
+  ...[
+    { path: '/app/administracao/suporte', Page: AdminSupportPage },
+    { path: '/app/administracao/comunicados', Page: AdminAnnouncementsPage },
+    { path: '/app/administracao/encomendas/relatorio', Page: PackageReportPage },
+    { path: '/app/plataforma/suporte', Page: PlatformSupportPage },
+    { path: '/app/plataforma/comunicados', Page: PlatformAnnouncementsPage },
   ].map(({ path, Page }) => ({
     path,
     element: (

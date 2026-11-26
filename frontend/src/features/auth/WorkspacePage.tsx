@@ -15,6 +15,7 @@ import { AccessDenied, RequireSession } from './SessionPages'
 import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
 import { MyCondominiums } from '../condominiums/MyCondominiums'
 import { ResidentNotices } from '../condominiums/ResidentNotices'
+import { supportNavigation } from '../suporte/support-state'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -36,8 +37,11 @@ const modules: Record<string, string[]> = {
     'Áreas comuns',
     'Reservas',
     'Ocorrências',
+    'Relatório de encomendas',
+    'Suporte',
+    'Comunicados',
   ],
-  plataforma: ['Condomínios', 'Administração da plataforma'],
+  plataforma: ['Condomínios', 'Fila de suporte', 'Comunicados'],
   'sem-condominio': [],
 }
 
@@ -53,6 +57,21 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'administracao' && label === 'Unidades e moradores') {
     return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
+  }
+  if (area === 'administracao' && label === 'Relatório de encomendas') {
+    return { to: '/app/administracao/encomendas/relatorio', action: 'Ver relatório' }
+  }
+  if (area === 'administracao' && label === 'Suporte') {
+    return { to: '/app/administracao/suporte', action: 'Abrir ou acompanhar chamados' }
+  }
+  if (area === 'administracao' && label === 'Comunicados') {
+    return { to: '/app/administracao/comunicados', action: 'Ler comunicados' }
+  }
+  if (area === 'plataforma' && label === 'Fila de suporte') {
+    return { to: '/app/plataforma/suporte', action: 'Atender chamados' }
+  }
+  if (area === 'plataforma' && label === 'Comunicados') {
+    return { to: '/app/plataforma/comunicados', action: 'Enviar comunicados' }
   }
   if (area === 'plataforma' && label === 'Condomínios') {
     return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
@@ -138,14 +157,10 @@ export function WorkspacePage({ area }: { area: string }) {
             to: '/app/administracao/conta-funcionarios',
             symbol: '♙',
           },
-          {
-            key: 'employees',
-            label: 'Funcionários',
-            to: '/app/administracao/funcionarios',
-            symbol: '♙',
-          },
+          ...supportNavigation('administracao').slice(1),
         ]
       : []),
+    ...(area === 'plataforma' ? supportNavigation('plataforma').slice(1) : []),
     ...(area === 'portaria'
       ? [
           { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },

@@ -20,6 +20,8 @@ import { ResidentPackagesPage } from '../features/portaria/ResidentPackagesPage'
 import { VisitorsWorkspacePage } from '../features/portaria/VisitorsWorkspacePage'
 import { ResidentVisitorsPage } from '../features/resident/ResidentVisitorsPage'
 import { ResidentVehiclesPage } from '../features/resident/ResidentVehiclesPage'
+import { ApprovalPage } from '../features/condominiums/ApprovalPage'
+import { CondominiumWizard } from '../features/condominiums/CondominiumWizard'
 import {
   ResidentReservationsPage,
   ResidentReservePage,
@@ -40,6 +42,8 @@ export const router = createBrowserRouter([
   { path: '/prototipos/portaria', element: <PortariaPage /> },
   { path: '/selecionar-condominio', element: <SelectCondominiumPage /> },
   { path: '/app', element: <AppEntry /> },
+  { path: '/app/plataforma/condominios', element: <RequireSession><ApprovalPage /></RequireSession> },
+  { path: '/app/cadastrar-condominio', element: <RequireSession><CondominiumWizard /></RequireSession> },
   {
     path: '/app/administracao/funcionarios',
     element: (

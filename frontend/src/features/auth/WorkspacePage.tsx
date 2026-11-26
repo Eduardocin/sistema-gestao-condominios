@@ -31,6 +31,9 @@ const modules: Record<string, string[]> = {
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'plataforma' && label === 'Condomínios') {
+    return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
+  }
   if (area === 'administracao' && label === 'Funcionários') {
     return { to: '/app/administracao/funcionarios', action: 'Gerenciar funcionários' }
   }
@@ -128,6 +131,9 @@ export function WorkspacePage({ area }: { area: string }) {
           <Notice tone="warning" title={notice.title}>
             {notice.message}
           </Notice>
+        )}
+        {area === 'sem-condominio' && !identity.administrador_plataforma && (
+          <ButtonLink to="/app/cadastrar-condominio">Cadastrar condomínio</ButtonLink>
         )}
         <Card>
           <Heading level={2} size="md">

@@ -35,6 +35,7 @@ import {
 import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
 import { AdminAreasPage } from '../features/admin-areas/AdminAreasPage'
 import { AdminReservationsPage } from '../features/admin-areas/AdminReservationsPage'
+import { AdminOccurrencesPage } from '../features/admin-occurrences/AdminOccurrencesPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -176,6 +177,7 @@ export const router = createBrowserRouter([
     { path: '/app/morador/ocorrencias', Page: ResidentOccurrencesPage },
     { path: '/app/administracao/areas-comuns', Page: AdminAreasPage },
     { path: '/app/administracao/reservas', Page: AdminReservationsPage },
+    { path: '/app/administracao/ocorrencias', Page: AdminOccurrencesPage },
   ].map(({ path, Page }) => ({
     path,
     element: (

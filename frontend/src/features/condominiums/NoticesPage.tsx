@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
 import styles from '../resident/ResidentWorkspace.module.css'
+import { buildNoticePayload, localDate } from './notice-form'
 
 type NoticeItem = {
   id: string
@@ -27,12 +28,6 @@ type NoticeItem = {
 }
 type Person = { id: string; nome: string; ativo: boolean }
 type NoticePage = { items: NoticeItem[]; page: number; page_size: number; total: number }
-
-const localDate = (value: string) => {
-  const date = new Date(value)
-  const pad = (part: number) => String(part).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
 
 export function NoticesPage() {
   const { snapshot, client } = useAuth()
@@ -78,20 +73,19 @@ export function NoticesPage() {
     event.preventDefault()
     if (busy) return
     const form = new FormData(event.currentTarget)
-    const start = String(form.get('inicio'))
-    const end = String(form.get('fim'))
-    if (!start || !end || new Date(end) <= new Date(start)) {
-      setError('A data de término deve ser posterior ao início.')
+    const result = buildNoticePayload({
+      titulo: String(form.get('titulo')),
+      texto: String(form.get('texto')),
+      inicio: String(form.get('inicio')),
+      fim: String(form.get('fim')),
+      importante: form.get('importante') === 'on',
+      responsavelId: responsible,
+    })
+    if (!result.ok) {
+      setError(result.message)
       return
     }
-    const data = {
-      titulo: String(form.get('titulo')).trim(),
-      texto: String(form.get('texto')).trim(),
-      inicio_em: new Date(start).toISOString(),
-      fim_em: new Date(end).toISOString(),
-      importante: form.get('importante') === 'on',
-      responsavel_id: responsible,
-    }
+    const data = result.payload
     setBusy(true)
     setError('')
     setSuccess('')

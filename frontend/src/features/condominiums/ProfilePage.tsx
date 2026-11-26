@@ -11,7 +11,15 @@ export function ProfilePage() {
   const { client } = useAuth()
   const [account, setAccount] = useState<Account>()
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [success, setSuccess] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('perfil-atualizado') ?? ''
+      sessionStorage.removeItem('perfil-atualizado')
+      return saved
+    } catch {
+      return ''
+    }
+  })
   const [pending, setPending] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
@@ -36,6 +44,11 @@ export function ProfilePage() {
         telefone: account.telefone ?? '',
       })
       setSuccess('Perfil atualizado.')
+      try {
+        sessionStorage.setItem('perfil-atualizado', 'Perfil atualizado.')
+      } catch {
+        /* A edição já foi salva. */
+      }
       await client.restore()
     } catch (failure) {
       const message = isAxiosError<{ error?: { message?: string } }>(failure)

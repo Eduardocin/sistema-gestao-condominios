@@ -32,6 +32,8 @@ import {
   ResidentReservePage,
 } from '../features/resident/ResidentReservationsPages'
 import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
+import { AdminAreasPage } from '../features/admin-areas/AdminAreasPage'
+import { AdminReservationsPage } from '../features/admin-areas/AdminReservationsPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -47,13 +49,62 @@ export const router = createBrowserRouter([
   { path: '/prototipos/portaria', element: <PortariaPage /> },
   { path: '/selecionar-condominio', element: <SelectCondominiumPage /> },
   { path: '/app', element: <AppEntry /> },
-  { path: '/app/plataforma/condominios', element: <RequireSession><ApprovalPage /></RequireSession> },
-  { path: '/app/cadastrar-condominio', element: <RequireSession><CondominiumWizard /></RequireSession> },
-  { path: '/app/administracao/chaves', element: <RequireSession><AccessKeysPage /></RequireSession> },
-  { path: '/app/vincular-unidade', element: <RequireSession><ResidentLinkPage /></RequireSession> },
-  { path: '/app/morador/permissoes', element: <RequireSession><ResidentPermissionsPage /></RequireSession> },
-  { path: '/app/administracao/avisos', element: <RequireSession><NoticesPage /></RequireSession> },
-  { path: '/app/perfil', element: <RequireSession><ProfilePage /></RequireSession> },
+  {
+    path: '/app/plataforma/condominios',
+    element: (
+      <RequireSession>
+        <ApprovalPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/cadastrar-condominio',
+    element: (
+      <RequireSession>
+        <CondominiumWizard />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/administracao/chaves',
+    element: (
+      <RequireSession>
+        <AccessKeysPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/vincular-unidade',
+    element: (
+      <RequireSession>
+        <ResidentLinkPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/morador/permissoes',
+    element: (
+      <RequireSession>
+        <ResidentPermissionsPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/administracao/avisos',
+    element: (
+      <RequireSession>
+        <NoticesPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/perfil',
+    element: (
+      <RequireSession>
+        <ProfilePage />
+      </RequireSession>
+    ),
+  },
   {
     path: '/app/administracao/funcionarios',
     element: (
@@ -106,6 +157,8 @@ export const router = createBrowserRouter([
     { path: '/app/morador/areas-comuns', Page: ResidentReservePage },
     { path: '/app/morador/reservas', Page: ResidentReservationsPage },
     { path: '/app/morador/ocorrencias', Page: ResidentOccurrencesPage },
+    { path: '/app/administracao/areas-comuns', Page: AdminAreasPage },
+    { path: '/app/administracao/reservas', Page: AdminReservationsPage },
   ].map(({ path, Page }) => ({
     path,
     element: (

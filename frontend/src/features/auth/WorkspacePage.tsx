@@ -143,6 +143,7 @@ export function WorkspacePage({ area }: { area: string }) {
         {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
         {area === 'morador' && <ResidentNotices />}
         {(area === 'sem-condominio' || area === 'morador') && <div><ButtonLink to="/app/vincular-unidade" variant="secondary">Vincular unidade</ButtonLink></div>}
+        {!identity.administrador_plataforma && <div><ButtonLink to="/app/perfil" variant="secondary">Editar perfil</ButtonLink></div>}
         {area === 'morador' && identity.unidades.some((unit) => unit.abas?.includes('usuarios')) && <div><ButtonLink to="/app/morador/permissoes" variant="secondary">Permissões dos moradores</ButtonLink></div>}
         <Card>
           <Heading level={2} size="md">

@@ -26,6 +26,7 @@ import { AccessKeysPage } from '../features/condominiums/AccessKeysPage'
 import { ResidentLinkPage } from '../features/condominiums/ResidentLinkPage'
 import { ResidentPermissionsPage } from '../features/condominiums/ResidentPermissionsPage'
 import { NoticesPage } from '../features/condominiums/NoticesPage'
+import { ProfilePage } from '../features/condominiums/ProfilePage'
 import {
   ResidentReservationsPage,
   ResidentReservePage,
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
   { path: '/app/vincular-unidade', element: <RequireSession><ResidentLinkPage /></RequireSession> },
   { path: '/app/morador/permissoes', element: <RequireSession><ResidentPermissionsPage /></RequireSession> },
   { path: '/app/administracao/avisos', element: <RequireSession><NoticesPage /></RequireSession> },
+  { path: '/app/perfil', element: <RequireSession><ProfilePage /></RequireSession> },
   {
     path: '/app/administracao/funcionarios',
     element: (

@@ -631,3 +631,157 @@ def test_cancelamento_recusado_nao_enfileira_email(client, session, predio, area
     )
     assert resposta.status_code == 409
     assert contar(session, EnvioEmail, EnvioEmail.condominio_id == predio.condominio.id) == 0
+
+
+# --- remoção de bloqueio ----------------------------------------------------------------------
+
+
+def remocao(area, bloqueio):
+    return url(area, f"bloqueios/{bloqueio.id}/remocao")
+
+
+@pytest.mark.parametrize("indice", range(len(PERFIS)), ids=[str(p) for p in PERFIS])
+def test_remocao_matriz_por_perfil(client, session, predio, area, responsavel, indice):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    headers = predio.cabecalho_de(PERFIS[indice])
+    resposta = client.post(
+        remocao(area, bloqueio), headers=headers, json={"responsavel_id": str(responsavel.id)}
+    )
+    esperado = 200 if PERFIS[indice] == Perfil.ADMINISTRACAO else 403
+    assert resposta.status_code == esperado, resposta.text
+    session.refresh(bloqueio)
+    assert (bloqueio.removido_em is not None) == (esperado == 200)
+
+
+def test_remocao_sem_token_e_401(client, session, predio, area):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    assert client.post(remocao(area, bloqueio), json={}).status_code == 401
+
+
+def test_remover_grava_remocao_audita_e_responde(client, session, predio, area, adm, responsavel):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA + timedelta(days=2))
+    resposta = client.post(
+        remocao(area, bloqueio), headers=adm, json={"responsavel_id": str(responsavel.id)}
+    )
+    assert resposta.status_code == 200, resposta.text
+    dados = resposta.json()
+    assert dados["id"] == str(bloqueio.id)
+    assert dados["removido_em"]
+    assert dados["data_inicio"] == DIA.isoformat()
+    session.refresh(bloqueio)
+    assert bloqueio.removido_em is not None
+    assert bloqueio.removido_por_usuario_id == predio.administracao.id
+    [evento] = eventos(session, predio, "area.desbloquear")
+    assert evento.recurso_id == area.id
+    assert evento.antes["bloqueio_id"] == str(bloqueio.id)
+    assert evento.depois == {"bloqueio_id": str(bloqueio.id), "removido": True}
+
+
+def test_bloqueio_removido_some_da_lista_e_libera_a_data(
+    client, session, predio, area, adm, responsavel
+):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    corpo_reserva = pedido(area, predio.unidade_101, DIA, "10:00")
+    morador = predio.cabecalho_de(Perfil.MORADOR)
+    assert client.post("/api/v1/reservas", headers=morador, json=corpo_reserva).status_code == 409
+
+    client.post(remocao(area, bloqueio), headers=adm, json={"responsavel_id": str(responsavel.id)})
+
+    assert client.get(url(area), headers=adm).json()["total"] == 0
+    assert client.post("/api/v1/reservas", headers=morador, json=corpo_reserva).status_code == 201
+
+
+def test_remover_duas_vezes_e_409(client, session, predio, area, adm, responsavel):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    corpo_remocao = {"responsavel_id": str(responsavel.id)}
+    assert client.post(remocao(area, bloqueio), headers=adm, json=corpo_remocao).status_code == 200
+    segunda = client.post(remocao(area, bloqueio), headers=adm, json=corpo_remocao)
+    assert segunda.status_code == 409
+    assert erro(segunda)["reason"] == "bloqueio_ja_removido"
+    assert len(eventos(session, predio, "area.desbloquear")) == 1
+
+
+def test_remover_bloqueio_que_ja_estava_removido_e_409(
+    client, session, predio, area, adm, responsavel
+):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA, removido=True)
+    resposta = client.post(
+        remocao(area, bloqueio), headers=adm, json={"responsavel_id": str(responsavel.id)}
+    )
+    assert resposta.status_code == 409
+    assert eventos(session, predio, "area.desbloquear") == []
+
+
+def test_remover_nao_desfaz_reservas_canceladas(client, session, predio, area, adm, responsavel):
+    reserva = criar_reserva(session, predio, area, data=DIA, hora=18)
+    resposta = client.post(
+        url(area), headers=adm, json=corpo(responsavel, confirmar_cancelamentos=True)
+    )
+    assert resposta.status_code == 201, resposta.text
+    bloqueio_id = resposta.json()["id"]
+
+    remover = client.post(
+        url(area, f"bloqueios/{bloqueio_id}/remocao"),
+        headers=adm,
+        json={"responsavel_id": str(responsavel.id)},
+    )
+    assert remover.status_code == 200
+    session.refresh(reserva)
+    assert reserva.status == "cancelada"
+
+
+def test_remocao_de_bloqueio_inexistente_ou_de_outra_area_e_404(
+    client, session, predio, area, adm, responsavel
+):
+    corpo_remocao = {"responsavel_id": str(responsavel.id)}
+    desconhecido = url(area, f"bloqueios/{uuid.uuid4()}/remocao")
+    assert client.post(desconhecido, headers=adm, json=corpo_remocao).status_code == 404
+
+    outra_area = criar_area(session, predio, nome="Quadra")
+    bloqueio = criar_bloqueio(session, predio, outra_area, DIA, DIA)
+    assert client.post(remocao(area, bloqueio), headers=adm, json=corpo_remocao).status_code == 404
+    session.refresh(bloqueio)
+    assert bloqueio.removido_em is None
+
+
+def test_remocao_isolada_por_condominio(
+    client, session, predio, outro_predio, area, adm, responsavel
+):
+    alheia = criar_area(session, outro_predio)
+    alheio = criar_bloqueio(session, outro_predio, alheia, DIA, DIA)
+    corpo_remocao = {"responsavel_id": str(responsavel.id)}
+    assert client.post(remocao(alheia, alheio), headers=adm, json=corpo_remocao).status_code == 404
+    assert client.post(remocao(area, alheio), headers=adm, json=corpo_remocao).status_code == 404
+    session.refresh(alheio)
+    assert alheio.removido_em is None
+
+
+def test_remocao_com_responsavel_de_outro_condominio_ou_inativo_e_404(
+    client, session, predio, outro_predio, area, adm
+):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    alheio = criar_responsavel(session, outro_predio)
+    inativo = criar_responsavel(session, predio, "Inativo", ativo=False)
+    for responsavel_id in (alheio.id, inativo.id, uuid.uuid4()):
+        resposta = client.post(
+            remocao(area, bloqueio), headers=adm, json={"responsavel_id": str(responsavel_id)}
+        )
+        assert resposta.status_code == 404
+    session.refresh(bloqueio)
+    assert bloqueio.removido_em is None
+
+
+@pytest.mark.parametrize("json", [{}, {"responsavel_id": "nao-e-uuid"}, {"responsavel_id": None}])
+def test_remocao_com_corpo_invalido_e_422(client, session, predio, area, adm, json):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    assert client.post(remocao(area, bloqueio), headers=adm, json=json).status_code == 422
+
+
+def test_remocao_recusa_campo_desconhecido(client, session, predio, area, adm, responsavel):
+    bloqueio = criar_bloqueio(session, predio, area, DIA, DIA)
+    resposta = client.post(
+        remocao(area, bloqueio),
+        headers=adm,
+        json={"responsavel_id": str(responsavel.id), "removido_em": "2020-01-01T00:00:00Z"},
+    )
+    assert resposta.status_code == 422

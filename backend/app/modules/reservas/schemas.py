@@ -229,6 +229,14 @@ class BloqueioEntrada(BaseModel):
         return self
 
 
+class RemocaoDeBloqueioEntrada(BaseModel):
+    """Corpo da remoção: quem na Administração responde por ela (vai para a auditoria)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    responsavel_id: uuid.UUID
+
+
 class ReservaAfetada(BaseModel):
     id: uuid.UUID
     unidade: UnidadeRef
@@ -253,6 +261,10 @@ class BloqueioSaida(BaseModel):
 
 class BloqueioCriadoSaida(BloqueioSaida):
     reservas_canceladas: int
+
+
+class BloqueioRemovidoSaida(BloqueioSaida):
+    removido_em: datetime
 
 
 class PaginaDeBloqueios(BaseModel):

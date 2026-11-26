@@ -229,6 +229,54 @@ def decidir(
         raise
 
 
+def alterar_status_plataforma(
+    session: Session,
+    contexto: ContextoPlataforma,
+    id_: uuid.UUID,
+    status: Literal["ativo", "desativado"],
+    *,
+    ip: str | None,
+    relogio: Relogio = agora,
+) -> schemas.CondominioSaida:
+    """Desativa/reativa o condomínio atomicamente e registra a decisão da plataforma."""
+    try:
+        condominio = repository.obter_plataforma(session, id_, bloquear=True)
+        anterior = condominio.status
+        esperado = "ativo" if status == "desativado" else "desativado"
+        if anterior != esperado:
+            raise ApiError(409, "conflict", "Transição inválida.", reason="transicao_invalida")
+        momento = relogio()
+        condominio.status = status
+        repository.registrar_decisao(
+            session,
+            condominio_id=id_,
+            usuario_id=contexto.usuario_id,
+            evento="desativado" if status == "desativado" else "reativado",
+            motivo=None,
+            momento=momento,
+        )
+        auditoria.registrar_acao(
+            session,
+            ctx=ContextoAuditoria(contexto.usuario_id, id_, "plataforma", ip),
+            acao="condominio.desativar" if status == "desativado" else "condominio.reativar",
+            recurso_tipo="condominio",
+            recurso_id=id_,
+            antes={"status": anterior},
+            depois={"status": status},
+        )
+        saida = dados_condominio(session, condominio)
+        session.commit()
+        return saida
+    except SQLAlchemyError:
+        session.rollback()
+        raise ApiError(
+            500, "internal_error", "Não foi possível alterar o status do condomínio."
+        ) from None
+    except Exception:
+        session.rollback()
+        raise
+
+
 def _arvore_estrutura(
     blocos: list[Bloco], andares: list[Andar], unidades: list[Unidade]
 ) -> list[schemas.BlocoAnalise]:

@@ -71,6 +71,8 @@ PRODUCAO_VALIDA = {
     "app_env": "production",
     "jwt_secret_key": "x" * 40,
     "cors_origins": ["https://condominios.exemplo.test"],
+    "frontend_base_url": "https://condominios.exemplo.test",
+    "email_backend": "smtp",
     "postgres_password": "senha-de-producao-ficticia",
     "storage_access_key": "chave-de-producao-ficticia",
     "storage_secret_key": "segredo-de-producao-ficticio",
@@ -90,6 +92,8 @@ def test_segredo_proprio_vale_em_producao():
         ({"storage_secret_key": "storage_local_dev_only"}, "STORAGE_SECRET_KEY"),
         ({"cors_origins": ["*"]}, "CORS_ORIGINS"),
         ({"cors_origins": ["http://condominios.exemplo.test"]}, "CORS_ORIGINS"),
+        ({"email_backend": "console"}, "EMAIL_BACKEND"),
+        ({"frontend_base_url": "http://condominios.exemplo.test"}, "FRONTEND_BASE_URL"),
     ],
 )
 def test_credenciais_de_desenvolvimento_sao_proibidas_em_producao(alteracao, trecho):
@@ -131,3 +135,31 @@ def test_senha_padrao_embutida_em_database_url_e_proibida_em_producao():
 def test_padroes_de_desenvolvimento_continuam_validos_fora_de_producao(app_env):
     settings = Settings(_env_file=None, app_env=app_env)
     assert settings.postgres_password.get_secret_value() == "local_dev_only"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://condominios.exemplo.test",
+        "https://user:pass@condominios.exemplo.test",
+        "https://condominios.exemplo.test?x=1",
+        "https://condominios.exemplo.test#frag",
+    ],
+)
+def test_frontend_base_url_rejeita_esquema_credencial_query_ou_fragmento(url):
+    with pytest.raises(ValidationError, match="FRONTEND_BASE_URL"):
+        Settings(_env_file=None, frontend_base_url=url)
+
+
+def test_frontend_base_url_remove_espacos_e_aceita_esquema_maiusculo_em_producao():
+    settings = Settings(
+        _env_file=None,
+        **(PRODUCAO_VALIDA | {"frontend_base_url": "  HTTPS://condominios.exemplo.test/  "}),
+    )
+    assert settings.frontend_base_url == "HTTPS://condominios.exemplo.test"
+
+
+@pytest.mark.parametrize("minutos", [4, 1441])
+def test_validade_do_token_de_recuperacao_respeita_limites(minutos):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, password_reset_token_expire_minutes=minutos)

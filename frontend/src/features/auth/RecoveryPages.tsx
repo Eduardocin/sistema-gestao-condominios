@@ -3,7 +3,13 @@ import type { SubmitEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Button, Card, Heading, Input, Notice, Page, PublicFooter, PublicHeader, Text } from '../../components'
 import { useAuth } from './context'
-import { passwordHint, passwordRuleError, recoveryRequestError, resetPasswordError } from './password'
+import {
+  isInvalidResetToken,
+  passwordHint,
+  passwordRuleError,
+  recoveryRequestError,
+  resetPasswordError,
+} from './password'
 import styles from './Auth.module.css'
 
 export function ForgotPasswordPage() {
@@ -58,11 +64,12 @@ export function ForgotPasswordPage() {
 
 export function ResetPasswordPage() {
   const { client } = useAuth()
-  const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const [params, setParams] = useSearchParams()
+  const token = params.get('token')?.trim() ?? ''
   const [pending, setPending] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  const [tokenInvalid, setTokenInvalid] = useState(false)
 
   async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -72,15 +79,19 @@ export function ResetPasswordPage() {
     const problem = passwordRuleError(password, String(form.get('confirmacao') ?? ''))
     if (problem) {
       setError(problem)
+      setTokenInvalid(false)
       return
     }
     setPending(true)
     setError('')
+    setTokenInvalid(false)
     try {
       await client.resetPassword(token, password)
       setDone(true)
+      setParams({}, { replace: true })
     } catch (failure) {
       setError(resetPasswordError(failure))
+      setTokenInvalid(isInvalidResetToken(failure))
     } finally {
       setPending(false)
     }
@@ -113,7 +124,7 @@ export function ResetPasswordPage() {
               <Input label="Confirmar nova senha" name="confirmacao" type="password" autoComplete="new-password" required minLength={8} maxLength={128} disabled={pending} />
               {error && (
                 <Notice tone="alert" role="alert">
-                  {error} {error.includes('novo e-mail') && <Link to="/recuperar-senha">Solicitar novo e-mail</Link>}
+                  {error} {tokenInvalid && <Link to="/recuperar-senha">Solicitar novo e-mail</Link>}
                 </Notice>
               )}
               <Button type="submit" loading={pending}>Salvar nova senha</Button>

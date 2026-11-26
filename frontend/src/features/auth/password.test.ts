@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import axios, { AxiosError } from 'axios'
 import {
   changePasswordError,
+  isInvalidResetToken,
   passwordRuleError,
   recoveryRequestError,
   resetPasswordError,
@@ -40,12 +41,16 @@ test('traduz os erros da troca, da redefinição e do pedido de recuperação', 
   assert.match(changePasswordError(failure(403)), /não pode trocar/)
   assert.match(changePasswordError(failure(429)), /Muitas tentativas/)
   assert.match(changePasswordError(new Error('rede')), /Tente novamente/)
+  assert.equal(isInvalidResetToken(failure(422, 'token_invalido')), true)
+  assert.equal(isInvalidResetToken(failure(422, 'outro')), false)
   assert.match(
     resetPasswordError(failure(422, 'token_invalido')),
     /inválido, expirou ou já foi usado/,
   )
   assert.match(resetPasswordError(failure(422, 'outro')), /8 a 128/)
+  assert.match(resetPasswordError(failure(422, 'outro')), /diferente do e-mail/)
   assert.match(resetPasswordError(failure(429)), /Muitas tentativas/)
+  assert.match(recoveryRequestError(failure(422)), /e-mail válido/)
   assert.match(recoveryRequestError(failure(429)), /Muitas tentativas/)
   assert.match(recoveryRequestError(failure(500)), /Tente novamente/)
 })

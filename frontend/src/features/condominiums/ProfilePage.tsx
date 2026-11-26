@@ -10,14 +10,6 @@ import { saveFlash, takeFlash } from './flash'
 const FLASH = 'perfil-atualizado'
 type Account = { nome: string; email: string; telefone: string | null }
 
-function rememberMessage(message: string) {
-  try {
-    sessionStorage.setItem('perfil-atualizado', message)
-  } catch {
-    /* A alteração já foi feita. */
-  }
-}
-
 export function ProfilePage() {
   const { client, snapshot } = useAuth()
   const [passwordError, setPasswordError] = useState('')
@@ -56,7 +48,7 @@ export function ProfilePage() {
     setPasswordPending(true)
     try {
       await client.changePassword(String(data.get('senha_atual') ?? ''), next, () =>
-        rememberMessage('Senha alterada. Os outros acessos à sua conta foram encerrados.'),
+        saveFlash(FLASH, 'Senha alterada. Os outros acessos à sua conta foram encerrados.'),
       )
       form.reset()
       setSuccess('Senha alterada. Os outros acessos à sua conta foram encerrados.')

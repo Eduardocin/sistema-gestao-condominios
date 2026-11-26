@@ -35,18 +35,23 @@ export function changePasswordError(error: unknown) {
   return generic
 }
 
+export function isInvalidResetToken(error: unknown) {
+  return responseOf(error)?.data?.error?.reason === 'token_invalido'
+}
+
 export function resetPasswordError(error: unknown) {
   const response = responseOf(error)
   if (response?.status === 429) return tooMany
-  if (response?.data?.error?.reason === 'token_invalido')
+  if (isInvalidResetToken(error))
     return 'Este link é inválido, expirou ou já foi usado. Solicite um novo e-mail de recuperação.'
   if (response?.status === 422)
-    return 'Confira a senha informada. Ela deve ter de 8 a 128 caracteres, com letra e número.'
+    return 'Confira a senha informada. Ela deve ter de 8 a 128 caracteres, com letra, número e diferente do e-mail.'
   return generic
 }
 
 export function recoveryRequestError(error: unknown) {
-  return responseOf(error)?.status === 429
-    ? tooMany
-    : 'Não foi possível enviar o pedido agora. Tente novamente.'
+  const status = responseOf(error)?.status
+  if (status === 429) return tooMany
+  if (status === 422) return 'Informe um e-mail válido.'
+  return 'Não foi possível enviar o pedido agora. Tente novamente.'
 }

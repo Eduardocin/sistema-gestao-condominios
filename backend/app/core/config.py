@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     @field_validator("frontend_base_url")
     @classmethod
     def validate_frontend_base_url(cls, value: str) -> str:
+        value = value.strip()
         parsed = urlsplit(value)
         if (
             parsed.scheme not in {"http", "https"}
@@ -123,8 +124,10 @@ class Settings(BaseSettings):
         """Em produção, nada de credencial de desenvolvimento nem CORS aberto (TASK-54)."""
         if self.app_env != "production":
             return self
-        if not self.frontend_base_url.startswith("https://"):
+        if urlsplit(self.frontend_base_url).scheme != "https":
             raise ValueError("FRONTEND_BASE_URL deve usar HTTPS em produção.")
+        if self.email_backend == "console":
+            raise ValueError("EMAIL_BACKEND não pode ser 'console' em produção; configure SMTP.")
         for origem in self.cors_origins:
             if origem.strip() == "*":
                 raise ValueError("CORS_ORIGINS não pode conter '*' em produção.")

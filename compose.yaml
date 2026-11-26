@@ -23,6 +23,9 @@ x-backend: &backend
     EMAIL_BACKEND: ${EMAIL_BACKEND:-smtp}
     SMTP_HOST: mailpit
     SMTP_PORT: "1025"
+    SMTP_USER: ""
+    SMTP_PASSWORD: ""
+    SMTP_STARTTLS: "false"
   volumes:
     - ./backend:/app
 

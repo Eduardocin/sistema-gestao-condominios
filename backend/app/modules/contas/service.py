@@ -122,6 +122,11 @@ def solicitar_recuperacao_senha(
 
 def enviar_email_recuperacao(mensagem: Mensagem, settings: Settings) -> None:
     """Entrega fora da transação HTTP; falha no provedor não invalida a solicitação."""
+    if settings.email_backend == "console":
+        logger.info(
+            "Envio de recuperação ignorado com EMAIL_BACKEND=console; configure SMTP/Mailpit."
+        )
+        return
     try:
         obter_backend(settings).enviar(mensagem)
     except Exception as erro:

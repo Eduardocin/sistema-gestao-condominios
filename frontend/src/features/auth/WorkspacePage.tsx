@@ -14,6 +14,7 @@ import { condominiumNotice, homePath, profileLabels } from './navigation'
 import { AccessDenied, RequireSession } from './SessionPages'
 import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
 import { MyCondominiums } from '../condominiums/MyCondominiums'
+import { ResidentNotices } from '../condominiums/ResidentNotices'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -26,12 +27,15 @@ const modules: Record<string, string[]> = {
     'Ocorrências',
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
-  administracao: ['Unidades e moradores', 'Funcionários', 'Aprovações'],
+  administracao: ['Unidades e moradores', 'Funcionários', 'Avisos'],
   plataforma: ['Condomínios', 'Administração da plataforma'],
   'sem-condominio': [],
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'administracao' && label === 'Avisos') {
+    return { to: '/app/administracao/avisos', action: 'Gerenciar avisos' }
+  }
   if (area === 'administracao' && label === 'Unidades e moradores') {
     return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
   }
@@ -137,7 +141,9 @@ export function WorkspacePage({ area }: { area: string }) {
           </Notice>
         )}
         {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
+        {area === 'morador' && <ResidentNotices />}
         {(area === 'sem-condominio' || area === 'morador') && <div><ButtonLink to="/app/vincular-unidade" variant="secondary">Vincular unidade</ButtonLink></div>}
+        {!identity.administrador_plataforma && <div><ButtonLink to="/app/perfil" variant="secondary">Editar perfil</ButtonLink></div>}
         {area === 'morador' && identity.unidades.some((unit) => unit.abas?.includes('usuarios')) && <div><ButtonLink to="/app/morador/permissoes" variant="secondary">Permissões dos moradores</ButtonLink></div>}
         <Card>
           <Heading level={2} size="md">

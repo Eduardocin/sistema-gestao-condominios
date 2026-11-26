@@ -37,7 +37,7 @@ Retornar apenas `id` e identificação/nome necessários ao formulário, com pag
 
 | Método e rota | Perfil / escopo | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `GET /encomendas` | Funcionário e Administração (condomínio); morador (suas unidades com aba ativa) | Query `busca`, `status`, `unidade_id` (opcional), `data_de`, `data_ate` (opcionais), `page`, `page_size` | 200, lista |
+| `GET /encomendas` | Funcionário e Administração (condomínio); morador (suas unidades com aba ativa) | Query `busca`, `status`, `unidade_id` (obrigatório para o Morador, opcional para os demais perfis), `data_de`, `data_ate` (opcionais), `page`, `page_size` | 200, lista |
 | `GET /encomendas/relatorio` | Administração | Query `data_de`, `data_ate`, `unidade_id` (opcionais) | 200, contagem por status e por unidade (proposta, ver `convivencia.md` §6.1) |
 | `GET /encomendas/{id}` | Mesmo escopo de leitura | — | 200, objeto com histórico |
 | `POST /encomendas` | Funcionário ativo | `multipart/form-data`: `unidade_id`, `destinatario_morador_unidade_id`, `descricao`, `recebido_por_funcionario_id`, `foto` e `transportadora` (opcional) | 201, objeto; `Location` do recurso |

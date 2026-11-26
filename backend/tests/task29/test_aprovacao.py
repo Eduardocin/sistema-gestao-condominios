@@ -189,6 +189,107 @@ def test_rejeicao_e_leitura_autorizada_do_motivo(client, session, caso):
     )
 
 
+def test_desativar_reativar_preserva_vinculos_e_registra_auditoria(client, session, caso):
+    headers = caso.a.cabecalho_de("plataforma")
+    desativacao = client.post(url(caso, "/desativacao"), headers=headers, json={})
+    assert desativacao.status_code == 200, desativacao.text
+    assert desativacao.json()["status"] == "desativado"
+    session.expire_all()
+    assert caso.a.condominio.status == "desativado"
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(VinculoCondominio)
+            .where(
+                VinculoCondominio.condominio_id == caso.a.condominio.id,
+                VinculoCondominio.ativo.is_(True),
+            )
+        )
+        == 3
+    )
+    assert (
+        client.get("/api/v1/unidades", headers=caso.a.cabecalho_de("administracao")).status_code
+        == 403
+    )
+
+    evento = session.scalars(
+        select(RegistroAuditoria).where(
+            RegistroAuditoria.condominio_id == caso.a.condominio.id,
+            RegistroAuditoria.acao == "condominio.desativar",
+        )
+    ).one()
+    assert evento.usuario_id == caso.a.adm.id and evento.perfil == "plataforma"
+    assert evento.antes == {"status": "ativo"}
+    assert evento.depois == {"status": "desativado"}
+    assert str(evento.ip) == "203.0.113.27"
+
+    reativacao = client.post(url(caso, "/reativacao"), headers=headers, json={})
+    assert reativacao.status_code == 200 and reativacao.json()["status"] == "ativo"
+    assert [item["evento"] for item in reativacao.json()["analises"]][-2:] == [
+        "desativado",
+        "reativado",
+    ]
+    assert (
+        client.get("/api/v1/unidades", headers=caso.a.cabecalho_de("administracao")).status_code
+        == 200
+    )
+    assert client.post(url(caso, "/reativacao"), headers=headers, json={}).status_code == 409
+
+
+@pytest.mark.parametrize("acao", ["desativacao", "reativacao"])
+def test_transicao_de_status_exige_ativo_ou_desativado(client, session, caso, acao):
+    pendente(session, caso)
+    resposta = client.post(
+        url(caso, f"/{acao}"),
+        headers=caso.a.cabecalho_de("plataforma"),
+        json={"campo_extra": "nao-permitido"},
+    )
+    assert resposta.status_code == 422
+    assert caso.a.condominio.status == "pendente"
+
+
+@pytest.mark.parametrize(
+    ("status", "acao"),
+    [("pendente", "desativacao"), ("ativo", "reativacao"), ("rejeitado", "reativacao")],
+)
+def test_status_so_muda_pelas_transicoes_permitidas(client, session, caso, status, acao):
+    caso.a.condominio.status = status
+    caso.a.condominio.motivo_rejeicao = "Cadastro incompleto" if status == "rejeitado" else None
+    session.commit()
+    resposta = client.post(
+        url(caso, f"/{acao}"), headers=caso.a.cabecalho_de("plataforma"), json={}
+    )
+    assert resposta.status_code == 409
+    assert resposta.json()["error"]["reason"] == "transicao_invalida"
+    session.refresh(caso.a.condominio)
+    assert caso.a.condominio.status == status
+
+
+@pytest.mark.parametrize("perfil", ["morador", "funcionario", "administracao"])
+def test_transicao_de_status_exclusiva_da_plataforma(client, caso, perfil):
+    resposta = client.post(
+        url(caso, "/desativacao"),
+        headers=caso.a.cabecalho_de(perfil),
+        json={},
+    )
+    assert resposta.status_code == 403
+
+
+def test_falha_de_auditoria_reverte_desativacao(client, session, caso, monkeypatch):
+    def falhar(*args, **kwargs):
+        raise RuntimeError("Falha simulada na auditoria")
+
+    monkeypatch.setattr(auditoria, "registrar_acao", falhar)
+    resposta = client.post(
+        url(caso, "/desativacao"),
+        headers=caso.a.cabecalho_de("plataforma"),
+        json={},
+    )
+    assert resposta.status_code == 500
+    session.refresh(caso.a.condominio)
+    assert caso.a.condominio.status == "ativo"
+
+
 @pytest.mark.parametrize(
     "corpo",
     [

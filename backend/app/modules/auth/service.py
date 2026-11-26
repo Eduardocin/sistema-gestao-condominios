@@ -49,8 +49,10 @@ class Acesso:
 
     @property
     def liberado(self) -> bool:
-        """R7: condomínio fora do ar só aceita a Administração (para corrigir o cadastro)."""
-        return self.status == "ativo" or self.perfil == "administracao"
+        """Admin corrige cadastro pendente/rejeitado, mas não opera condomínio desativado."""
+        return self.status == "ativo" or (
+            self.perfil == "administracao" and self.status in {"pendente", "rejeitado"}
+        )
 
 
 @dataclass(frozen=True)

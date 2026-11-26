@@ -208,7 +208,7 @@ def test_login_bem_sucedido_zera_o_contador(client, session):
     assert entrar(client, usuario).status_code == 200
 
 
-def test_condominio_fora_do_ar_nao_libera_morador_mas_libera_administracao(client, session):
+def test_condominio_desativado_nao_libera_perfil_local(client, session):
     morador, administracao = criar_usuario(session), criar_usuario(session)
     condominio = criar_condominio(session, ativo=False)
     vincular(session, morador, condominio, perfil="morador")
@@ -219,7 +219,8 @@ def test_condominio_fora_do_ar_nao_libera_morador_mas_libera_administracao(clien
 
     assert corpo_morador["condominio"] is None
     assert corpo_morador["condominios"][0]["status"] == "desativado"
-    assert corpo_adm["condominio"]["id"] == str(condominio.id)
+    assert corpo_adm["condominio"] is None
+    assert corpo_adm["condominios"][0]["status"] == "desativado"
 
 
 # --- selecionar condomínio ------------------------------------------------
@@ -274,6 +275,35 @@ def test_selecionar_condominio_fora_do_ar_da_403_para_morador(client, session):
 
     assert resposta.status_code == 403
     assert resposta.json()["error"]["code"] == "forbidden"
+
+
+def test_administracao_nao_inicia_acesso_a_condominio_desativado(client, session):
+    usuario = criar_usuario(session)
+    usuario.tipo_cadastro = "administracao"
+    condominio = criar_condominio(session, ativo=False)
+    vincular(session, usuario, condominio, perfil="administracao")
+    sessao = entrar(client, usuario).json()
+    assert sessao["condominio"] is None
+    assert sessao["condominios"][0]["status"] == "desativado"
+
+    resposta = client.post(
+        "/api/v1/auth/selecionar-condominio",
+        json={"condominio_id": str(condominio.id)},
+        headers=bearer(sessao["access_token"]),
+    )
+    assert resposta.status_code == 403
+
+
+@pytest.mark.parametrize("status", ["pendente", "rejeitado"])
+def test_administracao_ainda_acessa_cadastro_para_corrigir_e_reenviar(client, session, status):
+    usuario = criar_usuario(session)
+    usuario.tipo_cadastro = "administracao"
+    condominio = criar_condominio(session)
+    condominio.status = status
+    condominio.motivo_rejeicao = "Cadastro incompleto" if status == "rejeitado" else None
+    vincular(session, usuario, condominio, perfil="administracao")
+    sessao = entrar(client, usuario).json()
+    assert sessao["condominio"]["status"] == status
 
 
 # --- /me e proteção por token ---------------------------------------------

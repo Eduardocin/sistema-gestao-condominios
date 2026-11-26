@@ -3,7 +3,9 @@ import { Button, Card, Heading, Notice, Select } from '../../components'
 import { useAuth } from '../auth/context'
 import { ResidentWorkspace } from '../resident/ResidentWorkspace'
 import styles from '../resident/ResidentWorkspace.module.css'
+import { saveFlash, takeFlash } from './flash'
 
+const FLASH = 'permissoes-atualizadas'
 type Resident = { id: string; nome: string; eu: boolean; permissoes: Record<string, boolean> }
 const labels: Record<string, string> = {
   unidades: 'Unidades',
@@ -30,7 +32,7 @@ function Permissions() {
   const unit = units.find((item) => item.id === unitId) ?? units[0]
   const [residents, setResidents] = useState<Resident[]>([])
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [success, setSuccess] = useState(() => takeFlash(FLASH))
   const [busy, setBusy] = useState(false)
   const [revision, setRevision] = useState(0)
 
@@ -61,6 +63,7 @@ function Permissions() {
         { abas: resident.permissoes },
       )
       setSuccess('Permissões atualizadas.')
+      saveFlash(FLASH, 'Permissões atualizadas.')
       setRevision((value) => value + 1)
       await client.restore()
     } catch {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { supportScreensEnabled } from './feature-flag.ts'
 import { supportError } from './suporte-api.ts'
 
 export function useSupportQuery<T>(load: (signal: AbortSignal) => Promise<T>) {
@@ -36,44 +37,47 @@ export const dateTime = new Intl.DateTimeFormat('pt-BR', {
 })
 
 export function supportNavigation(area: 'administracao' | 'plataforma') {
-  return area === 'plataforma'
-    ? [
-        { key: 'overview', label: 'Visão geral', to: '/app/plataforma', symbol: '⌂' },
-        {
-          key: 'condominiums',
-          label: 'Condomínios',
-          to: '/app/plataforma/condominios',
-          symbol: '▤',
-        },
-        { key: 'support', label: 'Fila de suporte', to: '/app/plataforma/suporte', symbol: '☏' },
-        {
-          key: 'announcements',
-          label: 'Comunicados',
-          to: '/app/plataforma/comunicados',
-          symbol: '✉',
-        },
-      ]
-    : [
-        { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-        {
-          key: 'employees',
-          label: 'Funcionários',
-          to: '/app/administracao/funcionarios',
-          symbol: '♙',
-        },
-        { key: 'notices', label: 'Avisos', to: '/app/administracao/avisos', symbol: '◇' },
-        { key: 'support', label: 'Suporte', to: '/app/administracao/suporte', symbol: '☏' },
-        {
-          key: 'announcements',
-          label: 'Comunicados',
-          to: '/app/administracao/comunicados',
-          symbol: '✉',
-        },
-        {
-          key: 'packageReport',
-          label: 'Relatório de encomendas',
-          to: '/app/administracao/encomendas/relatorio',
-          symbol: '▣',
-        },
-      ]
+  const items =
+    area === 'plataforma'
+      ? [
+          { key: 'overview', label: 'Visão geral', to: '/app/plataforma', symbol: '⌂' },
+          {
+            key: 'condominiums',
+            label: 'Condomínios',
+            to: '/app/plataforma/condominios',
+            symbol: '▤',
+          },
+          { key: 'support', label: 'Fila de suporte', to: '/app/plataforma/suporte', symbol: '☏' },
+          {
+            key: 'announcements',
+            label: 'Comunicados',
+            to: '/app/plataforma/comunicados',
+            symbol: '✉',
+          },
+        ]
+      : [
+          { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
+          {
+            key: 'employees',
+            label: 'Funcionários',
+            to: '/app/administracao/funcionarios',
+            symbol: '♙',
+          },
+          { key: 'notices', label: 'Avisos', to: '/app/administracao/avisos', symbol: '◇' },
+          { key: 'support', label: 'Suporte', to: '/app/administracao/suporte', symbol: '☏' },
+          {
+            key: 'announcements',
+            label: 'Comunicados',
+            to: '/app/administracao/comunicados',
+            symbol: '✉',
+          },
+          {
+            key: 'packageReport',
+            label: 'Relatório de encomendas',
+            to: '/app/administracao/encomendas/relatorio',
+            symbol: '▣',
+          },
+        ]
+  const alwaysOn = ['overview', 'condominiums', 'employees', 'notices']
+  return supportScreensEnabled ? items : items.filter(({ key }) => alwaysOn.includes(key))
 }

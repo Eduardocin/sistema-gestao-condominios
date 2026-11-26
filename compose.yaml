@@ -102,6 +102,7 @@ services:
     environment:
       # Endereço usado pelo navegador (na sua máquina), não pelo container.
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+      VITE_SUPPORT_SCREENS: ${VITE_SUPPORT_SCREENS:-false}
       VITE_USE_POLLING: "true"
     ports:
       - "127.0.0.1:${WEB_PORT:-5173}:5173"

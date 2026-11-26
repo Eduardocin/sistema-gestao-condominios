@@ -15,6 +15,7 @@ import { AccessDenied, RequireSession } from './SessionPages'
 import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
 import { MyCondominiums } from '../condominiums/MyCondominiums'
 import { ResidentNotices } from '../condominiums/ResidentNotices'
+import { supportScreensEnabled } from '../suporte/feature-flag'
 import { supportNavigation } from '../suporte/support-state'
 import styles from './Auth.module.css'
 
@@ -39,6 +40,9 @@ const modules: Record<string, string[]> = {
   plataforma: ['Condomínios', 'Fila de suporte', 'Comunicados'],
   'sem-condominio': [],
 }
+
+// Atalhos das telas de suporte, comunicados e relatório: aparecem com VITE_SUPPORT_SCREENS=true.
+const hiddenUntilValidated = ['Relatório de encomendas', 'Suporte', 'Comunicados', 'Fila de suporte']
 
 function availableModule(area: string, label: string) {
   if (area === 'administracao' && label === 'Avisos') {
@@ -200,6 +204,7 @@ export function WorkspacePage({ area }: { area: string }) {
             <Text tone="secondary">Escolha um serviço disponível para sua área.</Text>
             <div className={styles.modules}>
               {modules[area].filter((label) => {
+                if (!supportScreensEnabled && hiddenUntilValidated.includes(label)) return false
                 if (area !== 'morador') return true
                 const tab = ({ Encomendas: 'packages', Visitantes: 'visitors', Veículos: 'vehicles', 'Reservar área': 'reserve', 'Minhas reservas': 'reservations', Ocorrências: 'occurrences' } as Record<string, string>)[label]
                 return !tab || identity.unidades.some((unit) => unit.abas?.includes(residentTabPermissions[tab]))

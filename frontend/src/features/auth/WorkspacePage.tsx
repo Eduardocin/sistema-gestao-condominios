@@ -28,7 +28,7 @@ const modules: Record<string, string[]> = {
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
   administracao: ['Unidades e moradores', 'Funcionários', 'Avisos'],
-  plataforma: ['Condomínios', 'Administração da plataforma'],
+  plataforma: ['Condomínios', 'Auditoria', 'Administração da plataforma'],
   'sem-condominio': [],
 }
 
@@ -38,6 +38,9 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'administracao' && label === 'Unidades e moradores') {
     return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
+  }
+  if (area === 'plataforma' && label === 'Auditoria') {
+    return { to: '/app/plataforma/auditoria', action: 'Consultar auditoria' }
   }
   if (area === 'plataforma' && label === 'Condomínios') {
     return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
@@ -108,6 +111,12 @@ export function WorkspacePage({ area }: { area: string }) {
             to: '/app/administracao/funcionarios',
             symbol: '♙',
           },
+        ]
+      : []),
+    ...(area === 'plataforma'
+      ? [
+          { key: 'approvals', label: 'Condomínios', to: '/app/plataforma/condominios', symbol: '▦' },
+          { key: 'audit', label: 'Auditoria', to: '/app/plataforma/auditoria', symbol: '☰' },
         ]
       : []),
     ...(area === 'portaria'

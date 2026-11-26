@@ -31,6 +31,7 @@ import {
   ResidentReservationsPage,
   ResidentReservePage,
 } from '../features/resident/ResidentReservationsPages'
+import { AuditPage } from '../features/auditoria/AuditPage'
 import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
 
 export const router = createBrowserRouter([
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
   { path: '/app', element: <AppEntry /> },
   { path: '/app/plataforma/condominios', element: <RequireSession><ApprovalPage /></RequireSession> },
   { path: '/app/cadastrar-condominio', element: <RequireSession><CondominiumWizard /></RequireSession> },
+  { path: '/app/plataforma/auditoria', element: <RequireSession><AuditPage /></RequireSession> },
   { path: '/app/administracao/chaves', element: <RequireSession><AccessKeysPage /></RequireSession> },
   { path: '/app/vincular-unidade', element: <RequireSession><ResidentLinkPage /></RequireSession> },
   { path: '/app/morador/permissoes', element: <RequireSession><ResidentPermissionsPage /></RequireSession> },

@@ -32,6 +32,9 @@ const modules: Record<string, string[]> = {
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'administracao' && label === 'Unidades e moradores') {
+    return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
+  }
   if (area === 'plataforma' && label === 'Condomínios') {
     return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
   }
@@ -134,6 +137,7 @@ export function WorkspacePage({ area }: { area: string }) {
           </Notice>
         )}
         {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
+        {(area === 'sem-condominio' || area === 'morador') && <div><ButtonLink to="/app/vincular-unidade" variant="secondary">Vincular unidade</ButtonLink></div>}
         <Card>
           <Heading level={2} size="md">
             Seu acesso

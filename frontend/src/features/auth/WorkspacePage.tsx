@@ -27,12 +27,26 @@ const modules: Record<string, string[]> = {
     'Ocorrências',
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
-  administracao: ['Unidades e moradores', 'Funcionários', 'Avisos', 'Áreas comuns', 'Reservas'],
+  administracao: [
+    'Condomínio e estrutura',
+    'Conta de funcionários',
+    'Unidades e moradores',
+    'Funcionários',
+    'Avisos',
+    'Áreas comuns',
+    'Reservas',
+  ],
   plataforma: ['Condomínios', 'Administração da plataforma'],
   'sem-condominio': [],
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'administracao' && label === 'Condomínio e estrutura') {
+    return { to: '/app/administracao/condominio', action: 'Editar condomínio e estrutura' }
+  }
+  if (area === 'administracao' && label === 'Conta de funcionários') {
+    return { to: '/app/administracao/conta-funcionarios', action: 'Gerenciar conta compartilhada' }
+  }
   if (area === 'administracao' && label === 'Avisos') {
     return { to: '/app/administracao/avisos', action: 'Gerenciar avisos' }
   }
@@ -108,6 +122,18 @@ export function WorkspacePage({ area }: { area: string }) {
     { key: 'overview', label: 'Visão geral', to: destination, symbol: '⌂' },
     ...(area === 'administracao'
       ? [
+          {
+            key: 'condominium-settings',
+            label: 'Condomínio e estrutura',
+            to: '/app/administracao/condominio',
+            symbol: '▦',
+          },
+          {
+            key: 'shared-account',
+            label: 'Conta de funcionários',
+            to: '/app/administracao/conta-funcionarios',
+            symbol: '♙',
+          },
           {
             key: 'employees',
             label: 'Funcionários',

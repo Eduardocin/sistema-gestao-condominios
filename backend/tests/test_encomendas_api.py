@@ -336,11 +336,35 @@ def test_morador_lista_somente_unidades_ativas_com_aba(client, session):
         unidade_id=predio.unidade_102.id,
     )
 
-    resposta = client.get("/api/v1/encomendas", headers=predio.cabecalho_de("morador"))
+    resposta = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"unidade_id": str(predio.unidade_101.id)},
+    )
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["total"] == 1
     assert [item["id"] for item in resposta.json()["items"]] == [str(da_unidade.id)]
     assert str(de_outra_unidade.id) not in resposta.text
+
+
+def test_morador_sem_unidade_id_recebe_422(client, session):
+    predio = montar_predio(session)
+    funcionario = criar_funcionario(session, predio)
+    permitir_aba_encomendas(session, predio)
+    criar_encomenda(session, predio, funcionario, descricao="Não deve aparecer")
+    session.commit()
+
+    resposta = client.get("/api/v1/encomendas", headers=predio.cabecalho_de("morador"))
+    assert resposta.status_code == 422, resposta.text
+    assert "unidade_id" in resposta.json()["error"]["message"]
+    assert "Não deve aparecer" not in resposta.text
+    # Com filtros, mas ainda sem a unidade, a regra continua valendo.
+    com_filtro = client.get(
+        "/api/v1/encomendas",
+        headers=predio.cabecalho_de("morador"),
+        params={"status": "aguardando_retirada", "data_de": "2030-01-01"},
+    )
+    assert com_filtro.status_code == 422, com_filtro.text
 
 
 def test_detalhe_de_outro_condominio_retorna_404(client, session):
@@ -1107,7 +1131,7 @@ def test_morador_filtra_a_propria_lista_por_periodo(client, session):
     resposta = client.get(
         "/api/v1/encomendas",
         headers=predio.cabecalho_de("morador"),
-        params={"data_de": "2030-06-01"},
+        params={"unidade_id": str(predio.unidade_101.id), "data_de": "2030-06-01"},
     )
     assert [i["id"] for i in resposta.json()["items"]] == [str(nova.id)]
     assert str(velha.id) not in resposta.text

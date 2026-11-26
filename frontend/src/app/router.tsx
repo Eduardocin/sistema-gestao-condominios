@@ -39,7 +39,6 @@ import {
   PlatformAnnouncementsPage,
   PlatformSupportPage,
 } from '../features/suporte/SupportPages'
-import { supportScreensEnabled } from '../features/suporte/feature-flag'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -128,16 +127,14 @@ export const router = createBrowserRouter([
     { path: '/app/administracao/encomendas/relatorio', Page: PackageReportPage },
     { path: '/app/plataforma/suporte', Page: PlatformSupportPage },
     { path: '/app/plataforma/comunicados', Page: PlatformAnnouncementsPage },
-  ]
-    .filter(() => supportScreensEnabled)
-    .map(({ path, Page }) => ({
-      path,
-      element: (
-        <RequireSession>
-          <Page />
-        </RequireSession>
-      ),
-    })),
+  ].map(({ path, Page }) => ({
+    path,
+    element: (
+      <RequireSession>
+        <Page />
+      </RequireSession>
+    ),
+  })),
   ...['morador', 'portaria', 'administracao', 'plataforma', 'sem-condominio'].map((area) => ({
     path: `/app/${area}`,
     element: <WorkspacePage area={area} />,

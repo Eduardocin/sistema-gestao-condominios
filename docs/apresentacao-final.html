@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão de Condomínios — Apresentação Final</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ===========================================
+   THEME — "Planta": blueprint in the site's Azul Safira
+   Tokens mirror frontend/src/styles/tokens.css
+   =========================================== */
+:root {
+    --safira: #0f52ba;
+    --navy: #0b2a63;
+    --navy-deep: #081d47;
+    --paper: #f8fafc;
+    --ink: #1e293b;
+    --ink-soft: #475569;
+    --line-dark: rgba(156, 192, 245, 0.14);
+    --line-light: rgba(15, 82, 186, 0.09);
+    --amber: #f59e0b;
+    --success: #10b981;
+    --font-display: 'Bricolage Grotesque', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --stage-bg: #050f26;
+    --slide-bg: #0b2a63;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* === FIXED 16:9 STAGE (from viewport-base.css) === */
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--stage-bg); }
+.deck-viewport { position: fixed; inset: 0; overflow: hidden; background: var(--stage-bg); }
+.deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0; background: var(--slide-bg); }
+.slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: block; visibility: hidden; opacity: 0; pointer-events: none; background: var(--slide-bg); }
+.slide.active, .slide.visible { visibility: visible; opacity: 1; pointer-events: auto; z-index: 1; }
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+@media print {
+    html, body { overflow: visible; height: auto; background: #fff; }
+    .deck-viewport { position: static; }
+    .deck-stage { position: static; transform: none !important; height: auto; }
+    .slide { position: relative; visibility: visible; opacity: 1; page-break-after: always; break-after: page; }
+}
+
+/* === SLIDE SURFACES === */
+.slide { font-family: var(--font-display); color: var(--paper); transition: opacity 0.45s ease, visibility 0.45s; }
+.slide.dark {
+    background-color: var(--navy);
+    background-image: linear-gradient(var(--line-dark) 1px, transparent 1px), linear-gradient(90deg, var(--line-dark) 1px, transparent 1px);
+    background-size: 60px 60px;
+}
+.slide.light {
+    background-color: var(--paper); color: var(--ink);
+    background-image: linear-gradient(var(--line-light) 1px, transparent 1px), linear-gradient(90deg, var(--line-light) 1px, transparent 1px);
+    background-size: 60px 60px;
+}
+.slide.amber { background: var(--amber); color: var(--navy-deep); }
+.inner { position: absolute; inset: 0; padding: 110px 120px 150px; display: flex; flex-direction: column; }
+
+/* === CHROME === */
+.chrome { position: absolute; left: 120px; right: 120px; bottom: 56px; display: flex; justify-content: space-between; font: 400 24px var(--font-mono); letter-spacing: 2px; opacity: 0.6; }
+.eyebrow { font: 500 26px var(--font-mono); letter-spacing: 5px; text-transform: uppercase; color: var(--amber); margin-bottom: 28px; }
+.light .eyebrow { color: var(--safira); }
+.amber .eyebrow { color: var(--navy-deep); }
+
+/* === TYPE === */
+h1 { font: 800 148px/0.95 var(--font-display); letter-spacing: -4px; }
+h1 span, h2 span { color: var(--amber); }
+.light h2 span { color: var(--safira); }
+h2 { font: 800 88px/1.02 var(--font-display); letter-spacing: -2.5px; max-width: 1560px; }
+h3 { font: 800 44px/1.1 var(--font-display); letter-spacing: -1px; margin-bottom: 14px; }
+.lead { font: 400 42px/1.35 var(--font-display); color: rgba(248, 250, 252, 0.82); max-width: 1250px; margin-top: 36px; }
+.light .lead { color: var(--ink-soft); }
+.body { font: 400 32px/1.4 var(--font-display); color: rgba(248, 250, 252, 0.8); }
+.light .body { color: var(--ink-soft); }
+.mono { font-family: var(--font-mono); }
+.fill { flex: 1; }
+
+/* === COMPONENTS === */
+.row { display: flex; gap: 36px; }
+.card { flex: 1; border: 2px solid rgba(156, 192, 245, 0.35); background: rgba(15, 82, 186, 0.28); padding: 44px; }
+.light .card { background: #fff; border-color: rgba(15, 82, 186, 0.25); }
+.card.on { background: var(--amber); border-color: var(--amber); color: var(--navy-deep); }
+.card.on .body { color: var(--navy-deep); }
+.num { font: 800 150px/1 var(--font-display); letter-spacing: -4px; color: var(--amber); }
+.light .num { color: var(--safira); }
+.idx { font: 500 28px var(--font-mono); color: var(--amber); letter-spacing: 3px; margin-bottom: 18px; }
+.light .idx { color: var(--safira); }
+.tbl { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.tbl th { font: 500 24px var(--font-mono); letter-spacing: 3px; text-transform: uppercase; text-align: left; padding: 18px 28px; color: var(--amber); border-bottom: 2px solid rgba(156, 192, 245, 0.5); }
+.tbl td { font: 400 32px/1.3 var(--font-display); padding: 26px 28px; border-bottom: 1px solid rgba(156, 192, 245, 0.25); vertical-align: top; }
+.tbl td:first-child { font-weight: 800; color: #fff; width: 26%; }
+.arrow { font: 500 72px var(--font-mono); color: var(--amber); align-self: center; }
+.node { border: 2px solid var(--amber); padding: 36px 40px; background: rgba(8, 29, 71, 0.6); }
+.node h3 { color: #fff; }
+.stat { font: 500 26px var(--font-mono); border: 2px solid var(--amber); color: var(--amber); padding: 14px 22px; }
+.plan { position: absolute; right: 120px; top: 150px; width: 640px; height: 800px; }
+.plan .u { position: absolute; width: 150px; height: 110px; border: 2px solid rgba(248, 250, 252, 0.4); }
+.plan .u.on { background: var(--amber); border-color: var(--amber); }
+.dim { position: absolute; right: 120px; top: 972px; font: 400 22px var(--font-mono); letter-spacing: 3px; opacity: 0.6; }
+.tick { font: 800 44px var(--font-display); }
+ul.list { list-style: none; }
+ul.list li { font: 400 36px/1.3 var(--font-display); padding: 16px 0 16px 44px; position: relative; border-bottom: 1px solid rgba(15, 82, 186, 0.15); }
+ul.list li::before { content: ''; position: absolute; left: 0; top: 30px; width: 20px; height: 20px; background: var(--safira); }
+.dark ul.list li { border-color: rgba(156, 192, 245, 0.25); }
+.dark ul.list li::before { background: var(--amber); }
+.note { font: 400 28px var(--font-mono); letter-spacing: 1px; opacity: 0.75; margin-top: 36px; }
+
+/* === ANIMATIONS === */
+.reveal { opacity: 0; transform: translateY(36px); }
+.slide.active .reveal { opacity: 1; transform: none; transition: opacity 0.8s var(--ease-out-expo), transform 0.8s var(--ease-out-expo); transition-delay: calc(var(--d, 0) * 110ms + 120ms); }
+.plan .u { opacity: 0; }
+.slide.active .plan .u { opacity: 1; transition: opacity 0.6s ease; transition-delay: calc(var(--d, 0) * 40ms + 300ms); }
+@keyframes blink { from { opacity: 0.55; } to { opacity: 1; } }
+.slide.active .plan .u.on { animation: blink 2.4s 1.4s infinite alternate; }
+
+/* === UI OUTSIDE STAGE === */
+.progress { position: fixed; left: 0; top: 0; height: 6px; background: var(--amber); z-index: 1000; transition: width 0.4s var(--ease-out-expo); }
+.hint { position: fixed; right: 18px; bottom: 14px; font: 400 14px var(--font-mono); color: rgba(255, 255, 255, 0.35); z-index: 1000; }
+[contenteditable="true"] { outline: 2px dashed var(--amber); outline-offset: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none !important; }
+    .plan .u { opacity: 1; transition: none !important; animation: none !important; }
+    .slide { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="deck-viewport">
+<div class="deck-stage" id="stage">
+
+<!-- === 01 CAPA === -->
+<section class="slide dark" data-label="Capa">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Apresentação final · 2026</p>
+    <h1 class="reveal" style="--d:1;margin-top:150px;width:1150px">Gestão de <span>Condomínios</span></h1>
+    <p class="lead reveal" style="--d:2;width:1000px">Uma plataforma, vários condomínios, cada um isolado dos demais e com o histórico preservado.</p>
+    <div class="fill"></div>
+    <div class="row reveal" style="--d:3;gap:24px">
+      <p class="stat">52 user stories</p><p class="stat">19 módulos</p><p class="stat">81 arquivos de teste</p>
+    </div>
+  </div>
+  <div class="plan" id="plan"></div>
+  <p class="dim">UNIDADE 302 · BLOCO A</p>
+</section>
+
+<!-- === 02 PROBLEMA === -->
+<section class="slide light" data-label="Problema">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">O problema</p>
+    <h2 class="reveal" style="--d:1">Quando uma encomenda some, ninguém prova <span>quem recebeu</span>.</h2>
+    <div class="fill"></div>
+    <div class="row">
+      <div class="card reveal" style="--d:2"><p class="idx">01</p><h3>Caderno da portaria</h3><p class="body">Some o caderno, some a prova.</p></div>
+      <div class="card reveal" style="--d:3"><p class="idx">02</p><h3>Grupos de WhatsApp</h3><p class="body">Visita liberada sem histórico consultável.</p></div>
+      <div class="card reveal" style="--d:4"><p class="idx">03</p><h3>Mural e combinados</h3><p class="body">Reserva e avisos sem regra e sem conflito detectado.</p></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 03 SOLUÇÃO === -->
+<section class="slide dark" data-label="Solução">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">A solução</p>
+    <h2 class="reveal" style="--d:1">Uma plataforma, <span>quatro perfis</span>.</h2>
+    <div class="fill"></div>
+    <div class="row">
+      <div class="card reveal" style="--d:2"><p class="idx">ADM</p><h3>Administração</h3><p class="body">Estrutura, funcionários, áreas comuns, avisos e relatórios.</p></div>
+      <div class="card reveal" style="--d:3"><p class="idx">MOR</p><h3>Morador</h3><p class="body">Vínculo por chave, visitantes, reservas e ocorrências.</p></div>
+      <div class="card reveal" style="--d:4"><p class="idx">POR</p><h3>Portaria</h3><p class="body">Encomendas com foto, entrada e saída de visitantes.</p></div>
+      <div class="card on reveal" style="--d:5"><p class="idx" style="color:var(--navy-deep)">PLT</p><h3>ADM da plataforma</h3><p class="body">Aprova condomínios e audita, sem acesso operacional.</p></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 04 ESCOPO === -->
+<section class="slide light" data-label="Escopo">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Escopo e entrega</p>
+    <h2 class="reveal" style="--d:1">O que o projeto entrega, <span>em números</span>.</h2>
+    <div class="fill"></div>
+    <div class="row">
+      <div class="card reveal" style="--d:2"><p class="num">52</p><h3>user stories</h3><p class="body">31 Must, 19 Should, 2 Could</p></div>
+      <div class="card reveal" style="--d:3"><p class="num">19</p><h3>módulos</h3><p class="body">~18,7 mil linhas de Python</p></div>
+      <div class="card reveal" style="--d:4"><p class="num">81</p><h3>arquivos de teste</h3><p class="body">Contra PostgreSQL real</p></div>
+    </div>
+    <p class="note reveal" style="--d:5">FORA DO MVP: boletos · financeiro · documentos · login facial · WhatsApp · SMS · app nativo</p>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 05 ARQUITETURA === -->
+<section class="slide dark" data-label="Arquitetura">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Arquitetura</p>
+    <h2 class="reveal" style="--d:1">Monólito modular em <span>quatro camadas</span>.</h2>
+    <div class="fill"></div>
+    <div class="row" style="gap:28px;align-items:stretch">
+      <div class="node reveal" style="--d:2;width:430px"><h3>React 19</h3><p class="body">TypeScript, Vite, Router, Axios</p></div>
+      <p class="arrow reveal" style="--d:3">→</p>
+      <div class="node reveal" style="--d:3;width:560px"><h3>FastAPI</h3><p class="body">Router → Service → Repository, Pydantic v2</p></div>
+      <p class="arrow reveal" style="--d:4">→</p>
+      <div class="reveal" style="--d:4;flex:1;display:flex;flex-direction:column;gap:16px">
+        <p class="body node" style="padding:20px 28px"><b>PostgreSQL 17</b> · isolamento</p>
+        <p class="body node" style="padding:20px 28px"><b>MinIO</b> · bucket privado</p>
+        <p class="body node" style="padding:20px 28px"><b>Outbox</b> · fila de e-mail</p>
+      </div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 06 SEGURANÇA === -->
+<section class="slide light" data-label="Segurança">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Segurança e privacidade</p>
+    <h2 class="reveal" style="--d:1">O condomínio vem do <span>token</span>, nunca da requisição.</h2>
+    <div class="fill"></div>
+    <div class="row" style="flex-wrap:wrap">
+      <div class="card reveal" style="--d:2;flex:1 1 45%"><p class="idx">01</p><h3>Campo proibido</h3><p class="body">condominio_id no corpo é rejeitado com 422.</p></div>
+      <div class="card reveal" style="--d:3;flex:1 1 45%"><p class="idx">02</p><h3>404 uniforme</h3><p class="body">Outro condomínio responde como inexistente.</p></div>
+      <div class="card reveal" style="--d:4;flex:1 1 45%"><p class="idx">03</p><h3>Perfil lido do banco</h3><p class="body">Revogar acesso vale na próxima requisição.</p></div>
+      <div class="card reveal" style="--d:5;flex:1 1 45%"><p class="idx">04</p><h3>Arquivos privados</h3><p class="body">Download por URL assinada de 60 segundos.</p></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 07 DEMO === -->
+<section class="slide dark" data-label="Demonstração">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Demonstração · 4 minutos</p>
+    <h2 class="reveal" style="--d:1">Do cadastro à <span>retirada da encomenda</span>.</h2>
+    <div class="fill"></div>
+    <div class="row">
+      <div class="card reveal" style="--d:2"><p class="num" style="font-size:110px">1</p><h3>Cadastro</h3><p class="body">Condomínio cadastrado e aprovado pelo ADM.</p></div>
+      <div class="card reveal" style="--d:3"><p class="num" style="font-size:110px">2</p><h3>Vínculo</h3><p class="body">Morador entra na unidade pela chave.</p></div>
+      <div class="card reveal" style="--d:4"><p class="num" style="font-size:110px">3</p><h3>Encomenda</h3><p class="body">Registro com foto e retirada confirmada.</p></div>
+      <div class="card on reveal" style="--d:5"><p class="num" style="font-size:110px;color:var(--navy-deep)">4</p><h3>Isolamento</h3><p class="body">Condomínio A lê o B e recebe 404.</p></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 08 QUALIDADE === -->
+<section class="slide light" data-label="Qualidade">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Qualidade</p>
+    <h2 class="reveal" style="--d:1">Cada PR passa por <span>CI</span> e testes negativos.</h2>
+    <div class="fill"></div>
+    <div class="row" style="gap:80px">
+      <div class="reveal" style="--d:2;flex:1"><h3>GitHub Actions</h3>
+        <ul class="list"><li>Ruff e Mypy</li><li>Pytest em PostgreSQL real</li><li>ESLint e TypeScript</li><li>Migrations em banco limpo</li></ul></div>
+      <div class="reveal" style="--d:3;flex:1"><h3>Casos negativos</h3>
+        <ul class="list"><li>Outro condomínio</li><li>Outra unidade do morador</li><li>Perfil errado</li><li>Aba sem acesso</li></ul></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 09 DECISÕES 1 === -->
+<section class="slide dark" data-label="Decisões 1">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Decisões técnicas · 1 de 2</p>
+    <h2 class="reveal" style="--d:1">Arquitetura e <span>dados</span>.</h2>
+    <table class="tbl reveal" style="--d:2;margin-top:48px">
+      <tr><th>Decisão</th><th>Por quê</th><th>Custo assumido</th></tr>
+      <tr><td>Monólito modular</td><td>Equipe pequena, transação local, um comando para rodar</td><td>Disciplina nas fronteiras entre módulos</td></tr>
+      <tr><td>Isolamento por condominio_id</td><td>Filtro automático no repositório base</td><td>Sem RLS: SQL fora do repository vazaria dados</td></tr>
+      <tr><td>SQLAlchemy síncrono</td><td>Simples de depurar; sem carga que exija async</td><td>Menor concorrência por processo</td></tr>
+      <tr><td>FK composta e constraints</td><td>Unidade de outro prédio é impossível no banco</td><td>Migrations coordenadas, validadas no CI</td></tr>
+    </table>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 10 DECISÕES 2 === -->
+<section class="slide dark" data-label="Decisões 2">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Decisões técnicas · 2 de 2</p>
+    <h2 class="reveal" style="--d:1">Sessão, arquivos e <span>e-mail</span>.</h2>
+    <table class="tbl reveal" style="--d:2;margin-top:48px">
+      <tr><th>Decisão</th><th>Por quê</th><th>Custo assumido</th></tr>
+      <tr><td>JWT com versão de sessão</td><td>Trocar credencial invalida tokens antigos</td><td>Uma consulta de vínculo por requisição</td></tr>
+      <tr><td>Contas compartilhadas</td><td>Porteiro troca de turno; auditoria guarda o nome</td><td>Identificação do operador é declaratória</td></tr>
+      <tr><td>MinIO privado, URL assinada</td><td>Arquivo fora do banco, compatível com S3</td><td>Mais um serviço no Compose</td></tr>
+      <tr><td>Outbox de e-mail no banco</td><td>Evento grava junto do fato; envio não derruba a operação</td><td>Entrega assíncrona, exige worker</td></tr>
+    </table>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 11 PRINCÍPIO === -->
+<section class="slide amber" data-label="Princípio">
+  <div class="inner" style="justify-content:center">
+    <p class="eyebrow reveal" style="--d:0">O princípio</p>
+    <h1 class="reveal" style="--d:1;font-size:96px;line-height:1.05;width:1560px">Onde o erro é caro, a regra fica no banco e na camada comum.</h1>
+    <p class="lead reveal" style="--d:2;color:var(--navy-deep)">Onde é barato, uma tela ou um relatório, vale a solução mais simples.</p>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 12 DEFESA === -->
+<section class="slide light" data-label="Defesa">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Defesa</p>
+    <h2 class="reveal" style="--d:1">As perguntas difíceis, com <span>respostas honestas</span>.</h2>
+    <div class="fill"></div>
+    <div class="row">
+      <div class="card reveal" style="--d:2"><h3>“Isolamento só na aplicação é frágil?”</h3><p class="body">É. Filtro automático, FK composta e testes com dois condomínios mitigam. RLS está avaliada no ADR 0002.</p></div>
+      <div class="card reveal" style="--d:3"><h3>“Por que poucas telas?”</h3><p class="body">Priorizamos o que não se refaz: isolamento, permissões e histórico.</p></div>
+      <div class="card reveal" style="--d:4"><h3>“Já envia e-mail?”</h3><p class="body">Fila e worker existem. SMTP em produção ainda não está confirmado.</p></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 13 ESTADO === -->
+<section class="slide dark" data-label="Estado atual">
+  <div class="inner">
+    <p class="eyebrow reveal" style="--d:0">Estado atual</p>
+    <h2 class="reveal" style="--d:1">O que está pronto e o que <span>falta</span>.</h2>
+    <div class="fill"></div>
+    <div class="row" style="gap:80px">
+      <div class="reveal" style="--d:2;flex:1"><h3>Pronto</h3>
+        <ul class="list"><li>Backend nos recortes do README</li><li>Telas de acesso, funcionários, encomendas</li><li>CI, migrations e isolamento testados</li></ul></div>
+      <div class="reveal" style="--d:3;flex:1"><h3>Pendente</h3>
+        <ul class="list"><li>Telas da maioria dos fluxos</li><li>SMTP em produção, recuperação de senha</li><li>Convites, CSV, teste de carga, deploy</li></ul></div>
+    </div>
+  </div>
+  <div class="chrome"><span>GESTÃO DE CONDOMÍNIOS</span><span class="pg"></span></div>
+</section>
+
+<!-- === 14 ENCERRAMENTO === -->
+<section class="slide dark" data-label="Encerramento">
+  <div class="inner" style="justify-content:center">
+    <p class="eyebrow reveal" style="--d:0">Encerramento</p>
+    <h1 class="reveal" style="--d:1;font-size:96px;line-height:1.05;width:1500px">Fundação certa primeiro, <span>interface depois</span>.</h1>
+    <p class="lead reveal" style="--d:2">O custo de errar o isolamento de dados é maior que o de uma tela faltando.</p>
+    <p class="mono reveal" style="--d:3;margin-top:80px;font-size:44px;color:var(--amber);letter-spacing:4px">PERGUNTAS?</p>
+  </div>
+</section>
+
+</div>
+</div>
+<p class="hint">← → navegar · E editar · F tela cheia</p>
+
+<script>
+/* === STAGE SCALING === */
+const stage = document.getElementById('stage');
+function fit() {
+    const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+}
+addEventListener('resize', fit); fit();
+
+/* === BLUEPRINT FLOOR PLAN ON COVER === */
+const plan = document.getElementById('plan');
+for (let r = 0; r < 6; r++) for (let c = 0; c < 4; c++) {
+    const d = document.createElement('div');
+    d.className = 'u' + (r === 2 && c === 1 ? ' on' : '');
+    d.style.cssText = `left:${c * 163}px;top:${r * 135}px;--d:${r * 4 + c}`;
+    plan.appendChild(d);
+}
+
+/* === NAVIGATION === */
+const slides = [...document.querySelectorAll('.slide')];
+const bar = document.getElementById('progress');
+let cur = 0;
+slides.forEach((s, i) => { const pg = s.querySelector('.pg'); if (pg) pg.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(slides.length).padStart(2, '0'); });
+function go(n) {
+    cur = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, i) => s.classList.toggle('active', i === cur));
+    bar.style.width = ((cur + 1) / slides.length * 100) + '%';
+    history.replaceState(null, '', '#' + (cur + 1));
+}
+addEventListener('keydown', e => {
+    if (document.activeElement && document.activeElement.isContentEditable) return;
+    if (['ArrowRight', 'ArrowDown', ' ', 'PageDown'].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'f' || e.key === 'F') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
+    else if (e.key === 'e' || e.key === 'E') {
+        const on = document.body.dataset.edit !== '1'; document.body.dataset.edit = on ? '1' : '';
+        document.querySelectorAll('.slide h1,.slide h2,.slide h3,.slide p,.slide li,.slide td').forEach(el => el.contentEditable = on ? 'true' : 'false');
+    }
+});
+let tx = null;
+addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+addEventListener('touchend', e => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 50) go(cur + (dx < 0 ? 1 : -1)); tx = null; });
+addEventListener('click', e => { if (document.body.dataset.edit === '1') return; go(cur + (e.clientX > innerWidth / 2 ? 1 : -1)); });
+go(Math.max(0, (parseInt(location.hash.slice(1)) || 1) - 1));
+</script>
+</body>
+</html>

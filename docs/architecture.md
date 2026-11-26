@@ -173,7 +173,7 @@ O módulo de [permissões por aba](../backend/app/modules/permissoes_aba/README.
 
 ## Configuração e falhas
 
-Pydantic Settings lê `.env` na raiz por caminho absoluto; variáveis do processo têm precedência. A URL SQLAlchemy é montada com `URL.create`, preservando senhas com caracteres especiais. `DATABASE_URL`, quando informada, substitui os campos separados. Logs básicos usam nível configurável; SQL echo permanece desligado.
+Pydantic Settings lê `.env` na raiz por caminho absoluto; variáveis do processo têm precedência. A URL SQLAlchemy é montada com `URL.create`, preservando senhas com caracteres especiais. `DATABASE_URL`, quando informada, substitui os campos separados. Logs básicos usam nível configurável; SQL echo permanece desligado. Os handlers da raiz, do uvicorn e do SQLAlchemy passam por um filtro que redige CPF, CNPJ, e-mail, JWT e segredos, e o log de acesso perde a query string; todas as respostas levam cabeçalhos de segurança, e em produção a documentação da API fica desligada ([proteção de dados](protecao-de-dados.md)).
 
 Erros HTTP, validação e exceções inesperadas usam o envelope documentado em `api-contracts/health.md`. Respostas inesperadas não devolvem detalhes internos. CORS permite por padrão somente as origens locais indicadas no exemplo. CORS não substitui autorização. O health é liveness da API, não readiness do banco.
 

@@ -4,7 +4,7 @@ Backend da TASK-31 com os complementos da US-209, baseado em `docs/api-contracts
 
 | Rota | Acesso e resposta |
 | --- | --- |
-| `GET /api/v1/funcionarios` | Administração: dados completos; Funcionário: somente `id` e `nome` dos ativos |
+| `GET /api/v1/funcionarios` | Administração: resumo com telefone mascarado (só os 4 últimos dígitos; o completo fica em `GET /funcionarios/{id}`, TASK-54); Funcionário: somente `id` e `nome` dos ativos |
 | `POST /api/v1/funcionarios` | Administração; `201` com o funcionário criado |
 | `GET /api/v1/funcionarios/{id}` | Administração; objeto com o mesmo schema do cadastro, inclusive desligados |
 | `PUT /api/v1/funcionarios/{id}` | Administração; corrige dados com as mesmas validações do cadastro |

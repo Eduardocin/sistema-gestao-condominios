@@ -55,7 +55,10 @@ def test_detalhe_autorizado_reutiliza_resposta_do_cadastro(client, caso):
     resposta = client.get(f"{BASE}/{caso.id}", headers=headers)
     assert resposta.status_code == 200
     lista = client.get(BASE, headers=headers).json()["items"]
-    assert resposta.json() == next(item for item in lista if item["id"] == caso.id)
+    item = next(item for item in lista if item["id"] == caso.id)
+    # TASK-54: a lista mascara o telefone; o detalhe traz o número completo.
+    completo = resposta.json()["telefone"]
+    assert item == resposta.json() | {"telefone": "*" * (len(completo) - 4) + completo[-4:]}
     assert set(resposta.json()) == {
         "id",
         "nome",

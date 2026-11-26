@@ -96,11 +96,17 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"CORS_ORIGINS só aceita origens https:// em produção (recebido: {origem})."
                 )
-        sem_database_url = not (self.database_url and self.database_url.get_secret_value())
-        if sem_database_url and self.postgres_password.get_secret_value() == DEV_POSTGRES_PASSWORD:
+        url_database = self.database_url.get_secret_value() if self.database_url else ""
+        if url_database:
+            senha_na_url = make_url(url_database).password
+            if senha_na_url == DEV_POSTGRES_PASSWORD:
+                raise ValueError(
+                    "Defina uma senha própria em DATABASE_URL: a senha padrão do banco "
+                    "não vale em produção."
+                )
+        elif self.postgres_password.get_secret_value() == DEV_POSTGRES_PASSWORD:
             raise ValueError(
-                "Defina POSTGRES_PASSWORD ou DATABASE_URL próprios: a senha padrão do banco "
-                "não vale em produção."
+                "Defina POSTGRES_PASSWORD próprio: a senha padrão do banco não vale em produção."
             )
         if (
             self.storage_access_key.get_secret_value() == DEV_STORAGE_ACCESS_KEY

@@ -22,6 +22,9 @@ import { ResidentVisitorsPage } from '../features/resident/ResidentVisitorsPage'
 import { ResidentVehiclesPage } from '../features/resident/ResidentVehiclesPage'
 import { ApprovalPage } from '../features/condominiums/ApprovalPage'
 import { CondominiumWizard } from '../features/condominiums/CondominiumWizard'
+import { AccessKeysPage } from '../features/condominiums/AccessKeysPage'
+import { ResidentLinkPage } from '../features/condominiums/ResidentLinkPage'
+import { ResidentPermissionsPage } from '../features/condominiums/ResidentPermissionsPage'
 import {
   ResidentReservationsPage,
   ResidentReservePage,
@@ -44,6 +47,9 @@ export const router = createBrowserRouter([
   { path: '/app', element: <AppEntry /> },
   { path: '/app/plataforma/condominios', element: <RequireSession><ApprovalPage /></RequireSession> },
   { path: '/app/cadastrar-condominio', element: <RequireSession><CondominiumWizard /></RequireSession> },
+  { path: '/app/administracao/chaves', element: <RequireSession><AccessKeysPage /></RequireSession> },
+  { path: '/app/vincular-unidade', element: <RequireSession><ResidentLinkPage /></RequireSession> },
+  { path: '/app/morador/permissoes', element: <RequireSession><ResidentPermissionsPage /></RequireSession> },
   {
     path: '/app/administracao/funcionarios',
     element: (

@@ -62,7 +62,7 @@ export function ResidentPackagesPage() {
 function ResidentPackages() {
   const { client, snapshot } = useAuth()
   const api = useMemo(() => createEncomendasClient(client.http), [client])
-  const units = snapshot.identity?.unidades ?? []
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes('encomendas'))
   const [unitId, setUnitId] = useState(() => units[0]?.id ?? '')
   const activeUnit = units.some((unit) => unit.id === unitId) ? unitId : (units[0]?.id ?? '')
   const [loadedUnit, setLoadedUnit] = useState('')

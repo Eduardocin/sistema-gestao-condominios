@@ -13,6 +13,7 @@ import { useAuth } from './context'
 import { condominiumNotice, homePath, profileLabels } from './navigation'
 import { AccessDenied, RequireSession } from './SessionPages'
 import { residentNavigation } from '../resident/resident-navigation'
+import { MyCondominiums } from '../condominiums/MyCondominiums'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -31,6 +32,9 @@ const modules: Record<string, string[]> = {
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'plataforma' && label === 'Condomínios') {
+    return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
+  }
   if (area === 'administracao' && label === 'Funcionários') {
     return { to: '/app/administracao/funcionarios', action: 'Gerenciar funcionários' }
   }
@@ -129,6 +133,7 @@ export function WorkspacePage({ area }: { area: string }) {
             {notice.message}
           </Notice>
         )}
+        {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
         <Card>
           <Heading level={2} size="md">
             Seu acesso

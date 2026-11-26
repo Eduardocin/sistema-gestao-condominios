@@ -27,7 +27,14 @@ const modules: Record<string, string[]> = {
     'Ocorrências',
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
-  administracao: ['Unidades e moradores', 'Funcionários', 'Avisos', 'Áreas comuns', 'Reservas'],
+  administracao: [
+    'Unidades e moradores',
+    'Funcionários',
+    'Avisos',
+    'Áreas comuns',
+    'Reservas',
+    'Ocorrências',
+  ],
   plataforma: ['Condomínios', 'Administração da plataforma'],
   'sem-condominio': [],
 }
@@ -50,6 +57,9 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'administracao' && label === 'Reservas') {
     return { to: '/app/administracao/reservas', action: 'Gerenciar reservas' }
+  }
+  if (area === 'administracao' && label === 'Ocorrências') {
+    return { to: '/app/administracao/ocorrencias', action: 'Tratar ocorrências' }
   }
   if (area === 'portaria' && label === 'Recebimento e retirada de encomendas') {
     return { to: '/app/portaria/encomendas', action: 'Acessar encomendas' }

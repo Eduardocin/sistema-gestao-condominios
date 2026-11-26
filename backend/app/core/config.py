@@ -73,6 +73,21 @@ class Settings(BaseSettings):
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
 
+    # E-mail assíncrono (US-803, plataforma.md seção 6). `console` escreve no log em vez de
+    # enviar: é o padrão em desenvolvimento e nos testes.
+    email_backend: Literal["console", "smtp"] = "console"
+    smtp_host: str = "localhost"
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    smtp_user: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str = "nao-responda@example.test"
+    smtp_starttls: bool = False
+    smtp_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    # O worker da fila roda no processo da API (uma instância; ADR 0001) quando ligado.
+    email_worker_ativo: bool = False
+    email_worker_intervalo_seconds: int = Field(default=30, ge=1, le=3600)
+    email_max_tentativas: int = Field(default=3, ge=1, le=10)
+
     @model_validator(mode="after")
     def _validar_segredo_jwt(self) -> Self:
         segredo = self.jwt_secret_key.get_secret_value()

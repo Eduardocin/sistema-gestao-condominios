@@ -127,6 +127,7 @@ Mensagens de 403 e 404 são genéricas e não citam o recurso, o condomínio ou 
 | Comunicados da plataforma | — | — | V (C), os que lhe foram enviados | V C D (P) |
 | Chamados de suporte | — | — | V C (C), e mensagens no chamado | V E (P), atender |
 | Auditoria | — | — | — | V (P) |
+| Envios de e-mail (fila, US-803) | — | — | — | V E (P): acompanhar e reenviar |
 
 Regras que a tabela não mostra:
 

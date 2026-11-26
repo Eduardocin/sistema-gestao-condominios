@@ -394,11 +394,7 @@ e versão, nunca senha, hash ou tokens. Esta entrega não implementa a US-208.
 
 ## 6. E-mail assíncrono (US-803, Should, Sprint 3)
 
-**Estado atual:** aprovação de condomínio, registro de encomenda e cancelamento
-administrativo de reserva já enfileiram eventos na outbox. Processamento assíncrono,
-entrega SMTP e reenvio não estão implementados; a TASK-50 foi integralmente adiada.
-As interfaces e rotas descritas abaixo são o contrato planejado. Solicitação de
-recuperação e entrega do e-mail ainda são necessárias para completar a US-102.
+**Estado atual (TASK-50):** a fila `envios_email` recebe os eventos `condominio_aprovado`, `encomenda_registrada` e `reserva_cancelada`, e um **worker** a esvazia: monta o corpo a partir do banco, entrega por SMTP (ou escreve no log, em `console`), marca `enviado` e tenta de novo em caso de erro. O ADM da plataforma acompanha a fila e reenvia o que falhou (6.3). **Pendente:** o evento `recuperacao_senha`, cuja solicitação ainda não enfileira nada e depende do token em memória (ver o ponto de atenção abaixo).
 
 ### 6.1 Eventos cobertos
 
@@ -420,6 +416,8 @@ class EventoEmail(StrEnum):
     ENCOMENDA_REGISTRADA = "encomenda_registrada"
     RESERVA_CANCELADA = "reserva_cancelada"
 
+# Planejado: hoje cada módulo insere o `EnvioEmail` na própria transação (padrão em
+# condominios, encomendas e reservas); um helper único fica para quando houver mais eventos.
 def enfileirar_email(
     session: Session, *, evento: EventoEmail, destinatario: str,
     condominio_id: UUID | None, recurso_tipo: str, recurso_id: UUID,
@@ -429,16 +427,16 @@ def enfileirar_email(
 Como funciona, em quatro passos:
 
 1. O módulo chama `enfileirar_email` **dentro da transação da operação principal**. A linha entra em `envios_email` com `status = 'pendente'`. Se a operação falhar e der rollback, o e-mail some junto; se der certo, o e-mail está garantido na fila (padrão "outbox").
-2. Depois do `commit`, a rota agenda o envio com `BackgroundTasks` do FastAPI; o envio roda **depois de a resposta sair**, sem esperar o SMTP para responder. A tarefa usa uma sessão própria do banco, não a sessão encerrada da requisição. Não há Redis nem Celery (decisão do ADR 0001).
-3. A tarefa monta o corpo **a partir do banco** (pelo `recurso_tipo` e `recurso_id`), envia por SMTP e marca `enviado` e `enviado_em`. Em erro, incrementa `tentativas`, grava `ultimo_erro` (sem dados sensíveis) e tenta de novo até 3 vezes, com intervalos curtos (proposta: 30 s e 2 min); esgotadas, `status = 'falhou'`. **A falha do e-mail nunca desfaz nem bloqueia a operação principal** (critério de aceite).
+2. **Um worker esvazia a fila.** Ele roda a cada `EMAIL_WORKER_INTERVALO_SECONDS` (30 s por padrão), dentro do processo da API quando `EMAIL_WORKER_ATIVO=true`, ou sozinho com `python -m app.modules.notificacoes.worker`. Pega um envio `pendente` por vez, do mais antigo ao mais novo, com `SELECT ... FOR UPDATE SKIP LOCKED`: mais de um worker pode rodar sem enviar a mesma mensagem duas vezes. Sem Redis nem Celery (decisão do ADR 0001). Desta forma o e-mail não depende de a rota lembrar de agendar nada, e um reinício da API não perde envio: o que estava `pendente` continua `pendente` e o worker retoma.
+3. O worker monta o corpo **a partir do banco** (pelo `recurso_tipo` e `recurso_id`, sempre com o `condominio_id` do envio), entrega e marca `enviado` e `enviado_em`. Em erro, incrementa `tentativas` e grava `ultimo_erro` com **só o tipo do erro** (e o código, no erro SMTP), nunca a mensagem, que poderia trazer o endereço. O envio volta na rodada seguinte, então o intervalo do worker é o espaçamento entre as tentativas; na terceira falha (`EMAIL_MAX_TENTATIVAS`), `status = 'falhou'`. Recurso que deixou de existir ou evento sem modelo vira `falhou` de uma vez, com `ultimo_erro` `recurso_inexistente` ou `evento_sem_modelo`: repetir não muda o texto. **A falha do e-mail nunca desfaz nem bloqueia a operação principal** (critério de aceite).
 4. Quem acompanha e reenvia é o ADM (6.3).
 
 O destinatário vem do banco, nunca de um campo livre do cliente. O corpo do e-mail não inclui segredos além do necessário ao evento (o link de recuperação de senha é o único).
 
 **Pontos de atenção:**
 
-- **Recuperação de senha não se reenvia.** O link contém um token que só existe em texto no instante do envio (o banco guarda `token_hash`). Um reenvio manual exigiria gerar outro token; por isso `reenvio` de `recuperacao_senha` retorna 409 (`reason: "reenvio_nao_permitido"`) e a pessoa pede de novo. Como o corpo é montado na hora do envio e não no `enfileirar_email`, o token **não é gravado** em `envios_email`; ele é gerado pelo service de recuperação e entregue à tarefa em memória.
-- **Envios interrompidos ao reiniciar a API.** Para o MVP, a API roda em **uma instância com um worker**. Antes de aceitar novas requisições, a inicialização muda **todos** os envios ainda `pendente` para `falhou`, com `ultimo_erro = "envio_interrompido_por_reinicio"`, preservando `tentativas`. Inclui envios recentes: não há corte de 5 minutos, pois a tarefa do processo anterior já não existe. O ADM pode reenviar esses registros pela rota da seção 6.3, exceto `recuperacao_senha`: nesse caso o token em memória foi perdido, e a pessoa faz uma nova solicitação pelo fluxo normal. O token em texto nunca vai para o banco ou para o log. Se a atualização inicial falhar, a API não começa a atender; o erro fica no log para correção. Esta estratégia de inicialização precisa ser revista antes de usar múltiplos workers ou réplicas, para não marcar como interrompido um envio de outro processo ativo.
+- **Recuperação de senha não se reenvia.** O link contém um token que só existe em texto no instante do envio (o banco guarda `token_hash`). Um reenvio manual exigiria gerar outro token; por isso `reenvio` de `recuperacao_senha` retorna 409 (`reason: "reenvio_nao_permitido"`) e a pessoa pede de novo. Como o corpo é montado na hora do envio e não no `enfileirar_email`, o token **não é gravado** em `envios_email`; a solicitação de recuperação precisará de um caminho próprio para entregar o token (por exemplo, enviar direto, sem passar pela fila), e esse caminho **ainda não existe**.
+- **Reinício da API.** Não é preciso marcar nada como interrompido: o envio só sai de `pendente` dentro da transação do worker, que também grava `enviado`. Se o processo cair no meio, a transação desfaz e o envio continua `pendente` para a próxima rodada (a janela de duplicação está no ponto seguinte).
 - **Limite do envio por SMTP.** Se o SMTP aceitar a mensagem e a API cair antes de gravar `enviado`, um reenvio manual pode duplicá-la. O MVP não promete entrega exatamente uma vez.
 
 ### 6.3 Acompanhamento e reenvio
@@ -448,7 +446,7 @@ O destinatário vem do banco, nunca de um campo livre do cliente. O corpo do e-m
 | `GET /plataforma/envios-email` | ADM | `status`, `evento`, `condominio_id`, `de`, `ate`, paginação | 200, lista |
 | `POST /plataforma/envios-email/{id}/reenvio` | ADM | `{}` | 202, envio com `status = 'pendente'` |
 
-Item: `id`, `evento`, `destinatario` (mascarado: `a***@exemplo.com`), `status`, `tentativas`, `ultimo_erro`, `criado_em`, `enviado_em`. Só `falhou` pode ser reenviado (senão 409), incluindo os interrompidos que a inicialização marcou dessa forma. `recuperacao_senha` sempre retorna 409 (`reason: "reenvio_nao_permitido"`), mesmo em `falhou`. O reenvio muda o status para `pendente`, zera `tentativas` e limpa `ultimo_erro` na mesma transação; só depois do commit agenda a tarefa. Essa mudança é condicional ao status ainda ser `falhou`, para dois pedidos de reenvio não agendarem a mesma mensagem: um recebe 202 e o outro 409.
+Item: `id`, `evento`, `destinatario` (mascarado: `a***@exemplo.com`), `status`, `tentativas`, `ultimo_erro`, `criado_em`, `enviado_em`. Só `falhou` pode ser reenviado (senão 409, `reason: "envio_nao_falhou"`). `recuperacao_senha` sempre retorna 409 (`reason: "reenvio_nao_permitido"`), mesmo em `falhou`. Envio inexistente retorna 404. O reenvio muda o status para `pendente`, zera `tentativas` e limpa `ultimo_erro`, e o worker entrega na próxima rodada. A mudança é condicional ao status ainda ser `falhou`, para dois pedidos simultâneos não recolocarem a mesma mensagem na fila: um recebe 202 e o outro 409. A lista traz do mais recente ao mais antigo; `de` e `ate` são datas inclusivas, em UTC. Permissão: recurso `envios_email` (`V` para listar, `E` para reenviar), só o ADM da plataforma. O reenvio não grava evento de auditoria (não há ação no catálogo da seção 4.2).
 
 A matriz não tem linha para esses envios, e o DER guarda só o destino, não o recurso. Ambos estão nas pendências.
 
@@ -504,7 +502,7 @@ Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a list
 - **Chamados:** Administração de outro condomínio recebe 404; mensagem em chamado encerrado retorna 409; a primeira resposta do ADM move para `em_atendimento` uma única vez.
 - **Funcionários:** desligado some da lista do Funcionário e permanece em registros antigos; Funcionário não acessa `POST /funcionarios`.
 - **Conta compartilhada:** trocar a senha derruba a sessão ativa (a requisição seguinte com o token antigo retorna 401); a senha não aparece em nenhuma resposta nem no log.
-- **E-mail:** com o SMTP falhando, a operação principal termina com sucesso e o envio fica `falhou`; rollback da operação não deixa e-mail na fila; simular reinício com envios `pendente` recentes e antigos, todos devem ficar `falhou` com `envio_interrompido_por_reinicio`, sem perder o contador de tentativas; um envio já `enviado` permanece intacto; a inicialização roda antes de aceitar requisições e falha se não conseguir atualizar os interrompidos; o ADM consegue reenviar um interrompido comum; dois reenvios simultâneos produzem um 202, um 409 e uma única tarefa agendada; `recuperacao_senha` interrompida não é reenviável e exige nova solicitação; token em texto não aparece no banco nem no log; o corpo nunca contém dados de outro condomínio.
+- **E-mail:** com o SMTP falhando, a operação principal termina com sucesso e o envio é tentado de novo até três vezes e então fica `falhou`; `ultimo_erro` guarda só o tipo do erro; rollback da operação não deixa e-mail na fila; um envio já `enviado` não é enviado outra vez; dois workers não pegam o mesmo envio (`SKIP LOCKED`); a falha de um envio não trava os outros; o ADM reenvia um `falhou` e o worker o entrega; dois reenvios seguidos produzem um 202 e um 409; `recuperacao_senha` nunca é reenviável; o corpo nunca contém dados de outro condomínio; só o ADM da plataforma acompanha e reenvia.
 - **Estrutura:** parametrizar as oito operações: sem `responsavel_id` ou com formato inválido retorna 422; responsável inexistente, inativo ou de outro condomínio retorna 404, sem alteração nem auditoria de sucesso; com responsável válido a operação e um evento `estrutura.editar` são gravados juntos; falha da auditoria reverte a alteração; em condomínio pendente ou rejeitado, é possível cadastrar o responsável antes de corrigir a estrutura; nome duplicado retorna 409; desativar unidade com morador ativo retorna 409; chave revogada ao desativar; Funcionário e Morador recebem 403 nas escritas.
 
 ## 9. Pendências e responsáveis
@@ -514,13 +512,13 @@ Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a list
 | Destinatários dos comunicados | Aprovar `comunicado_destinatarios` (seção 2). Fecha a pendência da seção 7 do DER. | Davi e Tude |
 | `D` em comunicados | A matriz dá "D" ao ADM, mas `comunicados` não tem coluna de desativação. Sem coluna, sem a ação; com coluna (`desativado_em`), `POST .../desativacao`. | Gabriel e Davi |
 | Colunas de `envios_email` | Falta guardar **o que** foi enviado: **proposta** de `recurso_tipo` e `recurso_id`, para montar o corpo no reenvio e achar o envio pelo recurso. | Davi e Tude |
-| Matriz: envios de e-mail | Nova linha "Envios de e-mail": ADM `V E (P)`. A matriz não tem esse módulo. | Gabriel |
+| Matriz: envios de e-mail | **Implementado** como o recurso `envios_email` (ADM `V E`). Falta confirmar na matriz do documento de permissões. | Gabriel |
 | Histórico de funcionários | Exceção à regra "auditoria só do ADM" (seção 5.1) | Gabriel |
 | Rotas de cadastro em condomínio não ativo | A dependência de autorização deve liberar as rotas de estrutura, cadastro e gestão dos responsáveis (para fornecer `responsavel_id`) em `pendente` e `rejeitado` (R7) | Gabriel |
 | `/portaria/funcionarios` | Manter ou unificar com `/funcionarios` | Eduardo e Tude |
 | Login da conta compartilhada | E-mail (assumido) ou nome de usuário | Gabriel e Paulo |
-| Recuperação de envios interrompidos | Implementar a inicialização da seção 6.2: marcar pendentes como falhos antes de atender, com reenvio manual dos eventos comuns. Recuperação de senha exige nova solicitação. MVP com uma instância e um worker. | Tude e Gabriel |
-| Servidor SMTP | Provedor para produção/demo e variáveis no `.env.example` | Davi |
+| Recuperação de envios interrompidos | **Resolvido pelo worker** (seção 6.2): sem varredura na inicialização, o `pendente` simplesmente continua na fila. Recuperação de senha exige nova solicitação. | Tude e Gabriel |
+| Servidor SMTP | Variáveis no `.env.example` (`EMAIL_BACKEND`, `SMTP_*`, `EMAIL_WORKER_*`). Falta escolher o provedor de produção/demo. | Davi |
 | Integração com os donos de módulo | Cada dono confirma as ações do catálogo da seção 4.2 e chama `registrar_acao`; combinar numa reunião curta | Todos |
 | TASK-11 em andamento | O card está `Em andamento` com Tude. Este documento é uma proposta de base: Tude compara com o que já escreveu e decide o que adotar. | Tude |
 

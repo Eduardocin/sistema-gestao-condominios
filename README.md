@@ -93,13 +93,14 @@ Monorepo com **monólito modular**: React → HTTP/REST → FastAPI → services
 │   ├── produto/
 │   ├── architecture.md
 │   ├── modelo-de-dados.md
+│   ├── protecao-de-dados.md
 │   └── storage.md
 ├── .github/workflows/ci.yaml
 ├── .env.example
 └── compose.yaml
 ```
 
-Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/), [contratos HTTP](docs/api-contracts/), [autenticação do frontend](docs/frontend/autenticacao.md) e [armazenamento](docs/storage.md).
+Consulte [arquitetura](docs/architecture.md) (inclui [como criar um endpoint respeitando o isolamento entre condomínios](docs/architecture.md#como-criar-um-endpoint-novo-respeitando-o-isolamento)), [ADRs](docs/decisions/), [contratos HTTP](docs/api-contracts/), [autenticação do frontend](docs/frontend/autenticacao.md), [armazenamento](docs/storage.md) e [proteção de dados pessoais](docs/protecao-de-dados.md) (LGPD básico: o que é guardado, quem vê, máscaras, logs e pendências).
 
 No modo local descrito no guia detalhado, API e frontend rodam no host; PostgreSQL e, para operações com arquivos, MinIO rodam em containers:
 

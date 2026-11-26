@@ -279,7 +279,7 @@ comando reproduzível: [evidência da TASK-49](../../backend/app/modules/auditor
 
 | Método e rota | Permissão | Entrada | Sucesso |
 | --- | --- | --- | --- |
-| `GET /funcionarios` | Funcionário: só nomes ativos (`id` e `nome`). Administração: todos | Administração: `ativo`, `busca`, paginação | 200, lista |
+| `GET /funcionarios` | Funcionário: só nomes ativos (`id` e `nome`). Administração: todos, com telefone mascarado (`*******4321`); o completo fica no detalhe (TASK-54) | Administração: `ativo`, `busca`, paginação | 200, lista |
 | `GET /funcionarios/{id}` | Administração | — | 200, objeto |
 | `POST /funcionarios` | Administração | JSON abaixo | 201, objeto |
 | `PUT /funcionarios/{id}` | Administração | JSON abaixo | 200, objeto |

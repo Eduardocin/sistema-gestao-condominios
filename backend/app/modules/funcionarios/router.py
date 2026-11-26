@@ -53,9 +53,14 @@ def listar(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PaginaFuncionarios:
     items, total = service.listar(ativo=ativo, busca=busca, page=page, page_size=page_size)
-    saida = FuncionarioNome if service.contexto.perfil == "funcionario" else FuncionarioSaida
+    # Funcionário vê só os nomes; a Administração vê o resumo, com telefone mascarado.
+    resumir = (
+        FuncionarioNome.model_validate
+        if service.contexto.perfil == "funcionario"
+        else FuncionarioSaida.para_listagem
+    )
     return PaginaFuncionarios(
-        items=[saida.model_validate(item) for item in items],
+        items=[resumir(item) for item in items],
         page=page,
         page_size=page_size,
         total=total,

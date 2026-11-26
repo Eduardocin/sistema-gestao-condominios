@@ -405,7 +405,7 @@ e versão, nunca senha, hash ou tokens. Esta entrega não implementa a US-208.
 
 ## 6. E-mail assíncrono (US-803, Should, Sprint 3)
 
-**Estado atual (TASK-50):** a fila `envios_email` recebe os eventos `condominio_aprovado`, `encomenda_registrada` e `reserva_cancelada`, e um **worker** a esvazia: monta o corpo a partir do banco, entrega por SMTP (ou escreve no log, em `console`), marca `enviado` e tenta de novo em caso de erro. O ADM da plataforma acompanha a fila e reenvia o que falhou (6.3). **Pendente:** o evento `recuperacao_senha`, cuja solicitação ainda não enfileira nada e depende do token em memória (ver o ponto de atenção abaixo).
+**Estado atual (TASK-50):** a fila `envios_email` recebe os eventos `condominio_aprovado`, `encomenda_registrada` e `reserva_cancelada`, e um **worker** a esvazia. Recuperação de senha tem um caminho direto separado, descrito abaixo, porque o token não pode ser persistido na outbox.
 
 ### 6.1 Eventos cobertos
 
@@ -446,7 +446,7 @@ O destinatário vem do banco, nunca de um campo livre do cliente. O corpo do e-m
 
 **Pontos de atenção:**
 
-- **Recuperação de senha não se reenvia.** O link contém um token que só existe em texto no instante do envio (o banco guarda `token_hash`). Um reenvio manual exigiria gerar outro token; por isso `reenvio` de `recuperacao_senha` retorna 409 (`reason: "reenvio_nao_permitido"`) e a pessoa pede de novo. Como o corpo é montado na hora do envio e não no `enfileirar_email`, o token **não é gravado** em `envios_email`; a solicitação de recuperação precisará de um caminho próprio para entregar o token (por exemplo, enviar direto, sem passar pela fila), e esse caminho **ainda não existe**.
+- **Recuperação de senha não se reenvia pela fila.** `POST /contas/recuperacao-senha` cria o token e envia o e-mail diretamente, depois de confirmar a transação. O banco guarda somente `token_hash`; o token em texto existe apenas para montar o link enviado, nunca entra em `envios_email`, auditoria ou logs. Falha no provedor não altera o `202`; a pessoa solicita outro link, que invalida os anteriores. O endpoint devolve a mesma resposta para e-mail existente e inexistente; há limite por IP.
 - **Reinício da API.** Não é preciso marcar nada como interrompido: o envio só sai de `pendente` dentro da transação do worker, que também grava `enviado`. Se o processo cair no meio, a transação desfaz e o envio continua `pendente` para a próxima rodada (a janela de duplicação está no ponto seguinte).
 - **Limite do envio por SMTP.** Se o SMTP aceitar a mensagem e a API cair antes de gravar `enviado`, um reenvio manual pode duplicá-la. O MVP não promete entrega exatamente uma vez.
 

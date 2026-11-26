@@ -330,6 +330,14 @@ def test_filtro_redige_a_mensagem_formatada(mensagem, segredo):
     assert segredo not in logging.Formatter().format(item)
 
 
+def test_filtro_redige_senha_sem_aspas_com_espacos():
+    texto = redigir("login falhou: senha=Senha Secreta123, host=db.exemplo.test")
+
+    assert "Senha" not in texto
+    assert "Secreta123" not in texto
+    assert "host=db.exemplo.test" in texto
+
+
 def test_filtro_redige_o_traceback():
     item = registro("Falha não tratada em %s %s", "GET", "/api/v1/contas/me", exc=True)
     FiltroDadosPessoais().filter(item)

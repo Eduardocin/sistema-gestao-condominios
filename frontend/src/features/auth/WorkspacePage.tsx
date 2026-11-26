@@ -33,6 +33,8 @@ const modules: Record<string, string[]> = {
     'Unidades e moradores',
     'Funcionários',
     'Avisos',
+    'Áreas comuns',
+    'Reservas',
   ],
   plataforma: ['Condomínios', 'Administração da plataforma'],
   'sem-condominio': [],
@@ -56,6 +58,12 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'administracao' && label === 'Funcionários') {
     return { to: '/app/administracao/funcionarios', action: 'Gerenciar funcionários' }
+  }
+  if (area === 'administracao' && label === 'Áreas comuns') {
+    return { to: '/app/administracao/areas-comuns', action: 'Gerenciar áreas comuns' }
+  }
+  if (area === 'administracao' && label === 'Reservas') {
+    return { to: '/app/administracao/reservas', action: 'Gerenciar reservas' }
   }
   if (area === 'portaria' && label === 'Recebimento e retirada de encomendas') {
     return { to: '/app/portaria/encomendas', action: 'Acessar encomendas' }

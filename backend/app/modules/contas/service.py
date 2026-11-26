@@ -31,7 +31,7 @@ from app.modules.contas.schemas import (
     TrocaSenha,
     conferir_senha,
 )
-from app.modules.notificacoes.smtp import Mensagem, obter_backend
+from app.modules.notificacoes.smtp import ConsoleBackend, Mensagem, obter_backend
 from app.modules.usuarios.models import Usuario
 
 logger = logging.getLogger(__name__)
@@ -122,13 +122,14 @@ def solicitar_recuperacao_senha(
 
 def enviar_email_recuperacao(mensagem: Mensagem, settings: Settings) -> None:
     """Entrega fora da transação HTTP; falha no provedor não invalida a solicitação."""
-    if settings.email_backend == "console":
-        logger.info(
-            "Envio de recuperação ignorado com EMAIL_BACKEND=console; configure SMTP/Mailpit."
-        )
-        return
     try:
-        obter_backend(settings).enviar(mensagem)
+        backend = obter_backend(settings)
+        if isinstance(backend, ConsoleBackend):
+            logger.info(
+                "Envio de recuperação ignorado com EMAIL_BACKEND=console; configure SMTP/Mailpit."
+            )
+            return
+        backend.enviar(mensagem)
     except Exception as erro:
         # Não registrar mensagem, destinatário, URL ou texto da exceção: podem conter o token.
         logger.warning("Falha no envio do e-mail de recuperação (%s).", type(erro).__name__)

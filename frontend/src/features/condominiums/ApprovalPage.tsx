@@ -23,6 +23,15 @@ type Item = {
   estrutura: { blocos: number; andares: number; unidades: number }
 }
 type Detail = Item & {
+  endereco: {
+    logradouro: string | null
+    numero: string | null
+    bairro: string | null
+    cidade: string | null
+    uf: string | null
+  }
+  possivel_duplicidade: { id: string; nome: string; status: string }[]
+  documentos: { arquivo_id: string; nome_original: string }[]
   blocos: {
     id: string
     nome: string
@@ -207,6 +216,22 @@ export function ApprovalPage() {
             <Text>
               CNPJ {detail.cnpj ?? 'Não informado'} · Situação {detail.status}
             </Text>
+            <Text>
+              {detail.endereco.logradouro}, {detail.endereco.numero} · {detail.endereco.bairro},{' '}
+              {detail.endereco.cidade} / {detail.endereco.uf}
+            </Text>
+            {detail.possivel_duplicidade.length > 0 && (
+              <Notice tone="warning" title="Possíveis cadastros duplicados">
+                {detail.possivel_duplicidade.map((item) => (
+                  <Text key={item.id}>
+                    {item.nome} · {item.status}
+                  </Text>
+                ))}
+              </Notice>
+            )}
+            {detail.documentos.map((document) => (
+              <Text key={document.arquivo_id}>Documento: {document.nome_original}</Text>
+            ))}
             {detail.administracao && (
               <Text>
                 Administração {detail.administracao.nome} · {detail.administracao.email}

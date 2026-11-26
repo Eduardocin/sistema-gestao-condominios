@@ -7,5 +7,6 @@ Contrato: [plataforma.md](../../../../docs/api-contracts/plataforma.md), seção
 - **Envio.** `smtp.py`: `EMAIL_BACKEND=console` (log) ou `smtp` (`SMTP_*`). O corpo vem de `corpo.py`, montado do banco com o `condominio_id` do envio.
 - **Falhas.** Até `EMAIL_MAX_TENTATIVAS` (3); depois `falhou`. `ultimo_erro` guarda só o tipo do erro. Recurso inexistente ou evento sem modelo falha de uma vez.
 - **Rotas (ADM da plataforma).** `GET /plataforma/envios-email` e `POST /plataforma/envios-email/{id}/reenvio` (202). Recurso da matriz: `envios_email`.
-- **Pendente.** `recuperacao_senha` (a solicitação ainda não enfileira; o token não vai para a fila) e a escolha do provedor SMTP de produção.
+- **Recuperação de senha.** Usa envio direto separado da outbox: o token em texto não pode ser persistido na fila, auditoria ou logs. `POST /contas/recuperacao-senha` registra somente o hash, confirma a transação e agenda o envio direto; ver `contas/service.py`.
+- **Provedor SMTP de produção.** Ainda depende da configuração das credenciais e do host do ambiente de implantação.
 - **Testes.** `tests/notificacoes/`.

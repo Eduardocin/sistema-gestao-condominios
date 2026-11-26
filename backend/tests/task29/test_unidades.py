@@ -441,3 +441,43 @@ def test_foto_do_proprietario_respeita_politica_de_download(client, session, cas
         ).status_code
         == 200
     )
+
+
+def test_lista_de_unidades_ordena_por_bloco_andar_e_identificacao(client, session, caso):
+    """O "101" do bloco A vem antes do do bloco B, mesmo criado depois; legadas ficam por último."""
+    from app.modules.unidades.models import Andar, Bloco, Unidade
+
+    condominio_id = caso.a.condominio.id
+    bloco_b = Bloco(condominio_id=condominio_id, nome="Bloco B")
+    session.add(bloco_b)
+    session.flush()
+    terreo_b = Andar(condominio_id=condominio_id, bloco_id=bloco_b.id, nome="Térreo", ordem=0)
+    alto_b = Andar(condominio_id=condominio_id, bloco_id=bloco_b.id, nome="1º", ordem=1)
+    alto_a = Andar(condominio_id=condominio_id, bloco_id=caso.bloco.id, nome="1º", ordem=1)
+    session.add_all([terreo_b, alto_b, alto_a])
+    session.flush()
+    # Inseridas de propósito fora de ordem: antes da correção o desempate era o UUID.
+    novas = [
+        Unidade(condominio_id=condominio_id, andar_id=alto_b.id, identificacao="201"),
+        Unidade(condominio_id=condominio_id, andar_id=terreo_b.id, identificacao="101"),
+        Unidade(condominio_id=condominio_id, andar_id=alto_a.id, identificacao="201"),
+    ]
+    session.add_all(novas)
+    session.commit()
+    resposta = client.get(BASE, headers=caso.a.cabecalho_de("administracao"))
+    assert resposta.status_code == 200, resposta.text
+    por_id = {str(u.id): u for u in [caso.a.unidade_101, caso.a.unidade_102, *novas]}
+    nomes = [
+        (
+            por_id[item["id"]].andar_id,
+            por_id[item["id"]].identificacao,
+        )
+        for item in resposta.json()["items"]
+    ]
+    assert nomes == [
+        (caso.andar.id, "Bloco A / 101"),
+        (caso.andar.id, "Bloco A / 102"),
+        (alto_a.id, "201"),
+        (terreo_b.id, "101"),
+        (alto_b.id, "201"),
+    ]

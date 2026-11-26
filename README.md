@@ -17,17 +17,17 @@ Esta relação descreve o código integrado nesta branch. Contratos, modelos, ca
 
 | Área | Backend disponível | Frontend disponível |
 | --- | --- | --- |
-| Contas e sessão | Cadastro de Morador/Administração, consulta/edição da própria conta, troca de senha e redefinição com token de uso único; JWT, refresh, logout, seleção de condomínio e autorização central | Cadastro, login, restauração de sessão, seleção de condomínio e navegação por perfil; sem telas de troca/redefinição de senha |
+| Contas e sessão | Cadastro de Morador/Administração, consulta/edição da própria conta, troca de senha e recuperação/redefinição por token de uso único; JWT, refresh, logout, seleção de condomínio e autorização central | Cadastro, login, restauração de sessão, seleção de condomínio e navegação por perfil; sem telas de troca/redefinição de senha |
 | Cadastro de condomínio | Cadastro com estrutura, consulta, aprovação/rejeição pelo ADM e correção/reenvio de rejeitado (TASK-57 / US-204) | Sem tela de cadastro, análise ou reenvio de condomínio |
 | Dados e estrutura | Edição de dados e referência à logo; criação, edição e desativação/reativação lógica de blocos, andares e unidades (US-205/206) | Sem telas de gestão de dados, logo ou estrutura |
-| Unidades e moradores | Proprietário e chaves por unidade, vínculo por chave, consulta das próprias unidades, permissões por aba e desvinculação segura (US-305) | Sem telas desses fluxos |
+| Unidades e moradores | Proprietário e chaves por unidade, vínculo por chave, consulta das próprias unidades, permissões por aba e desvinculação segura (US-305) | Desvinculação de morador na tela de permissões (`/app/morador/permissoes`, TASK-60); demais fluxos sem tela |
 | Funcionários (US-209) e responsáveis | Lista, cadastro, desligamento, consulta individual, edição e histórico restrito de funcionários; cadastro/lista, edição e desativação de responsáveis administrativos | Lista, cadastro e desligamento de funcionários; cadastro de responsáveis. Demais operações sem tela |
 | Conta compartilhada (US-210) | Criação, consulta e troca das credenciais de Funcionários, com identidade permanente e invalidação de sessões antigas | Sem tela de gestão da conta compartilhada |
 | Encomendas | Recebimento com foto, entrega, confirmação pelo recebedor, filtros por unidade/período e relatório administrativo por status/unidade | Fluxos autenticados em `/app/portaria/encomendas` e `/app/morador/encomendas`; sem tela do relatório administrativo |
 | Visitantes | Cadastro, edição e cancelamento pelo Morador; avulsos, contatos e entrada/saída pela Portaria; relatório administrativo de visitas efetivas (US-506) | Sem telas operacionais integradas; o protótipo público usa dados fictícios |
 | Veículos | Cadastro, edição, remoção lógica, consulta operacional e relatório administrativo de cadastros com placas duplicadas (US-506) | Sem telas integradas |
-| Reservas e avisos | Áreas comuns, agenda/calendário, reservas, cancelamentos, bloqueio de datas com cancelamento das reservas afetadas e avisos transacionais | Sem telas operacionais desses fluxos |
-| Ocorrências | Abertura, consulta, resposta/resolução administrativa e comentários/reabertura pelo Morador | Sem telas operacionais integradas |
+| Reservas e avisos | Áreas comuns, agenda/calendário, reservas, cancelamentos, bloqueio de datas com cancelamento das reservas afetadas e avisos transacionais | Administração: cadastro, edição com foto, desativação e reativação de áreas comuns em `/app/administracao/areas-comuns`; consulta filtrada e cancelamento com motivo e responsável em `/app/administracao/reservas`. Morador: reserva e acompanhamento em `/app/morador/areas-comuns` e `/app/morador/reservas`. Sem telas de bloqueio de datas e de relatório |
+| Ocorrências | Abertura, consulta, resposta/resolução administrativa e comentários/reabertura pelo Morador | Administração: lista filtrada por situação e período, detalhe com histórico e anexos, resposta e resolução com responsável em `/app/administracao/ocorrencias`. Morador: abertura, comentário e reabertura em `/app/morador/ocorrencias` |
 | Arquivos e auditoria | Upload autorizado, bucket MinIO privado, download por URL assinada curta e auditoria transacional | Integração de fotos no fluxo de encomendas; sem tela geral de auditoria |
 
 Em US-205/206, as edições e a gestão da estrutura aceitam condomínios `pendente`, `rejeitado` e `ativo`; `desativado` bloqueia escritas. O reenvio continua exclusivo de `rejeitado`. As operações exigem responsável ativo do próprio condomínio e preservam IDs, vínculos e históricos. Unidade com morador ativo não pode ser desativada; bloco/andar com unidades ativas também não. A reativação exige pais ativos e não reativa filhos automaticamente. Desativar uma unidade revoga sua chave; criar/reativar em condomínio ativo gera chave se não houver vigente, preservando as anteriores.
@@ -40,7 +40,7 @@ Na US-210, `GET /api/v1/conta-funcionarios` consulta login e data da atualizaç�
 
 Os relatórios `GET /api/v1/relatorios/visitantes` e `GET /api/v1/relatorios/veiculos` são exclusivos da Administração de condomínio ativo. Aceitam unidade opcional, `de`/`ate` inclusivos em `America/Sao_Paulo` e paginação de até 100 itens; ordenam pelo instante decrescente e ID crescente. Visitantes filtra a entrada efetiva e preserva saídas posteriores ao período; veículos filtra a data de cadastro, inclui removidos e exibe os dados atuais. Ambos incluem unidades inativas. Placas duplicadas consideram cadastros atualmente ativos em unidades ativas distintas do próprio condomínio, independentemente dos filtros. Não há CSV, circulação de veículos ou reconstrução de versões anteriores dos nomes/dados. Detalhes em [convivência, seção 6.4](docs/api-contracts/convivencia.md#64-relatórios-administrativos-us-506-simplificada-task-52).
 
-As APIs dos PRs #25–#29, #32 e #33 já estão integradas: senha, visitantes/avulsos/veículos, reenvio cadastral/estrutura/funcionários, ocorrências, filtros/relatório de encomendas e bloqueios/reabertura. As USs 205/206 pertencem aos recortes integrados anteriormente pelo PR #28. Aprovação de condomínio, registro de encomenda e cancelamento administrativo de reservas já gravam eventos na outbox, mas não há processamento/entrega SMTP. A recuperação completa de senha ainda depende da solicitação de recuperação e dessa infraestrutura; a troca autenticada e a redefinição com token já estão disponíveis na API.
+As APIs dos PRs #25–#29, #32 e #33 já estão integradas: senha, visitantes/avulsos/veículos, reenvio cadastral/estrutura/funcionários, ocorrências, filtros/relatório de encomendas e bloqueios/reabertura. As USs 205/206 pertencem aos recortes integrados anteriormente pelo PR #28. Aprovação de condomínio, registro de encomenda e cancelamento administrativo de reservas já gravam eventos na outbox. A recuperação de senha envia o token diretamente por SMTP, sem gravá-lo na outbox; no Compose, os e-mails ficam no Mailpit local (`http://localhost:8025`).
 
 `/prototipos/portaria` é uma demonstração pública com dados fictícios em memória, sem persistência na API. As páginas gerais de cada perfil são pontos de navegação; não representam todos os fluxos concluídos. As três novas USs 210, 305 e 506 são entregas de backend. Permanecem pendentes a foto opcional de conta por storage global, o rascunho persistente/retomada do cadastro e uploads nos contextos cadastrais ainda não suportados. Consulte [Próximas entregas](#próximas-entregas) para os demais limites.
 
@@ -108,6 +108,7 @@ No modo local descrito no guia detalhado, API e frontend rodam no host; PostgreS
 | --- | --- | --- |
 | PostgreSQL 17 | `127.0.0.1:5432` (configurável) | Container Docker |
 | MinIO (arquivos) | `127.0.0.1:9000`; console em `:9001` | Container Docker |
+| Mailpit (e-mails locais) | `127.0.0.1:1025` (SMTP); interface em `:8025` | Container Docker |
 | API FastAPI | <http://127.0.0.1:8000> | Terminal 1, com `.venv` |
 | Frontend Vite | <http://127.0.0.1:5173> | Terminal 2, com Node |
 
@@ -128,7 +129,8 @@ O primeiro build do MinIO compila uma revisão fixa do código oficial e pode
 demorar alguns minutos. Não é necessário instalar Python ou Node no host.
 
 Confira frontend em <http://127.0.0.1:5173>, health em
-<http://127.0.0.1:8000/api/v1/health> e console MinIO em <http://127.0.0.1:9001>.
+<http://127.0.0.1:8000/api/v1/health>, console MinIO em <http://127.0.0.1:9001> e e-mails de
+desenvolvimento em <http://127.0.0.1:8025>.
 Credenciais locais estão no seu `.env`. Banco e arquivos têm volumes persistentes.
 Portas, limites, testes e integração estão em [Armazenamento](docs/storage.md).
 As rotas de arquivos já usam a autorização central e a política do recurso vinculado. No Compose, a API acessa `db:5432` e `storage:9000` internamente; o navegador usa os endereços públicos do `.env`. O Compose deixa `DATABASE_URL` vazia e utiliza os campos `POSTGRES_*` para a conexão interna.
@@ -266,7 +268,7 @@ Os valores do exemplo funcionam sem alteração na maioria das máquinas. Edite 
 | `STORAGE_BUCKET`, `STORAGE_REGION`, `STORAGE_URL_SECONDS` | Bucket privado, região S3 e validade da URL (1–300 segundos) |
 | `STORAGE_PORT`, `STORAGE_CONSOLE_PORT` | Portas do MinIO no host; mantenha os endpoints correspondentes |
 
-`TEST_DATABASE_URL` é definida separadamente no terminal para testes, nunca como banco operacional. `TEST_STORAGE_*` configura a integração MinIO dedicada, conforme [storage](docs/storage.md). As variáveis `EMAIL_BACKEND` e `SMTP_*` do exemplo são um contrato futuro: o worker de envio ainda não está implementado.
+`TEST_DATABASE_URL` é definida separadamente no terminal para testes, nunca como banco operacional. `TEST_STORAGE_*` configura a integração MinIO dedicada, conforme [storage](docs/storage.md). No ambiente local, `EMAIL_BACKEND=smtp` envia para o Mailpit do Compose; isso captura as mensagens sem entregá-las externamente.
 
 Regras importantes:
 
@@ -465,7 +467,7 @@ npm run dev
 
 Se aparecer “API indisponível”, veja [frontend não acessa a API](#frontend-mostra-api-indisponível).
 
-Para começar a usar os fluxos reais, crie uma conta em `/cadastro/administracao` ou `/cadastro/morador`. O cadastro de condomínio, sua análise, correção e estrutura são feitos pela API em <http://127.0.0.1:8000/docs>, seguindo o [contrato do núcleo](docs/api-contracts/nucleo.md). Cadastre o condomínio, selecione-o na sessão e cadastre um responsável da Administração antes das operações que exigem `responsavel_id`. A aprovação requer conta ADM previamente provisionada: o cadastro público não concede esse papel e o script de primeiro ADM ainda é uma proposta. Login não cria condomínio nem vínculo automaticamente. O vínculo por chave está disponível no backend; a gestão da conta compartilhada da Portaria permanece pendente.
+Para começar a usar os fluxos reais, crie uma conta em `/cadastro/administracao` ou `/cadastro/morador`. O cadastro de condomínio, sua análise, correção e estrutura são feitos pela API em <http://127.0.0.1:8000/docs>, seguindo o [contrato do núcleo](docs/api-contracts/nucleo.md). Cadastre o condomínio, selecione-o na sessão e cadastre um responsável da Administração antes das operações que exigem `responsavel_id`. A aprovação requer conta ADM previamente provisionada: o cadastro público não concede esse papel. Crie o primeiro ADM da plataforma com `docker compose exec api python -m app.modules.usuarios.provisionar_adm --nome "Seu Nome" --email voce@exemplo.com`; a senha é pedida em um prompt sem eco (ou lida de `ADM_SENHA`), nunca por argumento. O comando só cria contas novas e recusa e-mail já cadastrado. Login não cria condomínio nem vínculo automaticamente. O vínculo por chave está disponível no backend; a gestão da conta compartilhada da Portaria permanece pendente.
 
 ### Etapa 7 — Rodar as verificações de qualidade
 
@@ -843,7 +845,7 @@ O workflow [ci.yaml](.github/workflows/ci.yaml) valida backend (Python 3.13, com
 | TASK-52 — Tude | US-506 simplificada | Exportação CSV, USs 804, 901 e 902 e telas correspondentes |
 | TASK-50 — Tude | Nenhum serviço novo de envio; somente enfileiramento existente | US-803: processamento e entrega assíncrona de e-mails, adiada integralmente |
 
-As TASKs 51, 58 e 52 não estão integralmente concluídas. A TASK-50 não foi implementada; os eventos pendentes de aprovação, encomenda e cancelamento de reserva não equivalem à entrega SMTP. Solicitação de recuperação de senha e infraestrutura de envio continuam pendentes; não há fluxo completo de recuperação por e-mail.
+As TASKs 51, 58 e 52 não estão integralmente concluídas. A TASK-50 não foi implementada; os eventos pendentes de aprovação, encomenda e cancelamento de reserva não equivalem à entrega SMTP. A solicitação de recuperação de senha está disponível e usa o envio SMTP direto; no Compose, a mensagem pode ser conferida pelo Mailpit local.
 
 - Os PRs #30 e #31 tratam de visitantes e veículos e podem sobrepor consultas, contratos e registro de rotas existentes; exigem conciliação própria antes de serem integrados.
 - Remoção de bloqueios de datas ainda sem endpoint; filtro `unidade_id` de encomendas continua opcional para preservar a tela atual do Morador.

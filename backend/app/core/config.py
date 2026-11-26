@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     app_name: str = "Gestão de Condomínios"
     log_level: str = "INFO"
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    frontend_base_url: str = "http://localhost:5173"
+    password_reset_token_expire_minutes: int = Field(default=30, ge=5, le=1440)
     database_url: SecretStr | None = None
     postgres_user: str = "condominios_dev"
     postgres_password: SecretStr = SecretStr(DEV_POSTGRES_PASSWORD)
@@ -56,6 +58,24 @@ class Settings(BaseSettings):
             or parsed.fragment
         ):
             raise ValueError("Endpoint S3 deve ser HTTP(S), sem credenciais, caminho ou query.")
+        return value.rstrip("/")
+
+    @field_validator("frontend_base_url")
+    @classmethod
+    def validate_frontend_base_url(cls, value: str) -> str:
+        value = value.strip()
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "FRONTEND_BASE_URL deve ser HTTP(S), sem credenciais, query ou fragmento."
+            )
         return value.rstrip("/")
 
     # Ambiente de execução. Só "production" liga as travas extras de segurança.
@@ -104,6 +124,10 @@ class Settings(BaseSettings):
         """Em produção, nada de credencial de desenvolvimento nem CORS aberto (TASK-54)."""
         if self.app_env != "production":
             return self
+        if urlsplit(self.frontend_base_url).scheme != "https":
+            raise ValueError("FRONTEND_BASE_URL deve usar HTTPS em produção.")
+        if self.email_backend == "console":
+            raise ValueError("EMAIL_BACKEND não pode ser 'console' em produção; configure SMTP.")
         for origem in self.cors_origins:
             if origem.strip() == "*":
                 raise ValueError("CORS_ORIGINS não pode conter '*' em produção.")

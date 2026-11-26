@@ -57,7 +57,7 @@ mas o upload global de conta ainda não está disponível no [storage](../../../
 Não se reutilizam arquivos de condomínio para contornar essa limitação. O documento
 comprobatório permanece no cadastro do condomínio. Nenhuma migration ou dependência nova.
 
-## Senha (TASK-53, parte A)
+## Senha
 
 - `PUT /api/v1/contas/me/senha`: autenticado (sem exigir `cid`), `{"senha_atual", "senha_nova"}`.
   Só cadastro global (conta compartilhada e ADM: 403, como no `PUT /contas/me`). A conta fica
@@ -67,8 +67,8 @@ comprobatório permanece no cadastro do condomínio. Nenhuma migration ou depend
   `sessao_versao + 1`, tokens de recuperação pendentes inutilizados e o mesmo `LoginResponse` do
   login, preservando o `cid` selecionado quando continua ativo e liberado (os tokens antigos caem).
 - `POST /api/v1/contas/redefinicao-senha`: público, `{"token", "senha_nova"}`, 204 sem sessão. O
-  banco guarda só `hash_do_token(token)` (SHA-256 hexadecimal, em `auth/security.py`; a parte B usa
-  a mesma função). Numa transação: localiza o dono, trava a conta (`FOR UPDATE`), executa `UPDATE`
+  banco guarda só `hash_do_token(token)` (SHA-256 hexadecimal, em `auth/security.py`). Numa
+  transação: localiza o dono, trava a conta (`FOR UPDATE`), executa `UPDATE`
   condicional que consome o token, grava a senha nova, soma `sessao_versao + 1`, inutiliza demais
   tokens pendentes da conta e audita; após o commit, limpa eventual bloqueio da conta no
   `LoginRateLimiter`. Qualquer falha (inclusive senha igual ao e-mail) desfaz tudo e o token
@@ -78,9 +78,12 @@ comprobatório permanece no cadastro do condomínio. Nenhuma migration ou depend
   comparação com o e-mail é feita no service, que é quem conhece a conta.
 - Auditoria: `conta.senha_alterar` e `conta.senha_redefinir`, com só `sessao_versao` em
   `antes`/`depois`. Na rota pública, a identidade auditada é a dona do token, como em `conta.criar`.
-- Pendente (parte B): `POST /contas/recuperacao-senha`, que gera o token e envia o e-mail
-  (depende da TASK-50).
-- **Divergência documental:** o card do Notion cita `/auth/esqueci-senha` e
+- `POST /contas/recuperacao-senha`: público, recebe `{"email"}` e responde 202 para e-mail
+  válido, exista ou não uma conta elegível. Cria token de uso único, persiste só o SHA-256,
+  invalida links anteriores e agenda envio direto, sem outbox. O link dura 30 minutos por
+  padrão (`PASSWORD_RESET_TOKEN_EXPIRE_MINUTES`); falha de e-mail não muda a resposta. Limite
+  por IP retorna 429 com `Retry-After`.
+- **Divergência histórica:** o card original do Notion citava `/auth/esqueci-senha` e
   `/auth/redefinir-senha`. Vale o contrato (`nucleo.md`, seção 3.3): as rotas ficam em `/contas`.
 
 Testes: [cadastros existentes](../../../tests/test_contas_funcionarios_api.py) e

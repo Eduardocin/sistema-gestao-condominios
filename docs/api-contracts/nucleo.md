@@ -125,15 +125,19 @@ Erros: 409 `conflict` com `reason` = `email_ja_cadastrado` ou `telefone_ja_cadas
 | `GET /contas/me` | Qualquer conta | Dados da conta | US-103 |
 | `PUT /contas/me` | Cadastro global de Morador/Administração | Edita nome, telefone e e-mail; foto depende de storage global | US-103 (recorte TASK-27) |
 | `PUT /contas/me/senha` | Cadastro global de Morador/Administração | `{"senha_atual", "senha_nova"}`; incrementa `sessao_versao` e devolve tokens novos | US-103 |
-| `POST /contas/recuperacao-senha` | Público | `{"email"}`; **sempre 202**, exista ou não a conta; enfileira o e-mail `recuperacao_senha` | US-102 |
+| `POST /contas/recuperacao-senha` | Público | `{"email"}`; **202** para e-mail válido, exista ou não uma conta elegível; envia o link diretamente, fora da outbox | US-102 |
 | `POST /contas/redefinicao-senha` | Público | `{"token", "senha_nova"}`; token de uso único (`UPDATE ... WHERE usado_em IS NULL`) e com validade; incrementa `sessao_versao` | US-102 |
 
 **Implementado na TASK-27:** `GET/PUT /api/v1/contas/me` e auditoria dos cadastros
 das seções 3.1–3.2. Há sobreposição de consulta/edição com a US-103. Os cadastros existentes e
 seu `LoginResponse` são preservados.
 
-**Implementado na TASK-53, parte A:** `PUT /contas/me/senha` e `POST /contas/redefinicao-senha`.
-`POST /contas/recuperacao-senha` continua proposta (parte B, depende do e-mail da TASK-50).
+**Implementado no módulo de contas:** `PUT /contas/me/senha`, `POST /contas/redefinicao-senha` e
+`POST /contas/recuperacao-senha`. A solicitação responde 202 mesmo sem conta elegível, cria um
+token de uso único com validade configurável (30 minutos por padrão), persiste somente seu SHA-256
+e envia o link diretamente pelo backend de e-mail configurado. O token não entra na outbox. Falha
+do provedor não muda a resposta; a pessoa pode solicitar outro link. Limite por IP: 429 com
+`Retry-After` após excesso de solicitações.
 
 - `PUT /contas/me/senha`: Bearer válido, sem exigir `cid`. Neste recorte, como no `PUT /contas/me`,
   só cadastro global de Morador/Administração; conta compartilhada e ADM recebem 403 (o acesso
@@ -409,8 +413,14 @@ Rotas sob `/plataforma/...`, só para `administrador_plataforma` (R9). O ADM **n
 | `POST /plataforma/condominios/{id}/aprovacao` | ADM | `{}` | 200, objeto `ativo` |
 | `POST /plataforma/condominios/{id}/rejeicao` | ADM | `{"motivo": "..."}` | 200, objeto `rejeitado` |
 | `PUT /plataforma/condominios/{id}` | ADM (US-208, Could, Sprint 3) | `nome`, `cnpj`, `endereco`, `logo_arquivo_id` | 200, objeto |
-| `POST /plataforma/condominios/{id}/desativacao` | ADM (US-208) | `{"motivo": "..."}` | 200, objeto `desativado` |
-| `POST /plataforma/condominios/{id}/reativacao` | ADM (US-208) | `{}` | 200, objeto `ativo` |
+| `POST /plataforma/condominios/{id}/desativacao` | ADM, `cadastro_condominio:editar` | `{}`; somente de `ativo` | 200, objeto `desativado` |
+| `POST /plataforma/condominios/{id}/reativacao` | ADM, `cadastro_condominio:editar` | `{}`; somente de `desativado` | 200, objeto `ativo` |
+
+Desativação e reativação estão implementadas com bloqueio da linha e auditoria na mesma
+transação. Qualquer outra transição retorna 409 `transicao_invalida`; a auditoria registra
+estado anterior e novo. O status desativado bloqueia seleção e acesso operacional de todos os
+perfis locais; a Administração ainda pode selecionar condomínios `pendente` e `rejeitado` para
+correção e reenvio.
 
 Item da fila (a US-203 pede "CNPJ, documentos anexados e data de envio"):
 

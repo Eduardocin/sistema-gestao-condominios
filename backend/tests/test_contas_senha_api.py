@@ -1,8 +1,9 @@
-"""TASK-53 (parte A): troca de senha logado e redefinição por token, contra PostgreSQL migrado."""
+"""Troca, recuperação e redefinição de senha contra PostgreSQL migrado."""
 
 import json
 import logging
 import random
+import re
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -11,12 +12,16 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.core.config import Settings
 from app.db.session import get_session
 from app.main import create_app
 from app.modules.auditoria.models import RegistroAuditoria
 from app.modules.auth.rate_limit import get_login_rate_limiter
 from app.modules.auth.security import hash_do_token, hash_senha, verificar_senha
 from app.modules.condominios.models import Condominio, VinculoCondominio
+from app.modules.contas import service
+from app.modules.notificacoes.models import EnvioEmail
+from app.modules.notificacoes.smtp import Mensagem
 from app.modules.usuarios.models import TokenRecuperacaoSenha, Usuario
 from tests.isolamento.cenario import cabecalho, token_de
 from tests.test_contas_funcionarios_api import conta
@@ -28,6 +33,7 @@ pytestmark = pytest.mark.postgres
 
 TROCA = "/api/v1/contas/me/senha"
 REDEFINICAO = "/api/v1/contas/redefinicao-senha"
+RECUPERACAO = "/api/v1/contas/recuperacao-senha"
 SENHA = "SenhaFicticia123"
 NOVA = "OutraSenha456"
 
@@ -110,6 +116,170 @@ def test_hash_do_token_e_sha256_hexadecimal():
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     )
     assert len(hash_do_token(secrets.token_urlsafe(32))) == 64
+
+
+def test_recuperacao_responde_202_sem_revelar_conta_e_envia_token_com_hash(
+    client, session, monkeypatch
+):
+    sessao, dados = cadastrar(client)
+    usuario_id = uuid.UUID(sessao["usuario"]["id"])
+    anterior = emitir_token(session, usuario_id)
+    mensagens: list[Mensagem] = []
+
+    class BackendFake:
+        def enviar(self, mensagem: Mensagem) -> None:
+            mensagens.append(mensagem)
+
+    monkeypatch.setattr(service, "obter_backend", lambda _settings: BackendFake())
+
+    inexistente = client.post(RECUPERACAO, json={"email": "ausente@example.test"})
+    resposta = client.post(RECUPERACAO, json={"email": f" {dados['email'].upper()} "})
+
+    assert (inexistente.status_code, resposta.status_code) == (202, 202)
+    assert dados["email"] not in resposta.text
+    assert len(mensagens) == 1
+    mensagem = mensagens[0]
+    assert mensagem.destinatario == dados["email"]
+    token_novo = re.search(r"\?token=([A-Za-z0-9_-]+)", mensagem.corpo)
+    assert token_novo is not None
+    token_novo = token_novo.group(1)
+
+    tokens = list(
+        session.scalars(
+            select(TokenRecuperacaoSenha).where(TokenRecuperacaoSenha.usuario_id == usuario_id)
+        )
+    )
+    assert len(tokens) == 2
+    novo = next(token for token in tokens if token.token_hash == hash_do_token(token_novo))
+    velho = next(token for token in tokens if token.token_hash == hash_do_token(anterior))
+    assert novo.usado_em is None
+    assert velho.usado_em is not None
+    assert all(token_novo not in linha.token_hash for linha in tokens)
+    assert client.post(REDEFINICAO, json={"token": anterior, "senha_nova": NOVA}).status_code == 422
+    (evento,) = eventos(session, usuario_id, "conta.senha_recuperacao_solicitar")
+    assert evento.antes == evento.depois == {}
+    assert token_novo not in json.dumps([evento.antes, evento.depois])
+
+
+def test_limite_de_recuperacao_por_ip_responde_429(client):
+    limite = get_login_rate_limiter()._max_falhas
+    for _ in range(limite):
+        resposta = client.post(RECUPERACAO, json={"email": "ausente@example.test"})
+        assert resposta.status_code == 202
+
+    bloqueada = client.post(RECUPERACAO, json={"email": "ausente@example.test"})
+    assert bloqueada.status_code == 429
+    assert bloqueada.json()["error"]["code"] == "too_many_attempts"
+    assert int(bloqueada.headers["Retry-After"]) > 0
+
+
+def test_falha_do_smtp_nao_muda_o_202_nem_registra_segredos(client, session, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    sessao, dados = cadastrar(client)
+
+    class BackendComFalha:
+        def enviar(self, mensagem: Mensagem) -> None:
+            raise RuntimeError(mensagem.corpo)
+
+    monkeypatch.setattr(service, "obter_backend", lambda _settings: BackendComFalha())
+    resposta = client.post(RECUPERACAO, json={"email": dados["email"]})
+
+    assert resposta.status_code == 202
+    assert dados["email"] not in caplog.text
+    assert "token=" not in caplog.text
+    token_persistido = session.scalar(
+        select(TokenRecuperacaoSenha).where(
+            TokenRecuperacaoSenha.usuario_id == uuid.UUID(sessao["usuario"]["id"])
+        )
+    )
+    assert token_persistido is not None
+
+
+def test_enviar_email_recuperacao_com_console_nao_vaza_token(caplog):
+    caplog.set_level(logging.DEBUG)
+    token_secreto = "token-secreto-nao-pode-ir-para-log"
+    destinatario = "morador.teste@example.test"
+    mensagem = Mensagem(
+        destinatario=destinatario,
+        assunto="Redefinição de senha — Gestão de Condomínios",
+        corpo=(
+            f"Acesse: https://condominios.exemplo.test/redefinir-senha?token={token_secreto}"
+            "\n\nIgnore se não pediu."
+        ),
+    )
+
+    service.enviar_email_recuperacao(mensagem, Settings(_env_file=None, email_backend="console"))
+
+    assert token_secreto not in caplog.text
+    assert destinatario not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("ativo", "tipo_cadastro", "adm_plataforma"),
+    [
+        (False, "morador", False),
+        (True, None, False),
+        (True, None, True),
+    ],
+)
+def test_recuperacao_ignora_contas_inelegiveis(
+    client, session, monkeypatch, ativo, tipo_cadastro, adm_plataforma
+):
+    mensagens: list[Mensagem] = []
+
+    class BackendFake:
+        def enviar(self, mensagem: Mensagem) -> None:
+            mensagens.append(mensagem)
+
+    monkeypatch.setattr(service, "obter_backend", lambda _settings: BackendFake())
+
+    email = f"{uuid.uuid4().hex}@example.test"
+    usuario = Usuario(
+        nome="Conta inelegível",
+        email=email,
+        senha_hash=hash_senha(SENHA),
+        ativo=ativo,
+        tipo_cadastro=tipo_cadastro,
+        administrador_plataforma=adm_plataforma,
+    )
+    session.add(usuario)
+    session.commit()
+
+    resposta = client.post(RECUPERACAO, json={"email": email})
+
+    assert resposta.status_code == 202
+    assert mensagens == []
+    assert (
+        session.scalar(
+            select(TokenRecuperacaoSenha).where(TokenRecuperacaoSenha.usuario_id == usuario.id)
+        )
+        is None
+    )
+    assert eventos(session, usuario.id, "conta.senha_recuperacao_solicitar") == []
+
+
+def test_recuperacao_nao_usa_outbox_e_permite_redefinir_e_logar(client, session, monkeypatch):
+    _, dados = cadastrar(client)
+    mensagens: list[Mensagem] = []
+
+    class BackendFake:
+        def enviar(self, mensagem: Mensagem) -> None:
+            mensagens.append(mensagem)
+
+    monkeypatch.setattr(service, "obter_backend", lambda _settings: BackendFake())
+
+    resposta = client.post(RECUPERACAO, json={"email": dados["email"]})
+    assert resposta.status_code == 202
+    assert len(mensagens) == 1
+    assert session.scalars(select(EnvioEmail)).all() == []
+
+    match = re.search(r"\?token=([A-Za-z0-9_-]+)", mensagens[0].corpo)
+    assert match is not None
+    token_novo = match.group(1)
+
+    redefinicao = client.post(REDEFINICAO, json={"token": token_novo, "senha_nova": NOVA})
+    assert redefinicao.status_code == 204
+    assert login(client, dados["email"], NOVA).status_code == 200
 
 
 # --- troca de senha logado ---------------------------------------------------------------------

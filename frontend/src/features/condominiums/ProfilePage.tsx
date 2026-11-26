@@ -5,7 +5,9 @@ import { Button, ButtonLink, Card, Heading, Input, Notice, Page } from '../../co
 import { useAuth } from '../auth/context'
 import { changePasswordError, passwordHint, passwordRuleError } from '../auth/password'
 import styles from '../resident/ResidentWorkspace.module.css'
+import { saveFlash, takeFlash } from './flash'
 
+const FLASH = 'perfil-atualizado'
 type Account = { nome: string; email: string; telefone: string | null }
 
 function rememberMessage(message: string) {
@@ -22,15 +24,7 @@ export function ProfilePage() {
   const [passwordPending, setPasswordPending] = useState(false)
   const [account, setAccount] = useState<Account>()
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem('perfil-atualizado') ?? ''
-      sessionStorage.removeItem('perfil-atualizado')
-      return saved
-    } catch {
-      return ''
-    }
-  })
+  const [success, setSuccess] = useState(() => takeFlash(FLASH))
   const [pending, setPending] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
@@ -86,11 +80,7 @@ export function ProfilePage() {
         telefone: account.telefone ?? '',
       })
       setSuccess('Perfil atualizado.')
-      try {
-        sessionStorage.setItem('perfil-atualizado', 'Perfil atualizado.')
-      } catch {
-        /* A edição já foi salva. */
-      }
+      saveFlash(FLASH, 'Perfil atualizado.')
       await client.restore()
     } catch (failure) {
       const message = isAxiosError<{ error?: { message?: string } }>(failure)

@@ -1,6 +1,7 @@
 """Contas são globais; a edição recebe exclusivamente o ID da identidade autenticada."""
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -65,6 +66,34 @@ def obter_conta_travada(session: Session, usuario_id: uuid.UUID) -> Usuario | No
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+
+
+def obter_conta_para_recuperacao(session: Session, email: str) -> Usuario | None:
+    """Localiza e trava uma conta global elegível; contas inativas ficam indistinguíveis."""
+    return session.scalar(
+        select(Usuario)
+        .where(
+            Usuario.email == email,
+            Usuario.ativo.is_(True),
+            Usuario.tipo_cadastro.in_(("morador", "administracao")),
+            Usuario.administrador_plataforma.is_(False),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def criar_token_recuperacao(
+    session: Session, usuario_id: uuid.UUID, token_hash: str, expira_em: datetime
+) -> None:
+    session.add(
+        TokenRecuperacaoSenha(
+            usuario_id=usuario_id,
+            token_hash=token_hash,
+            expira_em=expira_em,
+        )
+    )
+    session.flush()
 
 
 def obter_usuario_id_token_recuperacao(session: Session, token_hash: str) -> uuid.UUID | None:

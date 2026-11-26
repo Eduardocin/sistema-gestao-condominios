@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -16,12 +16,15 @@ from app.modules.contas.schemas import (
     ContaSaida,
     EdicaoConta,
     RedefinicaoSenha,
+    SolicitacaoRecuperacaoSenha,
     TrocaSenha,
 )
 from app.modules.contas.service import (
     cadastrar,
     editar_propria_conta,
+    enviar_email_recuperacao,
     redefinir_senha,
+    solicitar_recuperacao_senha,
     trocar_propria_senha,
 )
 
@@ -97,6 +100,35 @@ def trocar_senha(
         condominio_id_atual=autenticado.condominio_id,
     )
     return resposta_de_sessao(sessao)
+
+
+@router.post(
+    "/recuperacao-senha",
+    status_code=202,
+    summary="Solicitar link de redefinição de senha",
+    responses={
+        202: {"description": "Solicitação aceita, exista ou não uma conta elegível."},
+        422: {"description": "E-mail inválido."},
+        429: {"description": "Limite de solicitações por endereço IP excedido."},
+    },
+)
+def solicitar_recuperacao(
+    dados: SolicitacaoRecuperacaoSenha,
+    background_tasks: BackgroundTasks,
+    session: SessionDep,
+    settings: SettingsDep,
+    limiter: LimiterDep,
+    request: Request,
+) -> None:
+    mensagem = solicitar_recuperacao_senha(
+        session,
+        dados,
+        limiter=limiter,
+        settings=settings,
+        ip=ip_do_cliente(request),
+    )
+    if mensagem is not None:
+        background_tasks.add_task(enviar_email_recuperacao, mensagem, settings)
 
 
 @router.post(

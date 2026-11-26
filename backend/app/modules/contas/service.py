@@ -1,4 +1,7 @@
+import logging
+import secrets
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +12,12 @@ from app.core.errors import ApiError
 from app.modules.auditoria import service as auditoria
 from app.modules.auditoria.schemas import ContextoAuditoria
 from app.modules.auth.rate_limit import LoginRateLimiter
-from app.modules.auth.security import hash_do_token, hash_senha, verificar_senha
+from app.modules.auth.security import (
+    gastar_tempo_de_verificacao,
+    hash_do_token,
+    hash_senha,
+    verificar_senha,
+)
 from app.modules.auth.service import SessaoEmitida, emitir_sessao_do_usuario
 from app.modules.contas import repository
 from app.modules.contas.schemas import (
@@ -19,10 +27,14 @@ from app.modules.contas.schemas import (
     ContaSaida,
     EdicaoConta,
     RedefinicaoSenha,
+    SolicitacaoRecuperacaoSenha,
     TrocaSenha,
     conferir_senha,
 )
+from app.modules.notificacoes.smtp import ConsoleBackend, Mensagem, obter_backend
 from app.modules.usuarios.models import Usuario
+
+logger = logging.getLogger(__name__)
 
 TIPOS_DE_CADASTRO = {"morador", "administracao"}
 MENSAGEM_SEM_PERMISSAO = "Você não tem permissão para realizar esta ação."
@@ -44,6 +56,83 @@ def _senha_invalida() -> ApiError:
 
 def _token_invalido() -> ApiError:
     return ApiError(422, "validation_error", MENSAGEM_TOKEN_INVALIDO, reason="token_invalido")
+
+
+def solicitar_recuperacao_senha(
+    session: Session,
+    dados: SolicitacaoRecuperacaoSenha,
+    *,
+    limiter: LoginRateLimiter,
+    settings: Settings,
+    ip: str | None,
+) -> Mensagem | None:
+    """Cria um token de uso único, sem revelar se a conta existe, e confirma a transação."""
+    chave = f"recuperacao:{ip or 'desconhecido'}"
+    segundos = limiter.bloqueio_restante(chave)
+    if segundos > 0:
+        raise ApiError(
+            429,
+            "too_many_attempts",
+            "Muitas solicitações. Tente novamente mais tarde.",
+            headers={"Retry-After": str(segundos)},
+        )
+    limiter.registrar_falha(chave)
+
+    mensagem: Mensagem | None = None
+    try:
+        # Custo fixo reduz a diferença de tempo entre contas elegíveis e e-mails sem conta.
+        gastar_tempo_de_verificacao(dados.email)
+        usuario = repository.obter_conta_para_recuperacao(session, dados.email)
+        if usuario is not None:
+            token = secrets.token_urlsafe(32)
+            repository.inutilizar_tokens_pendentes(session, usuario.id)
+            repository.criar_token_recuperacao(
+                session,
+                usuario.id,
+                hash_do_token(token),
+                datetime.now(UTC) + timedelta(minutes=settings.password_reset_token_expire_minutes),
+            )
+            auditoria.registrar_acao(
+                session,
+                ctx=ContextoAuditoria(usuario_id=usuario.id, ip=ip),
+                acao="conta.senha_recuperacao_solicitar",
+                recurso_tipo="usuario",
+                recurso_id=usuario.id,
+                antes={},
+                depois={},
+            )
+            link = f"{settings.frontend_base_url.rstrip('/')}/redefinir-senha?token={token}"
+            mensagem = Mensagem(
+                destinatario=usuario.email,
+                assunto="Redefinição de senha — Gestão de Condomínios",
+                corpo=(
+                    "Recebemos uma solicitação para redefinir sua senha.\n\n"
+                    "Acesse este link em até "
+                    f"{settings.password_reset_token_expire_minutes} minutos:\n"
+                    f"{link}\n\n"
+                    "Se você não solicitou a redefinição, ignore este e-mail."
+                ),
+            )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return mensagem
+
+
+def enviar_email_recuperacao(mensagem: Mensagem, settings: Settings) -> None:
+    """Entrega fora da transação HTTP; falha no provedor não invalida a solicitação."""
+    try:
+        backend = obter_backend(settings)
+        if isinstance(backend, ConsoleBackend):
+            logger.info(
+                "Envio de recuperação ignorado com EMAIL_BACKEND=console; configure SMTP/Mailpit."
+            )
+            return
+        backend.enviar(mensagem)
+    except Exception as erro:
+        # Não registrar mensagem, destinatário, URL ou texto da exceção: podem conter o token.
+        logger.warning("Falha no envio do e-mail de recuperação (%s).", type(erro).__name__)
 
 
 def _conflito(campo: str) -> ApiError:

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import {
   Button,
@@ -12,6 +12,7 @@ import {
 } from '../../components'
 import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
+import { condominiumAdminError, createCondominiumAdminApi } from './condominium-admin-api'
 import styles from '../resident/ResidentWorkspace.module.css'
 
 type Item = {
@@ -38,11 +39,13 @@ type Detail = Item & {
     andares: { id: string; nome: string; unidades: { id: string; identificacao: string }[] }[]
   }[]
   motivo_rejeicao: string | null
+  analises: { evento: string; motivo: string | null; em: string }[]
 }
 type Page = { items: Item[]; page: number; page_size: number; total: number }
 
 export function ApprovalPage() {
   const { snapshot, client } = useAuth()
+  const api = useMemo(() => createCondominiumAdminApi(client.http), [client])
   const [status, setStatus] = useState('pendente')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -109,6 +112,37 @@ export function ApprovalPage() {
       setError('Não foi possível concluir a análise. Atualize os dados e tente novamente.')
     } finally {
       submitting.current = false
+      setBusy(false)
+    }
+  }
+
+  async function changeAvailability() {
+    if (!detail || busy || !['ativo', 'desativado'].includes(detail.status)) return
+    const deactivating = detail.status === 'ativo'
+    const confirmation = deactivating
+      ? `Desativar ${detail.nome}? Moradores, Administração e funcionários perderão o acesso operacional até a reativação. Os dados serão preservados.`
+      : `Reativar ${detail.nome}? Os usuários locais poderão voltar a acessar o condomínio.`
+    if (!window.confirm(confirmation)) return
+    setBusy(true)
+    setError('')
+    setSuccess('')
+    try {
+      const data = await api.setCondominiumStatus(detail.id, !deactivating)
+      setDetail((current) => (current ? { ...current, ...data } : current))
+      setSuccess(
+        deactivating
+          ? 'Condomínio desativado. Os dados e vínculos foram preservados.'
+          : 'Condomínio reativado.',
+      )
+      setRevision((value) => value + 1)
+    } catch (cause) {
+      setError(
+        condominiumAdminError(
+          cause,
+          'Não foi possível alterar o status. Atualize e tente novamente.',
+        ),
+      )
+    } finally {
       setBusy(false)
     }
   }
@@ -252,6 +286,19 @@ export function ApprovalPage() {
             {detail.motivo_rejeicao && (
               <Notice tone="warning">Motivo da rejeição: {detail.motivo_rejeicao}</Notice>
             )}
+            {detail.analises.length > 0 && (
+              <div>
+                <Heading level={3} size="sm">
+                  Histórico de situação
+                </Heading>
+                {detail.analises.map((item, index) => (
+                  <Text key={`${item.em}-${index}`}>
+                    {new Date(item.em).toLocaleString('pt-BR')} · {item.evento}
+                    {item.motivo ? `: ${item.motivo}` : ''}
+                  </Text>
+                ))}
+              </div>
+            )}
             {detail.status === 'pendente' && (
               <>
                 <Input
@@ -274,6 +321,16 @@ export function ApprovalPage() {
                   </Button>
                 </div>
               </>
+            )}
+            {detail.status === 'ativo' && (
+              <Button variant="alert" disabled={busy} onClick={() => void changeAvailability()}>
+                Desativar condomínio
+              </Button>
+            )}
+            {detail.status === 'desativado' && (
+              <Button variant="success" disabled={busy} onClick={() => void changeAvailability()}>
+                Reativar condomínio
+              </Button>
             )}
           </Card>
         )}

@@ -8,7 +8,7 @@ As rotas usam a base `/api/v1` e o contexto autenticado para determinar o condom
 
 | Método e rota | Uso |
 | --- | --- |
-| `GET /encomendas` | Lista paginada e filtrável por descrição, status, `unidade_id` e período (`data_de`, `data_ate`), dentro do escopo autorizado |
+| `GET /encomendas` | Lista paginada e filtrável por descrição, status, `unidade_id` e período (`data_de`, `data_ate`), dentro do escopo autorizado. Para o Morador `unidade_id` é obrigatório (422 sem ele) |
 | `GET /encomendas/relatorio` | Relatório da Administração (US-404): contagem por status, no total e por unidade, com os mesmos filtros de período e unidade |
 | `GET /encomendas/{id}` | Consulta histórico e estado atual |
 | `POST /encomendas` | Recebe `multipart/form-data` com unidade, destinatário, descrição, funcionário e foto |

@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Heading, Notice, Select } from '../../components'
+import axios from 'axios'
+import { Button, Card, Heading, Modal, Notice, Select, Text } from '../../components'
 import { useAuth } from '../auth/context'
+import {
+  desvinculacaoErrorMessage,
+  desvinculacaoPath,
+  desvinculacaoSuccessMessage,
+} from './desvinculacao'
 import { ResidentWorkspace } from '../resident/ResidentWorkspace'
 import styles from '../resident/ResidentWorkspace.module.css'
+import { saveFlash, takeFlash } from './flash'
 
+const FLASH = 'permissoes-atualizadas'
 type Resident = { id: string; nome: string; eu: boolean; permissoes: Record<string, boolean> }
 const labels: Record<string, string> = {
   unidades: 'Unidades',
@@ -30,9 +38,10 @@ function Permissions() {
   const unit = units.find((item) => item.id === unitId) ?? units[0]
   const [residents, setResidents] = useState<Resident[]>([])
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [success, setSuccess] = useState(() => takeFlash(FLASH))
   const [busy, setBusy] = useState(false)
   const [revision, setRevision] = useState(0)
+  const [target, setTarget] = useState<Resident | null>(null)
 
   useEffect(() => {
     if (!unit) return
@@ -50,6 +59,35 @@ function Permissions() {
     return () => controller.abort()
   }, [client, unit, revision])
 
+  async function unlink(resident: Resident) {
+    if (!unit || busy) return
+    setBusy(true)
+    setError('')
+    setSuccess('')
+    try {
+      // Morador: o corpo é sempre vazio (responsavel_id é só da Administração).
+      const { data } = await client.http.post<{ chave_revogada: boolean }>(
+        desvinculacaoPath(unit.id, resident.id),
+        {},
+      )
+      setSuccess(desvinculacaoSuccessMessage(resident.nome, data.chave_revogada))
+      setTarget(null)
+      setRevision((value) => value + 1)
+      await client.restore()
+    } catch (failure) {
+      const response = axios.isAxiosError(failure) ? failure.response : undefined
+      setError(
+        desvinculacaoErrorMessage({
+          status: response?.status,
+          reason: response?.data?.error?.reason,
+        }),
+      )
+      setTarget(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function save(resident: Resident) {
     if (!unit || busy) return
     setBusy(true)
@@ -61,6 +99,7 @@ function Permissions() {
         { abas: resident.permissoes },
       )
       setSuccess('Permissões atualizadas.')
+      saveFlash(FLASH, 'Permissões atualizadas.')
       setRevision((value) => value + 1)
       await client.restore()
     } catch {
@@ -131,12 +170,35 @@ function Permissions() {
               <div>
                 <Button disabled={busy} onClick={() => void save(resident)}>
                   Salvar permissões
-                </Button>
+                </Button>{' '}
+                {!resident.eu && (
+                  <Button variant="alert" disabled={busy} onClick={() => setTarget(resident)}>
+                    Desvincular
+                  </Button>
+                )}
               </div>
             </article>
           ))}
         </Card>
       )}
+      <Modal
+        isOpen={target !== null}
+        onClose={() => !busy && setTarget(null)}
+        title="Desvincular morador"
+      >
+        <Text>
+          {target?.nome} perderá o acesso a {unit?.identificacao}. O histórico é preservado e a
+          chave de acesso atual da unidade será revogada.
+        </Text>
+        <div>
+          <Button variant="secondary" disabled={busy} onClick={() => setTarget(null)}>
+            Cancelar
+          </Button>{' '}
+          <Button variant="alert" disabled={busy} onClick={() => target && void unlink(target)}>
+            Confirmar desvinculação
+          </Button>
+        </div>
+      </Modal>
     </section>
   )
 }

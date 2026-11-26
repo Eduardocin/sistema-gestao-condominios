@@ -15,6 +15,7 @@ import { AccessDenied, RequireSession } from './SessionPages'
 import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
 import { MyCondominiums } from '../condominiums/MyCondominiums'
 import { ResidentNotices } from '../condominiums/ResidentNotices'
+import { supportNavigation } from '../suporte/support-state'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -27,17 +28,50 @@ const modules: Record<string, string[]> = {
     'Ocorrências',
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
-  administracao: ['Unidades e moradores', 'Funcionários', 'Avisos'],
-  plataforma: ['Condomínios', 'Auditoria', 'Administração da plataforma'],
+  administracao: [
+    'Condomínio e estrutura',
+    'Conta de funcionários',
+    'Unidades e moradores',
+    'Funcionários',
+    'Avisos',
+    'Áreas comuns',
+    'Reservas',
+    'Ocorrências',
+    'Relatório de encomendas',
+    'Suporte',
+    'Comunicados',
+  ],
+  plataforma: ['Condomínios', 'Fila de suporte', 'Comunicados', 'Auditoria'],
   'sem-condominio': [],
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'administracao' && label === 'Condomínio e estrutura') {
+    return { to: '/app/administracao/condominio', action: 'Editar condomínio e estrutura' }
+  }
+  if (area === 'administracao' && label === 'Conta de funcionários') {
+    return { to: '/app/administracao/conta-funcionarios', action: 'Gerenciar conta compartilhada' }
+  }
   if (area === 'administracao' && label === 'Avisos') {
     return { to: '/app/administracao/avisos', action: 'Gerenciar avisos' }
   }
   if (area === 'administracao' && label === 'Unidades e moradores') {
     return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
+  }
+  if (area === 'administracao' && label === 'Relatório de encomendas') {
+    return { to: '/app/administracao/encomendas/relatorio', action: 'Ver relatório' }
+  }
+  if (area === 'administracao' && label === 'Suporte') {
+    return { to: '/app/administracao/suporte', action: 'Abrir ou acompanhar chamados' }
+  }
+  if (area === 'administracao' && label === 'Comunicados') {
+    return { to: '/app/administracao/comunicados', action: 'Ler comunicados' }
+  }
+  if (area === 'plataforma' && label === 'Fila de suporte') {
+    return { to: '/app/plataforma/suporte', action: 'Atender chamados' }
+  }
+  if (area === 'plataforma' && label === 'Comunicados') {
+    return { to: '/app/plataforma/comunicados', action: 'Enviar comunicados' }
   }
   if (area === 'plataforma' && label === 'Auditoria') {
     return { to: '/app/plataforma/auditoria', action: 'Consultar auditoria' }
@@ -47,6 +81,15 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'administracao' && label === 'Funcionários') {
     return { to: '/app/administracao/funcionarios', action: 'Gerenciar funcionários' }
+  }
+  if (area === 'administracao' && label === 'Áreas comuns') {
+    return { to: '/app/administracao/areas-comuns', action: 'Gerenciar áreas comuns' }
+  }
+  if (area === 'administracao' && label === 'Reservas') {
+    return { to: '/app/administracao/reservas', action: 'Gerenciar reservas' }
+  }
+  if (area === 'administracao' && label === 'Ocorrências') {
+    return { to: '/app/administracao/ocorrencias', action: 'Tratar ocorrências' }
   }
   if (area === 'portaria' && label === 'Recebimento e retirada de encomendas') {
     return { to: '/app/portaria/encomendas', action: 'Acessar encomendas' }
@@ -106,16 +149,23 @@ export function WorkspacePage({ area }: { area: string }) {
     ...(area === 'administracao'
       ? [
           {
-            key: 'employees',
-            label: 'Funcionários',
-            to: '/app/administracao/funcionarios',
+            key: 'condominium-settings',
+            label: 'Condomínio e estrutura',
+            to: '/app/administracao/condominio',
+            symbol: '▦',
+          },
+          {
+            key: 'shared-account',
+            label: 'Conta de funcionários',
+            to: '/app/administracao/conta-funcionarios',
             symbol: '♙',
           },
+          ...supportNavigation('administracao').slice(1),
         ]
       : []),
     ...(area === 'plataforma'
       ? [
-          { key: 'approvals', label: 'Condomínios', to: '/app/plataforma/condominios', symbol: '▦' },
+          ...supportNavigation('plataforma').slice(1),
           { key: 'audit', label: 'Auditoria', to: '/app/plataforma/auditoria', symbol: '☰' },
         ]
       : []),
@@ -151,9 +201,28 @@ export function WorkspacePage({ area }: { area: string }) {
         )}
         {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
         {area === 'morador' && <ResidentNotices />}
-        {(area === 'sem-condominio' || area === 'morador') && <div><ButtonLink to="/app/vincular-unidade" variant="secondary">Vincular unidade</ButtonLink></div>}
-        {!identity.administrador_plataforma && <div><ButtonLink to="/app/perfil" variant="secondary">Editar perfil</ButtonLink></div>}
-        {area === 'morador' && identity.unidades.some((unit) => unit.abas?.includes('usuarios')) && <div><ButtonLink to="/app/morador/permissoes" variant="secondary">Permissões dos moradores</ButtonLink></div>}
+        {(area === 'sem-condominio' || area === 'morador') && (
+          <div>
+            <ButtonLink to="/app/vincular-unidade" variant="secondary">
+              Vincular unidade
+            </ButtonLink>
+          </div>
+        )}
+        {!identity.administrador_plataforma && (
+          <div>
+            <ButtonLink to="/app/perfil" variant="secondary">
+              Editar perfil
+            </ButtonLink>
+          </div>
+        )}
+        {area === 'morador' &&
+          identity.unidades.some((unit) => unit.abas?.includes('usuarios')) && (
+            <div>
+              <ButtonLink to="/app/morador/permissoes" variant="secondary">
+                Permissões dos moradores
+              </ButtonLink>
+            </div>
+          )}
         <Card>
           <Heading level={2} size="md">
             Seu acesso
@@ -192,33 +261,49 @@ export function WorkspacePage({ area }: { area: string }) {
             </Heading>
             <Text tone="secondary">Escolha um serviço disponível para sua área.</Text>
             <div className={styles.modules}>
-              {modules[area].filter((label) => {
-                if (area !== 'morador') return true
-                const tab = ({ Encomendas: 'packages', Visitantes: 'visitors', Veículos: 'vehicles', 'Reservar área': 'reserve', 'Minhas reservas': 'reservations', Ocorrências: 'occurrences' } as Record<string, string>)[label]
-                return !tab || identity.unidades.some((unit) => unit.abas?.includes(residentTabPermissions[tab]))
-              }).map((label) => {
-                const target = availableModule(area, label)
-                return (
-                  <Card key={label} className={styles.module}>
-                    <Heading level={3} size="sm">
-                      {label}
-                    </Heading>
-                    {target ? (
-                      <>
-                        <Badge variant="success">Disponível</Badge>
-                        <ButtonLink to={target.to}>{target.action}</ButtonLink>
-                      </>
-                    ) : (
-                      <>
-                        <Badge variant="neutral">Em breve</Badge>
-                        <Button variant="secondary" disabled>
-                          Indisponível
-                        </Button>
-                      </>
-                    )}
-                  </Card>
-                )
-              })}
+              {modules[area]
+                .filter((label) => {
+                  if (area !== 'morador') return true
+                  const tab = (
+                    {
+                      Encomendas: 'packages',
+                      Visitantes: 'visitors',
+                      Veículos: 'vehicles',
+                      'Reservar área': 'reserve',
+                      'Minhas reservas': 'reservations',
+                      Ocorrências: 'occurrences',
+                    } as Record<string, string>
+                  )[label]
+                  return (
+                    !tab ||
+                    identity.unidades.some((unit) =>
+                      unit.abas?.includes(residentTabPermissions[tab]),
+                    )
+                  )
+                })
+                .map((label) => {
+                  const target = availableModule(area, label)
+                  return (
+                    <Card key={label} className={styles.module}>
+                      <Heading level={3} size="sm">
+                        {label}
+                      </Heading>
+                      {target ? (
+                        <>
+                          <Badge variant="success">Disponível</Badge>
+                          <ButtonLink to={target.to}>{target.action}</ButtonLink>
+                        </>
+                      ) : (
+                        <>
+                          <Badge variant="neutral">Em breve</Badge>
+                          <Button variant="secondary" disabled>
+                            Indisponível
+                          </Button>
+                        </>
+                      )}
+                    </Card>
+                  )
+                })}
             </div>
           </section>
         )}

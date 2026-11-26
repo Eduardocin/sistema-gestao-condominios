@@ -1,0 +1,123 @@
+.content,
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.form {
+  gap: var(--space-2);
+}
+
+.header,
+.actions,
+.pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.header {
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.pagination {
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+/* A tabela rola dentro do próprio painel no celular, sem alargar a página. */
+.areasTable table {
+  min-width: 40rem;
+}
+
+.reservationsTable table {
+  min-width: 64rem;
+}
+
+.filters,
+.hours {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.filters {
+  margin-bottom: var(--space-4);
+}
+
+.filters > *,
+.hours > * {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.filters > button {
+  flex: 0 0 auto;
+  margin-bottom: var(--space-4);
+}
+
+.counter {
+  margin-top: calc(-1 * var(--space-3));
+  margin-bottom: var(--space-3);
+  text-align: end;
+}
+
+.photo {
+  width: 100%;
+  max-width: 16rem;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.photoField {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.fieldError {
+  color: var(--color-alert-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+.preserveLines {
+  white-space: pre-wrap;
+}
+
+.summary {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.summary div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.summary dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.summary dd {
+  margin: 0;
+}
+
+@media (max-width: 40rem) {
+  .filters > *,
+  .hours > * {
+    flex: 1 1 100%;
+  }
+
+  .filters > button {
+    margin-bottom: 0;
+  }
+}

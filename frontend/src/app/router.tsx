@@ -32,6 +32,7 @@ import {
   ResidentReservationsPage,
   ResidentReservePage,
 } from '../features/resident/ResidentReservationsPages'
+import { AuditPage } from '../features/auditoria/AuditPage'
 import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
 import { AdminAreasPage } from '../features/admin-areas/AdminAreasPage'
 import { AdminReservationsPage } from '../features/admin-areas/AdminReservationsPage'
@@ -63,6 +64,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireSession>
         <ApprovalPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/plataforma/auditoria',
+    element: (
+      <RequireSession>
+        <AuditPage />
       </RequireSession>
     ),
   },

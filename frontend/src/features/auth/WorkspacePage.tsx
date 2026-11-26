@@ -41,7 +41,7 @@ const modules: Record<string, string[]> = {
     'Suporte',
     'Comunicados',
   ],
-  plataforma: ['Condomínios', 'Fila de suporte', 'Comunicados'],
+  plataforma: ['Condomínios', 'Fila de suporte', 'Comunicados', 'Auditoria'],
   'sem-condominio': [],
 }
 
@@ -72,6 +72,9 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'plataforma' && label === 'Comunicados') {
     return { to: '/app/plataforma/comunicados', action: 'Enviar comunicados' }
+  }
+  if (area === 'plataforma' && label === 'Auditoria') {
+    return { to: '/app/plataforma/auditoria', action: 'Consultar auditoria' }
   }
   if (area === 'plataforma' && label === 'Condomínios') {
     return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
@@ -160,7 +163,12 @@ export function WorkspacePage({ area }: { area: string }) {
           ...supportNavigation('administracao').slice(1),
         ]
       : []),
-    ...(area === 'plataforma' ? supportNavigation('plataforma').slice(1) : []),
+    ...(area === 'plataforma'
+      ? [
+          ...supportNavigation('plataforma').slice(1),
+          { key: 'audit', label: 'Auditoria', to: '/app/plataforma/auditoria', symbol: '☰' },
+        ]
+      : []),
     ...(area === 'portaria'
       ? [
           { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },

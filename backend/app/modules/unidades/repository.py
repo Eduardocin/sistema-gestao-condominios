@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.errors import RecursoNaoEncontrado
 from app.db.repositorio import RepositorioDoCondominio
@@ -87,9 +87,28 @@ class RepositorioUnidades(RepositorioDoCondominio[Unidade]):
             )
             consulta = consulta.where(~existe if filtros.sem_proprietario else existe)
         total = self.session.scalar(select(func.count()).select_from(consulta.subquery())) or 0
+        # Bloco, andar e identificação: sem isso o "101" do bloco B podia vir antes do do bloco A.
+        # Unidades legadas, sem andar, ficam por último.
+        ordem_andar = aliased(Andar)
+        ordem_bloco = aliased(Bloco)
         items = list(
             self.session.scalars(
-                consulta.order_by(Unidade.identificacao, Unidade.id)
+                consulta.outerjoin(
+                    ordem_andar,
+                    (ordem_andar.id == Unidade.andar_id)
+                    & (ordem_andar.condominio_id == Unidade.condominio_id),
+                )
+                .outerjoin(
+                    ordem_bloco,
+                    (ordem_bloco.id == ordem_andar.bloco_id)
+                    & (ordem_bloco.condominio_id == ordem_andar.condominio_id),
+                )
+                .order_by(
+                    ordem_bloco.nome.asc().nulls_last(),
+                    ordem_andar.ordem.asc().nulls_last(),
+                    Unidade.identificacao,
+                    Unidade.id,
+                )
                 .offset((filtros.page - 1) * filtros.page_size)
                 .limit(filtros.page_size)
             )

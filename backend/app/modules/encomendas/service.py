@@ -47,6 +47,7 @@ from app.modules.storage.types import (
 )
 
 logger = logging.getLogger(__name__)
+MENSAGEM_UNIDADE_OBRIGATORIA = "Informe a unidade (unidade_id) para consultar as encomendas."
 
 
 class EncomendasService:
@@ -329,6 +330,9 @@ class EncomendasService:
         page_size: int,
     ) -> PaginaEncomendas:
         self._conferir_periodo(data_de, data_ate)
+        if unidade_id is None and self.contexto.perfil == "morador":
+            # A lista do Morador é sempre de uma unidade: sem ela, a lista mistura unidades.
+            raise ApiError(422, "validation_error", MENSAGEM_UNIDADE_OBRIGATORIA)
         if unidade_id is not None:
             # Passo 4: unidade que não é do Morador, 404; da unidade sem a aba Encomendas, 403.
             # Funcionário e Administração: unidade de outro condomínio também dá 404.

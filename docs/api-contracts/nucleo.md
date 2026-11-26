@@ -409,8 +409,14 @@ Rotas sob `/plataforma/...`, só para `administrador_plataforma` (R9). O ADM **n
 | `POST /plataforma/condominios/{id}/aprovacao` | ADM | `{}` | 200, objeto `ativo` |
 | `POST /plataforma/condominios/{id}/rejeicao` | ADM | `{"motivo": "..."}` | 200, objeto `rejeitado` |
 | `PUT /plataforma/condominios/{id}` | ADM (US-208, Could, Sprint 3) | `nome`, `cnpj`, `endereco`, `logo_arquivo_id` | 200, objeto |
-| `POST /plataforma/condominios/{id}/desativacao` | ADM (US-208) | `{"motivo": "..."}` | 200, objeto `desativado` |
-| `POST /plataforma/condominios/{id}/reativacao` | ADM (US-208) | `{}` | 200, objeto `ativo` |
+| `POST /plataforma/condominios/{id}/desativacao` | ADM, `cadastro_condominio:editar` | `{}`; somente de `ativo` | 200, objeto `desativado` |
+| `POST /plataforma/condominios/{id}/reativacao` | ADM, `cadastro_condominio:editar` | `{}`; somente de `desativado` | 200, objeto `ativo` |
+
+Desativação e reativação estão implementadas com bloqueio da linha e auditoria na mesma
+transação. Qualquer outra transição retorna 409 `transicao_invalida`; a auditoria registra
+estado anterior e novo. O status desativado bloqueia seleção e acesso operacional de todos os
+perfis locais; a Administração ainda pode selecionar condomínios `pendente` e `rejeitado` para
+correção e reenvio.
 
 Item da fila (a US-203 pede "CNPJ, documentos anexados e data de envio"):
 

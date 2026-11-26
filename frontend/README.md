@@ -44,6 +44,9 @@ O build inclui a checagem de tipos. Os testes Node de autenticação abrem um se
 | `/selecionar-condominio` | Selecionar contexto autenticado |
 | `/app` | Direcionar para a área permitida |
 | `/app/administracao/funcionarios` | Administração de condomínio ativo: listar, cadastrar e desligar funcionários; cadastrar responsáveis |
+| `/app/administracao/areas-comuns` | Administração de condomínio ativo: listar (ativas, desativadas ou todas), cadastrar, editar, desativar e reativar áreas comuns |
+| `/app/administracao/reservas` | Administração de condomínio ativo: consultar reservas por área, unidade, período e status e cancelar reservas futuras com motivo e responsável |
+| `/app/administracao/ocorrencias` | Administração de condomínio ativo: listar ocorrências por situação e período, ver o histórico e os anexos, responder e resolver com responsável |
 | `/app/portaria/encomendas` | Receber encomendas com foto e registrar entrega, usando a API autenticada |
 | `/app/morador/encomendas` | Consultar encomendas autorizadas e confirmar o recebimento |
 | `/app/morador`, `/app/portaria`, `/app/administracao`, `/app/plataforma` | Visão geral de cada perfil |
@@ -56,7 +59,7 @@ Cadastros usam `POST /contas/morador` ou `POST /contas/administracao`, com os ca
 US-210 (gestão da conta compartilhada e edição/desativação de responsáveis), US-305
 (desvinculação de moradores) e US-506 (relatórios de visitantes/veículos) estão
 disponíveis somente no backend. Também permanecem sem telas integradas os fluxos de
-visitantes/veículos, troca/redefinição de senha, reservas/bloqueios, ocorrências e os
+visitantes/veículos, troca/redefinição de senha, bloqueio de datas das áreas e os
 relatórios administrativos de encomendas. A solicitação de recuperação de senha e a
 entrega SMTP ainda não estão disponíveis; enfileirar eventos não conclui esse serviço.
 

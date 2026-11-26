@@ -1,0 +1,131 @@
+.content,
+.form,
+.detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.form {
+  gap: var(--space-2);
+}
+
+.detail {
+  gap: var(--space-4);
+}
+
+.header,
+.actions,
+.pagination,
+.badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.badges {
+  gap: var(--space-2);
+}
+
+.header {
+  justify-content: space-between;
+}
+
+.pagination {
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+/* A tabela rola dentro do próprio painel no celular, sem alargar a página. */
+.table table {
+  min-width: 48rem;
+}
+
+.filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.filters > * {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.filters > button {
+  flex: 0 0 auto;
+  margin-bottom: var(--space-4);
+}
+
+.heading:focus {
+  outline: none;
+}
+
+.heading:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.facts div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.facts dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timelineItem {
+  display: grid;
+  gap: var(--space-2);
+  border-inline-start: 3px solid var(--color-border-strong);
+  padding-inline-start: var(--space-3);
+}
+
+.fromAdministration {
+  border-inline-start-color: var(--color-primary);
+}
+
+.preserveLines {
+  white-space: pre-wrap;
+}
+
+.counter {
+  margin-top: calc(-1 * var(--space-3));
+  margin-bottom: var(--space-3);
+  text-align: end;
+}
+
+@media (max-width: 40rem) {
+  .filters > * {
+    flex: 1 1 100%;
+  }
+
+  .filters > button {
+    margin-bottom: 0;
+  }
+}

@@ -13,7 +13,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write src/features/employees src/features/auth/RegistrationPage.tsx src/features/auth/employees.test.ts .prettierrc.json",
     "format:check": "prettier --check src/features/employees src/features/auth/RegistrationPage.tsx src/features/auth/employees.test.ts .prettierrc.json",
-    "test": "node --experimental-strip-types --test src/features/portaria/*.test.ts src/features/auth/*.test.ts src/features/resident/*.test.ts src/features/condominiums/*.test.ts src/features/suporte/*.test.ts",
+    "test": "node --experimental-strip-types --test src/features/portaria/*.test.ts src/features/auth/*.test.ts src/features/resident/*.test.ts src/features/condominiums/*.test.ts src/features/admin-areas/*.test.ts src/features/admin-occurrences/*.test.ts src/features/suporte/*.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -21,6 +21,7 @@ import { VisitorsWorkspacePage } from '../features/portaria/VisitorsWorkspacePag
 import { ResidentVisitorsPage } from '../features/resident/ResidentVisitorsPage'
 import { ResidentVehiclesPage } from '../features/resident/ResidentVehiclesPage'
 import { ApprovalPage } from '../features/condominiums/ApprovalPage'
+import { CondominiumSettingsRoute, SharedAccountRoute } from '../features/condominiums/AdminPages'
 import { CondominiumWizard } from '../features/condominiums/CondominiumWizard'
 import { AccessKeysPage } from '../features/condominiums/AccessKeysPage'
 import { ResidentLinkPage } from '../features/condominiums/ResidentLinkPage'
@@ -32,6 +33,9 @@ import {
   ResidentReservePage,
 } from '../features/resident/ResidentReservationsPages'
 import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
+import { AdminAreasPage } from '../features/admin-areas/AdminAreasPage'
+import { AdminReservationsPage } from '../features/admin-areas/AdminReservationsPage'
+import { AdminOccurrencesPage } from '../features/admin-occurrences/AdminOccurrencesPage'
 import {
   AdminAnnouncementsPage,
   AdminSupportPage,
@@ -54,13 +58,78 @@ export const router = createBrowserRouter([
   { path: '/prototipos/portaria', element: <PortariaPage /> },
   { path: '/selecionar-condominio', element: <SelectCondominiumPage /> },
   { path: '/app', element: <AppEntry /> },
-  { path: '/app/plataforma/condominios', element: <RequireSession><ApprovalPage /></RequireSession> },
-  { path: '/app/cadastrar-condominio', element: <RequireSession><CondominiumWizard /></RequireSession> },
-  { path: '/app/administracao/chaves', element: <RequireSession><AccessKeysPage /></RequireSession> },
-  { path: '/app/vincular-unidade', element: <RequireSession><ResidentLinkPage /></RequireSession> },
-  { path: '/app/morador/permissoes', element: <RequireSession><ResidentPermissionsPage /></RequireSession> },
-  { path: '/app/administracao/avisos', element: <RequireSession><NoticesPage /></RequireSession> },
-  { path: '/app/perfil', element: <RequireSession><ProfilePage /></RequireSession> },
+  {
+    path: '/app/plataforma/condominios',
+    element: (
+      <RequireSession>
+        <ApprovalPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/administracao/condominio',
+    element: (
+      <RequireSession>
+        <CondominiumSettingsRoute />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/administracao/conta-funcionarios',
+    element: (
+      <RequireSession>
+        <SharedAccountRoute />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/cadastrar-condominio',
+    element: (
+      <RequireSession>
+        <CondominiumWizard />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/administracao/chaves',
+    element: (
+      <RequireSession>
+        <AccessKeysPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/vincular-unidade',
+    element: (
+      <RequireSession>
+        <ResidentLinkPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/morador/permissoes',
+    element: (
+      <RequireSession>
+        <ResidentPermissionsPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/administracao/avisos',
+    element: (
+      <RequireSession>
+        <NoticesPage />
+      </RequireSession>
+    ),
+  },
+  {
+    path: '/app/perfil',
+    element: (
+      <RequireSession>
+        <ProfilePage />
+      </RequireSession>
+    ),
+  },
   {
     path: '/app/administracao/funcionarios',
     element: (
@@ -113,6 +182,9 @@ export const router = createBrowserRouter([
     { path: '/app/morador/areas-comuns', Page: ResidentReservePage },
     { path: '/app/morador/reservas', Page: ResidentReservationsPage },
     { path: '/app/morador/ocorrencias', Page: ResidentOccurrencesPage },
+    { path: '/app/administracao/areas-comuns', Page: AdminAreasPage },
+    { path: '/app/administracao/reservas', Page: AdminReservationsPage },
+    { path: '/app/administracao/ocorrencias', Page: AdminOccurrencesPage },
   ].map(({ path, Page }) => ({
     path,
     element: (

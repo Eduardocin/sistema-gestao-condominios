@@ -160,6 +160,34 @@ def rejeitar(
     )
 
 
+@plataforma_router.post("/{id}/desativacao", response_model=schemas.CondominioSaida)
+def desativar(
+    id: uuid.UUID,
+    dados: schemas.AcaoAprovacao,
+    contexto: PlataformaEditar,
+    session: SessionDep,
+    request: Request,
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+) -> schemas.CondominioSaida:
+    return service.alterar_status_plataforma(
+        session, contexto, id, "desativado", ip=ip_do_cliente(request), relogio=relogio
+    )
+
+
+@plataforma_router.post("/{id}/reativacao", response_model=schemas.CondominioSaida)
+def reativar(
+    id: uuid.UUID,
+    dados: schemas.AcaoAprovacao,
+    contexto: PlataformaEditar,
+    session: SessionDep,
+    request: Request,
+    relogio: Annotated[Relogio, Depends(get_relogio)],
+) -> schemas.CondominioSaida:
+    return service.alterar_status_plataforma(
+        session, contexto, id, "ativo", ip=ip_do_cliente(request), relogio=relogio
+    )
+
+
 estrutura_router = APIRouter(prefix="/estrutura", tags=["correcao-cadastro"])
 ContextoCadastroDep = Annotated[ContextoCondominio, Depends(contexto_do_cadastro)]
 

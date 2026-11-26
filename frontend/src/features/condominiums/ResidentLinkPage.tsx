@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
+import { useNavigate } from 'react-router'
 import { Button, ButtonLink, Card, Heading, Input, Notice, Page, Text } from '../../components'
 import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
@@ -8,6 +9,7 @@ import styles from '../resident/ResidentWorkspace.module.css'
 
 export function ResidentLinkPage() {
   const { snapshot, client } = useAuth()
+  const navigate = useNavigate()
   const [key, setKey] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState('')
@@ -35,7 +37,14 @@ export function ResidentLinkPage() {
         `Vínculo criado para ${data.condominio.nome}, unidade ${data.unidade.identificacao}.`,
       )
       setKey('')
-      try { await client.selectCondominium(data.condominio.id) } catch { setResult(`Vínculo criado para ${data.condominio.nome}, unidade ${data.unidade.identificacao}. Entre novamente para atualizar a sessão.`) }
+      try {
+        await client.selectCondominium(data.condominio.id)
+        navigate('/app/morador', { replace: true })
+      } catch {
+        setResult(
+          `Vínculo criado para ${data.condominio.nome}, unidade ${data.unidade.identificacao}. Entre novamente para atualizar a sessão.`,
+        )
+      }
     } catch (failure) {
       const message = isAxiosError<{ error?: { message?: string } }>(failure)
         ? failure.response?.data?.error?.message

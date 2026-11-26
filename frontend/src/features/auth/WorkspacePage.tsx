@@ -15,6 +15,7 @@ import { AccessDenied, RequireSession } from './SessionPages'
 import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
 import { MyCondominiums } from '../condominiums/MyCondominiums'
 import { ResidentNotices } from '../condominiums/ResidentNotices'
+import { supportNavigation } from '../suporte/support-state'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -27,8 +28,15 @@ const modules: Record<string, string[]> = {
     'Ocorrências',
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
-  administracao: ['Unidades e moradores', 'Funcionários', 'Avisos'],
-  plataforma: ['Condomínios', 'Administração da plataforma'],
+  administracao: [
+    'Unidades e moradores',
+    'Funcionários',
+    'Avisos',
+    'Relatório de encomendas',
+    'Suporte',
+    'Comunicados',
+  ],
+  plataforma: ['Condomínios', 'Fila de suporte', 'Comunicados'],
   'sem-condominio': [],
 }
 
@@ -38,6 +46,21 @@ function availableModule(area: string, label: string) {
   }
   if (area === 'administracao' && label === 'Unidades e moradores') {
     return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
+  }
+  if (area === 'administracao' && label === 'Relatório de encomendas') {
+    return { to: '/app/administracao/encomendas/relatorio', action: 'Ver relatório' }
+  }
+  if (area === 'administracao' && label === 'Suporte') {
+    return { to: '/app/administracao/suporte', action: 'Abrir ou acompanhar chamados' }
+  }
+  if (area === 'administracao' && label === 'Comunicados') {
+    return { to: '/app/administracao/comunicados', action: 'Ler comunicados' }
+  }
+  if (area === 'plataforma' && label === 'Fila de suporte') {
+    return { to: '/app/plataforma/suporte', action: 'Atender chamados' }
+  }
+  if (area === 'plataforma' && label === 'Comunicados') {
+    return { to: '/app/plataforma/comunicados', action: 'Enviar comunicados' }
   }
   if (area === 'plataforma' && label === 'Condomínios') {
     return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
@@ -100,15 +123,8 @@ export function WorkspacePage({ area }: { area: string }) {
   )
   const navigation = [
     { key: 'overview', label: 'Visão geral', to: destination, symbol: '⌂' },
-    ...(area === 'administracao'
-      ? [
-          {
-            key: 'employees',
-            label: 'Funcionários',
-            to: '/app/administracao/funcionarios',
-            symbol: '♙',
-          },
-        ]
+    ...(area === 'administracao' || area === 'plataforma'
+      ? supportNavigation(area).slice(1)
       : []),
     ...(area === 'portaria'
       ? [

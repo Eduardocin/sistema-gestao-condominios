@@ -32,6 +32,13 @@ import {
   ResidentReservePage,
 } from '../features/resident/ResidentReservationsPages'
 import { ResidentOccurrencesPage } from '../features/resident/ResidentOccurrencesPage'
+import {
+  AdminAnnouncementsPage,
+  AdminSupportPage,
+  PackageReportPage,
+  PlatformAnnouncementsPage,
+  PlatformSupportPage,
+} from '../features/suporte/SupportPages'
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -106,6 +113,20 @@ export const router = createBrowserRouter([
     { path: '/app/morador/areas-comuns', Page: ResidentReservePage },
     { path: '/app/morador/reservas', Page: ResidentReservationsPage },
     { path: '/app/morador/ocorrencias', Page: ResidentOccurrencesPage },
+  ].map(({ path, Page }) => ({
+    path,
+    element: (
+      <RequireSession>
+        <Page />
+      </RequireSession>
+    ),
+  })),
+  ...[
+    { path: '/app/administracao/suporte', Page: AdminSupportPage },
+    { path: '/app/administracao/comunicados', Page: AdminAnnouncementsPage },
+    { path: '/app/administracao/encomendas/relatorio', Page: PackageReportPage },
+    { path: '/app/plataforma/suporte', Page: PlatformSupportPage },
+    { path: '/app/plataforma/comunicados', Page: PlatformAnnouncementsPage },
   ].map(({ path, Page }) => ({
     path,
     element: (

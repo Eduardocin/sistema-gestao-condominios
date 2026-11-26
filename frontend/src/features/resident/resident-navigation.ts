@@ -7,3 +7,14 @@ export const residentNavigation = [
   { key: 'reservations', label: 'Minhas reservas', to: '/app/morador/reservas', symbol: '✓' },
   { key: 'occurrences', label: 'Ocorrências', to: '/app/morador/ocorrencias', symbol: '◇' },
 ]
+
+export const residentTabPermissions: Record<string, string> = {
+  packages: 'encomendas', visitors: 'visitantes', vehicles: 'veiculos',
+  reserve: 'reservas', reservations: 'reservas', occurrences: 'ocorrencias',
+  permissions: 'usuarios',
+}
+
+export function visibleResidentNavigation(units: { abas?: string[] }[]) {
+  return residentNavigation.filter(({ key }) => !residentTabPermissions[key] ||
+    units.some((unit) => unit.abas?.includes(residentTabPermissions[key])))
+}

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.modules.auditoria.contexto import ip_do_cliente
-from app.modules.auth import service
+from app.modules.auth import repository, service
 from app.modules.auth.dependencies import UsuarioAutenticado, get_usuario_autenticado
 from app.modules.auth.presentation import resposta_de_sessao
 from app.modules.auth.rate_limit import LoginRateLimiter, get_login_rate_limiter
@@ -109,9 +109,19 @@ def me(autenticado: UsuarioDep, session: SessionDep) -> MeResponse:
     dados = service.montar_me(
         session, usuario=autenticado.usuario, condominio_id=autenticado.condominio_id
     )
+    abas = (
+        repository.listar_abas_do_morador(
+            session, usuario_id=dados.usuario.id, condominio_id=autenticado.condominio_id
+        )
+        if dados.unidades and autenticado.condominio_id
+        else {}
+    )
     return MeResponse(
         usuario=UsuarioOut.model_validate(dados.usuario),
         condominio=CondominioAcessoOut.model_validate(dados.acesso) if dados.acesso else None,
-        unidades=[UnidadeOut.model_validate(u) for u in dados.unidades],
+        unidades=[
+            UnidadeOut(id=u.id, identificacao=u.identificacao, abas=abas.get(u.id, []))
+            for u in dados.unidades
+        ],
         administrador_plataforma=dados.usuario.administrador_plataforma,
     )

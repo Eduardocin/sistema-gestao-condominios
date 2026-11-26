@@ -76,6 +76,7 @@ class UnidadeOut(BaseModel):
 
     id: uuid.UUID
     identificacao: str
+    abas: list[str] = Field(default_factory=list)
 
 
 class MeResponse(BaseModel):

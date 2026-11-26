@@ -29,12 +29,13 @@ export function ResidentLinkPage() {
     try {
       const { data } = await client.http.post<{
         unidade: { identificacao: string }
-        condominio: { nome: string }
+        condominio: { id: string; nome: string }
       }>('/vinculos/chave', { chave: key.trim() })
       setResult(
         `Vínculo criado para ${data.condominio.nome}, unidade ${data.unidade.identificacao}.`,
       )
       setKey('')
+      try { await client.selectCondominium(data.condominio.id) } catch { setResult(`Vínculo criado para ${data.condominio.nome}, unidade ${data.unidade.identificacao}. Entre novamente para atualizar a sessão.`) }
     } catch (failure) {
       const message = isAxiosError<{ error?: { message?: string } }>(failure)
         ? failure.response?.data?.error?.message
@@ -56,8 +57,7 @@ export function ResidentLinkPage() {
             <Notice tone="success" role="status">
               {result}
             </Notice>
-            <Text>Entre novamente para atualizar seus condomínios disponíveis.</Text>
-            <Button onClick={() => client.logout()}>Sair e entrar novamente</Button>
+            <Text>Confira sua área para acessar o condomínio.</Text>
           </>
         ) : (
           <form className={styles.form} onSubmit={(event) => void submit(event)}>

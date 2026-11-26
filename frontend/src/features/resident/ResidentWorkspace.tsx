@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Button, OperationsLayout } from '../../components'
 import { AccessDenied } from '../auth/SessionPages'
 import { useAuth } from '../auth/context'
-import { residentNavigation } from './resident-navigation'
+import { residentNavigation, visibleResidentNavigation } from './resident-navigation'
 import styles from './ResidentWorkspace.module.css'
 
 interface Props {
@@ -38,7 +38,7 @@ export function ResidentWorkspace({ activeKey, children }: Props) {
     <OperationsLayout
       key={condominium.id}
       activeKey={activeKey}
-      navigation={residentNavigation}
+      navigation={visibleResidentNavigation(identity?.unidades ?? [])}
       workspace={{ name: condominium.nome, profile: 'Morador', tools }}
     >
       {children}

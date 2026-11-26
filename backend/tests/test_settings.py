@@ -71,6 +71,7 @@ PRODUCAO_VALIDA = {
     "app_env": "production",
     "jwt_secret_key": "x" * 40,
     "cors_origins": ["https://condominios.exemplo.test"],
+    "frontend_base_url": "https://condominios.exemplo.test",
     "postgres_password": "senha-de-producao-ficticia",
     "storage_access_key": "chave-de-producao-ficticia",
     "storage_secret_key": "segredo-de-producao-ficticio",

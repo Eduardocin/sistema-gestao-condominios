@@ -107,3 +107,13 @@ class RedefinicaoSenha(BaseModel):
     senha_nova: Senha
 
     _senha_nova = field_validator("senha_nova")(_regra_da_senha)
+
+
+class SolicitacaoRecuperacaoSenha(BaseModel):
+    """POST /contas/recuperacao-senha. A resposta não revela se o e-mail tem conta."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(max_length=254)
+
+    _email = field_validator("email")(normalizar_email)

@@ -103,11 +103,26 @@ os códigos não entram na auditoria. Ator ADM, IP e horário vêm dos mecanismo
 O ADM não precisa de `cid` e não ganha acesso operacional. A leitura singular usa uma
 dependência restrita à identidade/vínculo administrativo, inclusive em pendente/rejeitado;
 não altera a dependência de operações diárias, que continua exigindo condomínio ativo.
-Não implementa reenvio, desativação, reativação nem qualquer vínculo de morador.
+O reenvio é documentado em Correção e reenvio — TASK-57 / US-204. As transições de status
+da plataforma estão documentadas abaixo.
 
 Testes: [aprovação](../../../tests/task29/test_aprovacao.py) e
 [concorrência com sessões reais](../../../tests/task29/test_concorrencia.py).
 Tratamento das chaves, proprietários e divergências: [unidades](../unidades/README.md).
+
+## Desativação e reativação pela plataforma
+
+| Método e rota | Permissão / comportamento |
+| --- | --- |
+| `POST /api/v1/plataforma/condominios/{id}/desativacao` | ADM, `cadastro_condominio:editar`; corpo `{}`, somente `ativo → desativado` |
+| `POST /api/v1/plataforma/condominios/{id}/reativacao` | ADM, `cadastro_condominio:editar`; corpo `{}`, somente `desativado → ativo` |
+
+As ações bloqueiam a linha do condomínio com `SELECT FOR UPDATE`, gravam a trilha
+`condominio.desativar`/`condominio.reativar` com estado anterior e novo na mesma transação e
+retornam 409 `transicao_invalida` para qualquer outra origem. Se a auditoria falhar, o status
+é revertido. As linhas de estrutura, contas e vínculos não são removidas. Enquanto o status
+for `desativado`, nenhum perfil local pode selecionar o condomínio nem usar rotas operacionais;
+a Administração mantém acesso de correção apenas em `pendente` e `rejeitado`.
 
 
 ## Correção e reenvio — TASK-57 / US-204

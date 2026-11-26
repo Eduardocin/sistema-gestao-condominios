@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.mascaras import mascarar_telefone
 from app.core.validation import normalizar_email, validar_telefone
 from app.modules.auditoria.schemas import ReferenciaAuditoria
 from app.modules.contas.schemas import Senha, conferir_senha
@@ -51,6 +52,13 @@ class FuncionarioSaida(FuncionarioNome):
     foto_arquivo_id: uuid.UUID | None
     ativo: bool
     desligado_em: datetime | None
+
+    @classmethod
+    def para_listagem(cls, item: object) -> "FuncionarioSaida":
+        """Item de lista (US-1007): telefone mascarado. O completo fica no detalhe
+        (`GET /funcionarios/{id}`); o e-mail segue inteiro porque é o contato exibido na lista."""
+        saida = cls.model_validate(item)
+        return saida.model_copy(update={"telefone": mascarar_telefone(saida.telefone)})
 
 
 class PaginaFuncionarios(BaseModel):

@@ -1,6 +1,6 @@
 # Plataforma — proposta de contrato REST e serviços transversais (TASK-11)
 
-Status: rascunho para revisão no portão dos leads. O serviço central de auditoria da seção 4.1 está implementado na TASK-82; a consulta HTTP da seção 4.3 está implementada na TASK-49. As demais seções devem ser confrontadas com os módulos e routers para distinguir entregas e propostas. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
+Status: rascunho para revisão no portão dos leads. O serviço central de auditoria da seção 4.1 está implementado na TASK-82; a consulta HTTP da seção 4.3 está implementada na TASK-49. **Implementado (TASK-52):** comunicados da plataforma (seção 2) e chamados de suporte (seção 3). As demais seções devem ser confrontadas com os módulos e routers para distinguir entregas e propostas. Cobre avisos, comunicados do ADM, chamados de suporte, consulta de auditoria, funcionários e responsáveis da Administração, edição da estrutura do prédio e os dois serviços que os outros módulos chamam: **auditoria** e **e-mail assíncrono**.
 
 Convenções comuns (envelope de erro, paginação, ações explícitas, `responsavel_id`, fuso): [convencoes.md](convencoes.md). Modelo de dados: [modelo-de-dados.md](../modelo-de-dados.md), seções 3.2 e 3.5. Permissões: [matriz](../permissoes-e-multitenant.md), seções 7, 9 e 10.
 
@@ -116,6 +116,8 @@ assíncrono não estão incluídos na TASK-48.
 
 A matriz dá ao ADM "V C D" em comunicados, mas `comunicados` não tem coluna de desativação. Esta proposta **não cria `D`** no MVP (ver pendências). Auditoria: `comunicado.enviar`. Sem e-mail: o US-803 só cobre quatro eventos.
 
+**Implementado (TASK-52).** O envio trava os condomínios `ativo` em `FOR SHARE`, grava o comunicado e os destinatários numa única transação e audita `comunicado.enviar` (sem condomínio, perfil `plataforma`, com `total_destinatarios`). `GET /plataforma/comunicados` lista do mais recente ao mais antigo, com `total_destinatarios` e `enviado_por`; o detalhe traz `destinatarios` (id e nome). `GET /comunicados` devolve à Administração só `id`, `titulo`, `texto` e `criado_em`, sem a lista dos outros condomínios. O `titulo` e o `texto` são aparados antes da validação (1 a 120 e 1 a 4000). Funcionário e Morador recebem 403; a Administração não envia.
+
 ## 3. Chamados de suporte (US-901, US-902, Should, Sprint 3)
 
 Status: `aberto`, `em_atendimento`, `encerrado`.
@@ -160,6 +162,15 @@ Transições:
 | `aberto` ou `em_atendimento` | `encerrado` | ADM, por `encerramento`; grava `encerrado_em`. Auditoria `chamado.encerrar` |
 
 Mensagem em chamado `encerrado` retorna 409 (`reason: "chamado_encerrado"`); a Administração abre outro chamado. O histórico de atendimento nunca é alterado. A Administração só vê chamados do **próprio** condomínio (404 nos demais). O ADM vê todos (escopo de plataforma). A fila padrão do ADM lista os não encerrados do **mais antigo para o mais recente** (quem espera há mais tempo primeiro); com `status=encerrado`, do mais recente para o mais antigo. O campo `condominio` só aparece nas rotas do ADM.
+
+**Implementado (TASK-52).** Pontos que o contrato deixava abertos:
+
+- A Administração responde chamado `aberto` ou `em_atendimento` sem mudar o status. Só a primeira mensagem do ADM move para `em_atendimento`: a linha do chamado é travada (`FOR UPDATE`), então duas respostas simultâneas gravam o evento `chamado.atender` uma só vez.
+- Encerrar um chamado ainda `aberto` grava o ADM em `atendido_por` (a constraint exige um ADM em todo chamado fora de `aberto`). Encerrar de novo retorna 409 `chamado_ja_encerrado`; o corpo do `encerramento` é `{}` e recusa campos.
+- `autor.tipo` da mensagem é `plataforma` quando a conta é de ADM e `administracao` nos demais casos; `aberto_por` e `atendido_por` mostram o nome da conta.
+- Os anexos têm de ser arquivos do módulo `suporte`, do mesmo condomínio e enviados por quem abre o chamado (422 nos demais casos). Ficam no chamado, não na mensagem.
+- Sem `status`, a fila do ADM traz só `aberto` e `em_atendimento`, do mais antigo ao mais novo; `status=encerrado` traz do mais recente ao mais antigo. `de` e `ate` são datas inclusivas (UTC) sobre `criado_em`; `busca` procura no título e na descrição, com `%` e `_` literais.
+- Auditoria: `chamado.atender` e `chamado.encerrar`, com `antes` e `depois` do status, perfil `plataforma` e o `condominio_id` do chamado. Abrir e responder não são auditados (não estão no catálogo da seção 4.2).
 
 ## 4. Auditoria (US-1004, US-903)
 
@@ -509,7 +520,7 @@ Edição dos dados do condomínio (nome, CNPJ, endereço, logo, US-206) e a list
 
 | Tema | Decisão ou alinhamento necessário | Quem |
 | --- | --- | --- |
-| Destinatários dos comunicados | Aprovar `comunicado_destinatarios` (seção 2). Fecha a pendência da seção 7 do DER. | Davi e Tude |
+| Destinatários dos comunicados | **Implementado** com `comunicado_destinatarios` (seção 2); falta Davi e a Tude aprovarem e fechar a pendência da seção 7 do DER. | Davi e Tude |
 | `D` em comunicados | A matriz dá "D" ao ADM, mas `comunicados` não tem coluna de desativação. Sem coluna, sem a ação; com coluna (`desativado_em`), `POST .../desativacao`. | Gabriel e Davi |
 | Colunas de `envios_email` | Falta guardar **o que** foi enviado: **proposta** de `recurso_tipo` e `recurso_id`, para montar o corpo no reenvio e achar o envio pelo recurso. | Davi e Tude |
 | Matriz: envios de e-mail | **Implementado** como o recurso `envios_email` (ADM `V E`). Falta confirmar na matriz do documento de permissões. | Gabriel |

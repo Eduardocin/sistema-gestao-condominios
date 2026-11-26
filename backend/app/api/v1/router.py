@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from app.modules.auditoria.router import router as auditoria_router
 from app.modules.auth.router import router as auth_router
 from app.modules.avisos.router import router as avisos_router
+from app.modules.comunicados.router import plataforma_router as comunicados_plataforma_router
+from app.modules.comunicados.router import router as comunicados_router
 from app.modules.condominios.router import cadastro_router, estrutura_router, plataforma_router
 from app.modules.condominios.router import router as condominios_router
 from app.modules.contas.router import router as contas_router
@@ -18,6 +20,8 @@ from app.modules.ocorrencias.router import router as ocorrencias_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
 from app.modules.reservas.router import router as reservas_router
 from app.modules.storage.router import router as storage_router
+from app.modules.suporte.router import plataforma_router as chamados_plataforma_router
+from app.modules.suporte.router import router as chamados_router
 from app.modules.unidades.router import router as unidades_router
 from app.modules.vinculos.router import router as vinculos_router
 from app.modules.visitantes.relatorios_router import router as relatorios_router
@@ -28,6 +32,10 @@ router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
 router.include_router(auditoria_router)
 router.include_router(avisos_router)
+router.include_router(comunicados_router)
+router.include_router(comunicados_plataforma_router)
+router.include_router(chamados_router)
+router.include_router(chamados_plataforma_router)
 router.include_router(envios_email_router)
 router.include_router(condominios_router)
 router.include_router(plataforma_router)

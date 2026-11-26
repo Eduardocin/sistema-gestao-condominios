@@ -13,6 +13,7 @@ import { useAuth } from './context'
 import { condominiumNotice, homePath, profileLabels } from './navigation'
 import { AccessDenied, RequireSession } from './SessionPages'
 import { residentNavigation } from '../resident/resident-navigation'
+import { MyCondominiums } from '../condominiums/MyCondominiums'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -132,9 +133,7 @@ export function WorkspacePage({ area }: { area: string }) {
             {notice.message}
           </Notice>
         )}
-        {area === 'sem-condominio' && !identity.administrador_plataforma && (
-          <ButtonLink to="/app/cadastrar-condominio">Cadastrar condomínio</ButtonLink>
-        )}
+        {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
         <Card>
           <Heading level={2} size="md">
             Seu acesso

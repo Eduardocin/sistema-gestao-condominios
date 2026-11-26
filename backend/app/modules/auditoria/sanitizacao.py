@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Any
 from unicodedata import normalize
 
+from app.core.mascaras import DOCUMENTO_MASCARADO, mascarar_documento
+
 CAMPOS_SECRETOS = frozenset(
     {
         "senha",
@@ -53,18 +55,14 @@ def _nome(campo: str) -> str:
 
 
 def _documento(valor: Any) -> str:
-    if isinstance(valor, str) and re.fullmatch(
-        r"\*{3}\.\d{3}\.\d{3}-\*{2}|\*{2}\.\*{3}\.\d{3}/\d{4}-\*{2}", valor
-    ):
-        return valor
+    # A máscara é a do core (a mesma das respostas da API). Aqui só decidimos o que não vira
+    # documento: tipos estranhos e tamanhos inválidos saem como OMITIDO, nunca como texto.
     if not isinstance(valor, (str, int)) or isinstance(valor, bool):
         return OMITIDO
-    digitos = re.sub(r"\D", "", str(valor))
-    if len(digitos) == 11:
-        return f"***.{digitos[3:6]}.{digitos[6:9]}-**"
-    if len(digitos) == 14:
-        return f"**.***.{digitos[5:8]}/{digitos[8:12]}-**"
-    return OMITIDO
+    mascarado = mascarar_documento(str(valor))
+    if mascarado is None or not DOCUMENTO_MASCARADO.fullmatch(mascarado):
+        return OMITIDO
+    return mascarado
 
 
 def _sanitizar(valor: Any, profundidade: int = 0) -> Any:

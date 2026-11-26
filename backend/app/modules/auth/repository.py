@@ -98,6 +98,29 @@ def listar_unidades_ativas_do_morador(
     return list(session.scalars(consulta))
 
 
+def listar_abas_do_morador(
+    session: Session, *, usuario_id: uuid.UUID, condominio_id: uuid.UUID
+) -> dict[uuid.UUID, list[str]]:
+    consulta = (
+        select(MoradorUnidade.unidade_id, PermissaoAba.aba)
+        .join(
+            PermissaoAba,
+            (PermissaoAba.morador_unidade_id == MoradorUnidade.id)
+            & (PermissaoAba.condominio_id == MoradorUnidade.condominio_id),
+        )
+        .where(
+            MoradorUnidade.usuario_id == usuario_id,
+            MoradorUnidade.condominio_id == condominio_id,
+            MoradorUnidade.status == "ativo",
+            PermissaoAba.com_acesso.is_(True),
+        )
+    )
+    resultado: dict[uuid.UUID, list[str]] = {}
+    for unidade_id, aba in session.execute(consulta):
+        resultado.setdefault(unidade_id, []).append(aba)
+    return resultado
+
+
 def morador_tem_acesso_a_aba(
     session: Session,
     *,

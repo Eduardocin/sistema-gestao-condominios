@@ -88,6 +88,18 @@ class RepositorioBloqueios(RepositorioDoCondominio[BloqueioArea]):
         )
         return self.session.scalar(select(consulta.exists())) or False
 
+    def obter_travado(self, area_id: uuid.UUID, bloqueio_id: uuid.UUID) -> BloqueioArea | None:
+        """O bloqueio da área, removido ou não, com a linha travada até o commit.
+
+        Duas remoções simultâneas se enfileiram aqui: a segunda enxerga `removido_em` e responde
+        409 em vez de gravar de novo.
+        """
+        return self.session.scalar(
+            self.consulta()
+            .where(BloqueioArea.area_id == area_id, BloqueioArea.id == bloqueio_id)
+            .with_for_update()
+        )
+
     def pagina(
         self,
         area_id: uuid.UUID,

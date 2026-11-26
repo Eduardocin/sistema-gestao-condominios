@@ -28,10 +28,11 @@ export function ResidentCommunity(props: Props) {
   )
 }
 
-function CommunityContent({ title, children }: Props) {
+function CommunityContent({ title, children, activeKey }: Props) {
   const { snapshot, client } = useAuth()
   const api = useMemo(() => createResidentCommunityClient(client.http), [client])
-  const units = snapshot.identity?.unidades ?? []
+  const aba = activeKey === 'occurrences' ? 'ocorrencias' : 'reservas'
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes(aba))
   const [unitId, setUnitId] = useState('')
   const unit = units.find(({ id }) => id === unitId) ?? units[0]
 

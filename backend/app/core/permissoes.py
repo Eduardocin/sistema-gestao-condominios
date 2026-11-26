@@ -60,6 +60,8 @@ _LINHAS: dict[str, tuple[str, str, str, str]] = {
     "comunicados": ("", "", "V", "VCD"),
     "suporte": ("", "", "VC", "VE"),
     "auditoria": ("", "", "", "V"),
+    # Acompanhamento e reenvio da fila de e-mails (US-803): só o ADM da plataforma.
+    "envios_email": ("", "", "", "VE"),
 }
 
 _COLUNAS = (Perfil.MORADOR, Perfil.FUNCIONARIO, Perfil.ADMINISTRACAO, Perfil.PLATAFORMA)

@@ -42,7 +42,7 @@ export function ResidentVehiclesPage() {
 function ResidentVehicles() {
   const { snapshot, client } = useAuth()
   const api = useMemo(() => createResidentVehiclesClient(client.http), [client])
-  const units = snapshot.identity?.unidades ?? []
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes('veiculos'))
   const [unitId, setUnitId] = useState('')
   const unit = units.find(({ id }) => id === unitId) ?? units[0]
 

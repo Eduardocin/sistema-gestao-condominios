@@ -12,7 +12,9 @@ import {
 import { useAuth } from './context'
 import { condominiumNotice, homePath, profileLabels } from './navigation'
 import { AccessDenied, RequireSession } from './SessionPages'
-import { residentNavigation } from '../resident/resident-navigation'
+import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
+import { MyCondominiums } from '../condominiums/MyCondominiums'
+import { ResidentNotices } from '../condominiums/ResidentNotices'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -25,12 +27,21 @@ const modules: Record<string, string[]> = {
     'Ocorrências',
   ],
   portaria: ['Recebimento e retirada de encomendas', 'Entrada e saída de visitantes'],
-  administracao: ['Unidades e moradores', 'Funcionários', 'Aprovações'],
+  administracao: ['Unidades e moradores', 'Funcionários', 'Avisos'],
   plataforma: ['Condomínios', 'Administração da plataforma'],
   'sem-condominio': [],
 }
 
 function availableModule(area: string, label: string) {
+  if (area === 'administracao' && label === 'Avisos') {
+    return { to: '/app/administracao/avisos', action: 'Gerenciar avisos' }
+  }
+  if (area === 'administracao' && label === 'Unidades e moradores') {
+    return { to: '/app/administracao/chaves', action: 'Gerenciar chaves' }
+  }
+  if (area === 'plataforma' && label === 'Condomínios') {
+    return { to: '/app/plataforma/condominios', action: 'Analisar condomínios' }
+  }
   if (area === 'administracao' && label === 'Funcionários') {
     return { to: '/app/administracao/funcionarios', action: 'Gerenciar funcionários' }
   }
@@ -105,7 +116,7 @@ export function WorkspacePage({ area }: { area: string }) {
           { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
         ]
       : []),
-    ...(area === 'morador' ? residentNavigation.slice(1) : []),
+    ...(area === 'morador' ? visibleResidentNavigation(identity.unidades).slice(1) : []),
   ]
 
   return (
@@ -129,6 +140,11 @@ export function WorkspacePage({ area }: { area: string }) {
             {notice.message}
           </Notice>
         )}
+        {(area === 'sem-condominio' || area === 'administracao') && <MyCondominiums />}
+        {area === 'morador' && <ResidentNotices />}
+        {(area === 'sem-condominio' || area === 'morador') && <div><ButtonLink to="/app/vincular-unidade" variant="secondary">Vincular unidade</ButtonLink></div>}
+        {!identity.administrador_plataforma && <div><ButtonLink to="/app/perfil" variant="secondary">Editar perfil</ButtonLink></div>}
+        {area === 'morador' && identity.unidades.some((unit) => unit.abas?.includes('usuarios')) && <div><ButtonLink to="/app/morador/permissoes" variant="secondary">Permissões dos moradores</ButtonLink></div>}
         <Card>
           <Heading level={2} size="md">
             Seu acesso
@@ -167,7 +183,11 @@ export function WorkspacePage({ area }: { area: string }) {
             </Heading>
             <Text tone="secondary">Escolha um serviço disponível para sua área.</Text>
             <div className={styles.modules}>
-              {modules[area].map((label) => {
+              {modules[area].filter((label) => {
+                if (area !== 'morador') return true
+                const tab = ({ Encomendas: 'packages', Visitantes: 'visitors', Veículos: 'vehicles', 'Reservar área': 'reserve', 'Minhas reservas': 'reservations', Ocorrências: 'occurrences' } as Record<string, string>)[label]
+                return !tab || identity.unidades.some((unit) => unit.abas?.includes(residentTabPermissions[tab]))
+              }).map((label) => {
                 const target = availableModule(area, label)
                 return (
                   <Card key={label} className={styles.module}>

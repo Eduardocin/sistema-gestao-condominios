@@ -15,6 +15,7 @@ from app.modules.encomendas.router import portaria_router as portaria_encomendas
 from app.modules.encomendas.router import router as encomendas_router
 from app.modules.funcionarios.router import conta_router, responsaveis_router
 from app.modules.funcionarios.router import router as funcionarios_router
+from app.modules.notificacoes.router import router as envios_email_router
 from app.modules.ocorrencias.router import router as ocorrencias_router
 from app.modules.permissoes_aba.router import router as permissoes_aba_router
 from app.modules.reservas.router import router as reservas_router
@@ -35,6 +36,7 @@ router.include_router(comunicados_router)
 router.include_router(comunicados_plataforma_router)
 router.include_router(chamados_router)
 router.include_router(chamados_plataforma_router)
+router.include_router(envios_email_router)
 router.include_router(condominios_router)
 router.include_router(plataforma_router)
 router.include_router(cadastro_router)

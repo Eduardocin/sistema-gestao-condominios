@@ -20,6 +20,13 @@ import { ResidentPackagesPage } from '../features/portaria/ResidentPackagesPage'
 import { VisitorsWorkspacePage } from '../features/portaria/VisitorsWorkspacePage'
 import { ResidentVisitorsPage } from '../features/resident/ResidentVisitorsPage'
 import { ResidentVehiclesPage } from '../features/resident/ResidentVehiclesPage'
+import { ApprovalPage } from '../features/condominiums/ApprovalPage'
+import { CondominiumWizard } from '../features/condominiums/CondominiumWizard'
+import { AccessKeysPage } from '../features/condominiums/AccessKeysPage'
+import { ResidentLinkPage } from '../features/condominiums/ResidentLinkPage'
+import { ResidentPermissionsPage } from '../features/condominiums/ResidentPermissionsPage'
+import { NoticesPage } from '../features/condominiums/NoticesPage'
+import { ProfilePage } from '../features/condominiums/ProfilePage'
 import {
   ResidentReservationsPage,
   ResidentReservePage,
@@ -40,6 +47,13 @@ export const router = createBrowserRouter([
   { path: '/prototipos/portaria', element: <PortariaPage /> },
   { path: '/selecionar-condominio', element: <SelectCondominiumPage /> },
   { path: '/app', element: <AppEntry /> },
+  { path: '/app/plataforma/condominios', element: <RequireSession><ApprovalPage /></RequireSession> },
+  { path: '/app/cadastrar-condominio', element: <RequireSession><CondominiumWizard /></RequireSession> },
+  { path: '/app/administracao/chaves', element: <RequireSession><AccessKeysPage /></RequireSession> },
+  { path: '/app/vincular-unidade', element: <RequireSession><ResidentLinkPage /></RequireSession> },
+  { path: '/app/morador/permissoes', element: <RequireSession><ResidentPermissionsPage /></RequireSession> },
+  { path: '/app/administracao/avisos', element: <RequireSession><NoticesPage /></RequireSession> },
+  { path: '/app/perfil', element: <RequireSession><ProfilePage /></RequireSession> },
   {
     path: '/app/administracao/funcionarios',
     element: (

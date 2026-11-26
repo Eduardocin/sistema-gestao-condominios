@@ -302,7 +302,9 @@ def test_me_do_morador_lista_a_unidade_do_condominio(client, session):
     corpo = client.get("/api/v1/auth/me", headers=bearer(token)).json()
 
     assert corpo["usuario"]["id"] == str(usuario.id)
-    assert corpo["unidades"] == [{"id": str(unidade.id), "identificacao": "Bloco A / 101"}]
+    assert corpo["unidades"] == [
+        {"id": str(unidade.id), "identificacao": "Bloco A / 101", "abas": []}
+    ]
 
 
 @pytest.mark.parametrize("desvinculado", [False, True])
@@ -341,7 +343,7 @@ def test_migracao_preserva_vinculo_legado_sem_reativar_desvinculo(client, sessio
     resposta = client.get("/api/v1/auth/me", headers=bearer(token))
     assert resposta.status_code == 200
     assert resposta.json()["unidades"] == (
-        [] if desvinculado else [{"id": str(unidade.id), "identificacao": "101"}]
+        [] if desvinculado else [{"id": str(unidade.id), "identificacao": "101", "abas": []}]
     )
     assert (
         session.scalar(

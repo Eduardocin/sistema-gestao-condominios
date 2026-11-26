@@ -40,6 +40,7 @@ def test_me_multiplas_unidades_e_selecao_sem_mudar_jwt(client, session, caso):
         str(caso.a.unidade_101.id),
         str(caso.a.unidade_102.id),
     }
+    assert all("abas" in unidade for unidade in me.json()["unidades"])
     outros = client.get("/api/v1/auth/me", headers=selecionar(client, caso, caso.b)).json()
     assert [u["id"] for u in outros["unidades"]] == [str(caso.b.unidade_102.id)]
     for vinculo in session.scalars(

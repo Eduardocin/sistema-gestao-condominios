@@ -7,7 +7,7 @@ export interface Condominium { id: string; nome: string; perfil: Profile; status
 export interface Identity {
   usuario: User
   condominio: Condominium | null
-  unidades: { id: string; identificacao: string }[]
+  unidades: { id: string; identificacao: string; abas?: string[] }[]
   administrador_plataforma: boolean
 }
 export interface LoginResponse {

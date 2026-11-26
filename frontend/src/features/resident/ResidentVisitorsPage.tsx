@@ -74,7 +74,7 @@ export function ResidentVisitorsPage() {
 
 function ResidentVisitors() {
   const { snapshot } = useAuth()
-  const units = snapshot.identity?.unidades ?? []
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes('visitantes'))
   const [unitId, setUnitId] = useState('')
   const unit = units.find((item) => item.id === unitId) ?? units[0]
 

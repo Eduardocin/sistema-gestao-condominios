@@ -112,6 +112,21 @@ def test_senha_padrao_do_banco_vale_em_producao_com_database_url():
     assert settings.sqlalchemy_url.host == "db.exemplo.test"
 
 
+def test_senha_padrao_embutida_em_database_url_e_proibida_em_producao():
+    with pytest.raises(ValidationError, match="DATABASE_URL"):
+        Settings(
+            _env_file=None,
+            **(
+                PRODUCAO_VALIDA
+                | {
+                    "database_url": (
+                        "postgresql+psycopg://app:local_dev_only@db.exemplo.test:5432/prod"
+                    )
+                }
+            ),
+        )
+
+
 @pytest.mark.parametrize("app_env", ["development", "test"])
 def test_padroes_de_desenvolvimento_continuam_validos_fora_de_producao(app_env):
     settings = Settings(_env_file=None, app_env=app_env)

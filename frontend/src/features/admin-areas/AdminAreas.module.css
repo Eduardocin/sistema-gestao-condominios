@@ -62,6 +62,11 @@
   margin-bottom: var(--space-4);
 }
 
+/* Linha só de campos: alinha pelo rótulo, para a dica ou o erro de um campo não empurrar o outro. */
+.hours {
+  align-items: start;
+}
+
 .counter {
   margin-top: calc(-1 * var(--space-3));
   margin-bottom: var(--space-3);

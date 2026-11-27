@@ -56,10 +56,18 @@ function isStale(error: unknown) {
   return axios.isAxiosError(error) && [404, 409].includes(error.response?.status ?? 0)
 }
 
+/** Erro de uma ação; quando o registro estava desatualizado, avisa que a lista foi recarregada. */
+function actionFailure(error: unknown) {
+  const message = apiError(error)
+  return axios.isAxiosError(error) && error.response?.status === 404
+    ? `${message} A lista foi atualizada.`
+    : message
+}
+
 function apiError(error: unknown) {
   if (axios.isAxiosError(error)) {
     if (error.response?.status === 404)
-      return 'Este registro não está mais disponível neste condomínio. A lista foi atualizada.'
+      return 'Este registro não está mais disponível neste condomínio.'
     if (error.response?.status === 409)
       return 'A situação da encomenda mudou. A lista foi atualizada; confira e tente novamente.'
     if (error.response?.status === 413 || error.response?.status === 422)
@@ -334,7 +342,7 @@ function PackagesWorkspace({ name }: { name: string }) {
       setPage(1)
       reload()
     } catch (error) {
-      setActionError(apiError(error))
+      setActionError(actionFailure(error))
       if (isStale(error)) reload()
     } finally {
       setPending(false)
@@ -363,7 +371,7 @@ function PackagesWorkspace({ name }: { name: string }) {
       setSuccess('Entrega registrada. A confirmação ficará pendente para o morador que recebeu.')
       reload()
     } catch (error) {
-      setActionError(apiError(error))
+      setActionError(actionFailure(error))
       if (isStale(error)) reload()
     } finally {
       setPending(false)

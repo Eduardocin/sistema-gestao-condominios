@@ -51,12 +51,17 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+/** Registro que mudou ou sumiu enquanto a tela estava aberta: a lista precisa ser recarregada. */
+function isStale(error: unknown) {
+  return axios.isAxiosError(error) && [404, 409].includes(error.response?.status ?? 0)
+}
+
 function apiError(error: unknown) {
   if (axios.isAxiosError(error)) {
     if (error.response?.status === 404)
-      return 'Este registro não está disponível neste condomínio. Atualize a lista.'
+      return 'Este registro não está mais disponível neste condomínio. A lista foi atualizada.'
     if (error.response?.status === 409)
-      return 'A situação da encomenda mudou. Atualize a lista e tente novamente.'
+      return 'A situação da encomenda mudou. A lista foi atualizada; confira e tente novamente.'
     if (error.response?.status === 413 || error.response?.status === 422)
       return 'Confira os dados e a foto. Use uma imagem JPG, PNG ou WebP de até 5 MB.'
     if (error.response?.status === 503)
@@ -330,6 +335,7 @@ function PackagesWorkspace({ name }: { name: string }) {
       reload()
     } catch (error) {
       setActionError(apiError(error))
+      if (isStale(error)) reload()
     } finally {
       setPending(false)
     }
@@ -358,6 +364,7 @@ function PackagesWorkspace({ name }: { name: string }) {
       reload()
     } catch (error) {
       setActionError(apiError(error))
+      if (isStale(error)) reload()
     } finally {
       setPending(false)
     }
@@ -451,9 +458,6 @@ function PackagesWorkspace({ name }: { name: string }) {
                 {loading ? 'Atualizando registros…' : `${total} registro(s)`}
               </Text>
             </div>
-            <Button variant="secondary" size="sm" onClick={reload} disabled={loading}>
-              Atualizar lista
-            </Button>
           </div>
           <form
             className={styles.filters}

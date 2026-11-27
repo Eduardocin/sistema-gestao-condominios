@@ -43,7 +43,7 @@ function failureMessage(error: unknown) {
     if (error.response?.status === 404)
       return 'Esta encomenda não está mais disponível para sua conta.'
     if (error.response?.status === 409)
-      return 'A situação mudou. Atualize a lista antes de tentar novamente.'
+      return 'A situação mudou. A lista foi atualizada; confira antes de tentar novamente.'
     if (error.response?.status === 403) return 'Seu acesso não permite confirmar esta encomenda.'
     if (error.response?.status === 429)
       return 'Muitas tentativas. Aguarde um pouco e tente novamente.'
@@ -62,7 +62,9 @@ export function ResidentPackagesPage() {
 function ResidentPackages() {
   const { client, snapshot } = useAuth()
   const api = useMemo(() => createEncomendasClient(client.http), [client])
-  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes('encomendas'))
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) =>
+    unit.abas?.includes('encomendas'),
+  )
   const [unitId, setUnitId] = useState(() => units[0]?.id ?? '')
   const activeUnit = units.some((unit) => unit.id === unitId) ? unitId : (units[0]?.id ?? '')
   const [loadedUnit, setLoadedUnit] = useState('')
@@ -139,6 +141,8 @@ function ResidentPackages() {
       reload()
     } catch (error) {
       setActionError(failureMessage(error))
+      // Encomenda que mudou ou sumiu: recarrega a lista sem depender de botão.
+      if (axios.isAxiosError(error) && [404, 409].includes(error.response?.status ?? 0)) reload()
     } finally {
       setPending(false)
     }
@@ -220,9 +224,6 @@ function ResidentPackages() {
                   {isLoading ? 'Atualizando registros…' : `${total} registro(s)`}
                 </Text>
               </div>
-              <Button variant="secondary" size="sm" onClick={reload} disabled={isLoading}>
-                Atualizar lista
-              </Button>
             </div>
             {isLoading ? (
               <Text role="status">Carregando encomendas…</Text>

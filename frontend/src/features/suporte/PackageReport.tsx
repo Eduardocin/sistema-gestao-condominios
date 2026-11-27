@@ -56,7 +56,7 @@ export function PackageReportView({ api }: { api: SupportClient }) {
           onChange={(event) => setDraft({ ...draft, data_ate: event.target.value })}
         />
         <div className={styles.actions}>
-          <Button type="submit">Atualizar</Button>
+          <Button type="submit">Filtrar</Button>
           <Button
             variant="secondary"
             onClick={() => {

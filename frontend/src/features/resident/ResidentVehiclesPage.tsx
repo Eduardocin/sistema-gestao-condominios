@@ -42,7 +42,9 @@ export function ResidentVehiclesPage() {
 function ResidentVehicles() {
   const { snapshot, client } = useAuth()
   const api = useMemo(() => createResidentVehiclesClient(client.http), [client])
-  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes('veiculos'))
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) =>
+    unit.abas?.includes('veiculos'),
+  )
   const [unitId, setUnitId] = useState('')
   const unit = units.find(({ id }) => id === unitId) ?? units[0]
 
@@ -196,11 +198,6 @@ function UnitVehicles({ unit, api }: { unit: Unit; api: VehiclesApi }) {
         <Button disabled={!result} onClick={() => openAction({ kind: 'create' })}>
           Cadastrar veículo
         </Button>
-        {result && (
-          <Button variant="secondary" onClick={() => load(query.search, query.page)}>
-            Atualizar lista
-          </Button>
-        )}
       </div>
       {success && (
         <Notice tone="success" role="status">

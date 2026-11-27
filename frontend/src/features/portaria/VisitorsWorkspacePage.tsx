@@ -517,8 +517,9 @@ function VisitorsWorkspace({ name }: { name: string }) {
                 variant={visao === valor ? 'primary' : 'secondary'}
                 aria-pressed={visao === valor}
                 onClick={() => {
+                  // Clicar na aba já aberta também recarrega a lista.
+                  carregarHistorico()
                   if (visao !== valor) {
-                    carregarHistorico()
                     setHistorico(null)
                     setHistoricoPage(1)
                     setVisao(valor)
@@ -528,9 +529,6 @@ function VisitorsWorkspace({ name }: { name: string }) {
                 {label}
               </Button>
             ))}
-            <Button variant="secondary" onClick={carregarHistorico} disabled={carregandoHistorico}>
-              Atualizar
-            </Button>
           </div>
           {visao !== 'contatos' && (
             <form

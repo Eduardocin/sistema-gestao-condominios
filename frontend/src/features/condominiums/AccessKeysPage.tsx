@@ -4,6 +4,7 @@ import { Button, Card, Heading, Notice, OperationsLayout, Select, Text } from '.
 import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
 import styles from '../resident/ResidentWorkspace.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 type Unit = { id: string; identificacao: string; bloco: string | null; andar: string | null }
 type Responsible = { id: string; nome: string; ativo: boolean }
@@ -84,10 +85,7 @@ export function AccessKeysPage() {
   return (
     <OperationsLayout
       activeKey="units"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-        { key: 'units', label: 'Chaves de acesso', to: '/app/administracao/chaves', symbol: '⌑' },
-      ]}
+      navigation={adminNavigation}
       workspace={{
         name: snapshot.identity?.condominio?.nome ?? 'Condomínio',
         profile: 'Administração',

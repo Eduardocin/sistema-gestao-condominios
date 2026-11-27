@@ -30,12 +30,7 @@ import type {
   Visitante,
 } from './visitantes-api'
 import styles from './PackagesWorkspacePage.module.css'
-
-const navigation = [
-  { key: 'overview', label: 'Visão geral', to: '/app/portaria', symbol: '⌂' },
-  { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },
-  { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
-]
+import { portariaNavigation } from '../auth/area-navigation'
 const canalNome = { interfone: 'Interfone', telefone: 'Telefone' }
 const respostaNome = { negou: 'Entrada negada', sem_resposta: 'Sem resposta' }
 const vazio: Busca = { unidade: '', termo: '', por: 'nome' }
@@ -358,7 +353,7 @@ function VisitorsWorkspace({ name }: { name: string }) {
   return (
     <OperationsLayout
       activeKey="visitors"
-      navigation={navigation}
+      navigation={portariaNavigation}
       workspace={{ name, profile: 'Portaria', tools }}
     >
       <section className={styles.content} aria-labelledby="visitantes-titulo">

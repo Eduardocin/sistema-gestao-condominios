@@ -15,7 +15,7 @@ import { AccessDenied, RequireSession } from './SessionPages'
 import { residentTabPermissions, visibleResidentNavigation } from '../resident/resident-navigation'
 import { MyCondominiums } from '../condominiums/MyCondominiums'
 import { ResidentNotices } from '../condominiums/ResidentNotices'
-import { supportNavigation } from '../suporte/support-state'
+import { adminNavigation, platformNavigation, portariaNavigation } from './area-navigation'
 import styles from './Auth.module.css'
 
 const modules: Record<string, string[]> = {
@@ -144,39 +144,16 @@ export function WorkspacePage({ area }: { area: string }) {
       </Button>
     </div>
   )
-  const navigation = [
-    { key: 'overview', label: 'Visão geral', to: destination, symbol: '⌂' },
-    ...(area === 'administracao'
-      ? [
-          {
-            key: 'condominium-settings',
-            label: 'Condomínio e estrutura',
-            to: '/app/administracao/condominio',
-            symbol: '▦',
-          },
-          {
-            key: 'shared-account',
-            label: 'Conta de funcionários',
-            to: '/app/administracao/conta-funcionarios',
-            symbol: '♙',
-          },
-          ...supportNavigation('administracao').slice(1),
-        ]
-      : []),
-    ...(area === 'plataforma'
-      ? [
-          ...supportNavigation('plataforma').slice(1),
-          { key: 'audit', label: 'Auditoria', to: '/app/plataforma/auditoria', symbol: '☰' },
-        ]
-      : []),
-    ...(area === 'portaria'
-      ? [
-          { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },
-          { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
-        ]
-      : []),
-    ...(area === 'morador' ? visibleResidentNavigation(identity.unidades).slice(1) : []),
-  ]
+  const navigation =
+    area === 'administracao'
+      ? adminNavigation
+      : area === 'plataforma'
+        ? platformNavigation
+        : area === 'portaria'
+          ? portariaNavigation
+          : area === 'morador'
+            ? visibleResidentNavigation(identity.unidades)
+            : [{ key: 'overview', label: 'Visão geral', to: destination, symbol: '⌂' }]
 
   return (
     <OperationsLayout

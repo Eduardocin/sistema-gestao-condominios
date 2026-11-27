@@ -15,6 +15,7 @@ import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
 import styles from '../resident/ResidentWorkspace.module.css'
 import { buildNoticePayload, localDate } from './notice-form'
+import { adminNavigation } from '../auth/area-navigation'
 
 type NoticeItem = {
   id: string
@@ -124,10 +125,7 @@ export function NoticesPage() {
   return (
     <OperationsLayout
       activeKey="notices"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-        { key: 'notices', label: 'Avisos', to: '/app/administracao/avisos', symbol: '◇' },
-      ]}
+      navigation={adminNavigation}
       workspace={{
         name: snapshot.identity?.condominio?.nome ?? 'Condomínio',
         profile: 'Administração',

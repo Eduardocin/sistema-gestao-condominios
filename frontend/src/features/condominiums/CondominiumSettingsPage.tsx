@@ -23,6 +23,7 @@ import {
 } from './condominium-admin-api'
 import { canResendRegistration } from './condominium-admin-state'
 import styles from './CondominiumSettingsPage.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 const emptyAddress: CondominiumAddress = {
   cep: '',
@@ -268,26 +269,11 @@ export function CondominiumSettingsPage() {
       ...(blocks.find((block) => block.id === blockId)?.andares.map((floor) => floor.ordem) ?? []),
     ) + 1
   const workspaceName = identity.condominio?.nome ?? 'Condomínio'
-  const nav = [
-    { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-    {
-      key: 'settings',
-      label: 'Condomínio e estrutura',
-      to: '/app/administracao/condominio',
-      symbol: '▦',
-    },
-    {
-      key: 'shared',
-      label: 'Conta de funcionários',
-      to: '/app/administracao/conta-funcionarios',
-      symbol: '♙',
-    },
-  ]
 
   return (
     <OperationsLayout
       activeKey="settings"
-      navigation={nav}
+      navigation={adminNavigation}
       workspace={{
         name: workspaceName,
         profile: 'Administração',
@@ -660,7 +646,8 @@ function FloorEditor({
   onDirty: (id: string, pending: boolean) => void
 }) {
   const [name, setName] = useState(floor.nome)
-  const [order, setOrder] = useState(floor.ordem)
+  // A posição no bloco é interna: definida na criação e nunca digitada.
+  const order = floor.ordem
   return (
     <div className={styles.nested}>
       <div className={styles.row}>
@@ -669,20 +656,7 @@ function FloorEditor({
           value={name}
           onChange={(event) => {
             setName(event.target.value)
-            onDirty(floor.id, event.target.value !== floor.nome || order !== floor.ordem)
-          }}
-          disabled={busy || !floor.ativo}
-        />
-        <Input
-          label="Ordem"
-          type="number"
-          min={0}
-          max={200}
-          value={order}
-          onChange={(event) => {
-            const nextOrder = Number(event.target.value)
-            setOrder(nextOrder)
-            onDirty(floor.id, name !== floor.nome || nextOrder !== floor.ordem)
+            onDirty(floor.id, event.target.value !== floor.nome)
           }}
           disabled={busy || !floor.ativo}
         />
@@ -697,7 +671,7 @@ function FloorEditor({
         <Button
           size="sm"
           variant={floor.ativo ? 'alert' : 'success'}
-          disabled={busy || name !== floor.nome || order !== floor.ordem}
+          disabled={busy || name !== floor.nome}
           onClick={() => onSave(floor.id, name, order, floor.ativo, true)}
         >
           {floor.ativo ? 'Desativar' : 'Reativar'}

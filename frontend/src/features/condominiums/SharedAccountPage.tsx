@@ -20,6 +20,7 @@ import {
   type SharedEmployeeAccount,
 } from './condominium-admin-api'
 import styles from './CondominiumSettingsPage.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 export function SharedAccountPage() {
   const { client, snapshot } = useAuth()
@@ -149,26 +150,11 @@ export function SharedAccountPage() {
   }
 
   const name = identity.condominio?.nome ?? 'Condomínio'
-  const nav = [
-    { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-    {
-      key: 'settings',
-      label: 'Condomínio e estrutura',
-      to: '/app/administracao/condominio',
-      symbol: '▦',
-    },
-    {
-      key: 'shared',
-      label: 'Conta de funcionários',
-      to: '/app/administracao/conta-funcionarios',
-      symbol: '♙',
-    },
-  ]
 
   return (
     <OperationsLayout
       activeKey="shared"
-      navigation={nav}
+      navigation={adminNavigation}
       workspace={{
         name,
         profile: 'Administração',

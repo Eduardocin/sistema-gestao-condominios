@@ -23,6 +23,7 @@ import {
   profileLabels,
 } from './auditoria-api.ts'
 import type { AuditFilters, AuditRecord, AuditReference } from './auditoria-api.ts'
+import { platformNavigation } from '../auth/area-navigation'
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
@@ -110,11 +111,7 @@ export function AuditPage() {
   return (
     <OperationsLayout
       activeKey="audit"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/plataforma', symbol: '⌂' },
-        { key: 'approvals', label: 'Condomínios', to: '/app/plataforma/condominios', symbol: '▦' },
-        { key: 'audit', label: 'Auditoria', to: '/app/plataforma/auditoria', symbol: '☰' },
-      ]}
+      navigation={platformNavigation}
       workspace={{
         name: 'Gestão da plataforma',
         profile: 'Plataforma',
@@ -151,14 +148,14 @@ export function AuditPage() {
             label="Ação"
             value={draft.acao}
             maxLength={60}
-            hint="Ex.: reserva.cancelar ou reserva."
+            placeholder="Ex.: reserva.cancelar"
             onChange={(event) => setDraft({ ...draft, acao: event.target.value })}
           />
           <Input
             label="Tipo de recurso"
             value={draft.recurso_tipo}
             maxLength={60}
-            hint="Ex.: reserva, condominio"
+            placeholder="Ex.: reserva"
             onChange={(event) => setDraft({ ...draft, recurso_tipo: event.target.value })}
           />
           <div className={styles.actions}>

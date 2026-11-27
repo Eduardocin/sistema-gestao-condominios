@@ -19,6 +19,7 @@ import { AccessDenied } from '../auth/SessionPages'
 import { createEmployeesClient } from './api'
 import type { Employee, EmployeeList, Responsible } from './api'
 import styles from './EmployeesPage.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 function message(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -136,15 +137,7 @@ function EmployeesContent({ name }: { name: string }) {
   return (
     <OperationsLayout
       activeKey="employees"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-        {
-          key: 'employees',
-          label: 'Funcionários',
-          to: '/app/administracao/funcionarios',
-          symbol: '♙',
-        },
-      ]}
+      navigation={adminNavigation}
       workspace={{ name, profile: 'Administração', tools }}
     >
       <div className={styles.content}>

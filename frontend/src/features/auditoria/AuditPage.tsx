@@ -148,7 +148,7 @@ export function AuditPage() {
             label="Ação"
             value={draft.acao}
             maxLength={60}
-            placeholder="Ex.: reserva.cancelar"
+            placeholder="Ex.: reserva. (todas)"
             onChange={(event) => setDraft({ ...draft, acao: event.target.value })}
           />
           <Input

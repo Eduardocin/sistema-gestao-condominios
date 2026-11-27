@@ -44,6 +44,7 @@ import {
 import type { InteractionErrors, OccurrenceFilters } from './occurrence-form'
 import { useRefreshableQuery } from './use-refreshable-query'
 import styles from './AdminOccurrences.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 // O Select do design system trava a opção vazia (placeholder); "todos" usa um valor próprio.
 const ALL = '*'
@@ -86,15 +87,7 @@ export function AdminOccurrencesPage() {
   return (
     <OperationsLayout
       activeKey="occurrences"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-        {
-          key: 'occurrences',
-          label: 'Ocorrências',
-          to: '/app/administracao/ocorrencias',
-          symbol: '!',
-        },
-      ]}
+      navigation={adminNavigation}
       workspace={{ name: condominium.nome, profile: 'Administração', tools }}
     >
       {/* A chave remonta o conteúdo ao trocar de condomínio: nada da lista anterior vaza. */}

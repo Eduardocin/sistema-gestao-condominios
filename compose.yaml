@@ -3,31 +3,40 @@
 #   Só o banco (API/front locais): docker compose up -d --wait db
 # Veja o README para detalhes.
 
-x-backend: &backend
+x-backend-base: &backend-base
+  # Um único build da aplicação backend é reutilizado por API, migração,
+  # bootstrap do storage e seed. PostgreSQL, MinIO e frontend são serviços separados.
+  image: ${COMPOSE_PROJECT_NAME:-condominios}-backend:demo
   build: ./backend
   env_file:
     - path: ${APP_ENV_FILE:-.env}
       required: false
-  environment:
-    # Dentro da rede do Compose o banco é o serviço "db" na porta interna 5432,
-    # independentemente de POSTGRES_HOST/POSTGRES_PORT usados pela API local.
-    POSTGRES_HOST: db
-    POSTGRES_PORT: "5432"
-    DATABASE_URL: ""
-    CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://127.0.0.1:5173"]}
-    STORAGE_ENDPOINT: http://storage:9000
-    STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://127.0.0.1:9000}
-    STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-condominios_storage_dev}
-    STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Defina STORAGE_SECRET_KEY no .env}
-    STORAGE_BUCKET: ${STORAGE_BUCKET:-condominios-arquivos}
-    EMAIL_BACKEND: ${EMAIL_BACKEND:-smtp}
-    SMTP_HOST: mailpit
-    SMTP_PORT: "1025"
-    SMTP_USER: ""
-    SMTP_PASSWORD: ""
-    SMTP_STARTTLS: "false"
   volumes:
     - ./backend:/app
+
+x-backend-environment: &backend-environment
+  # O Compose usa nomes de serviço e portas internas para banco e storage.
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://127.0.0.1:5173"]}
+  STORAGE_ENDPOINT: http://storage:9000
+  STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://127.0.0.1:9000}
+  STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-condominios_storage_dev}
+  STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Defina STORAGE_SECRET_KEY no .env}
+  STORAGE_BUCKET: ${STORAGE_BUCKET:-condominios-arquivos}
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-smtp}
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+  SMTP_STARTTLS: "false"
+
+x-backend: &backend
+  <<: *backend-base
+  environment:
+    <<: *backend-environment
+    DATABASE_URL: ""
+    DEMO_SEED_ALLOWED: "false"
 
 services:
   storage:
@@ -84,6 +93,26 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  demo-seed:
+    <<: *backend-base
+    profiles: ["demo"]
+    command: ["python", "-m", "app.seed_demo"]
+    environment:
+      <<: *backend-environment
+      POSTGRES_DB: ${POSTGRES_DB:-condominios}
+      POSTGRES_USER: ${POSTGRES_USER:-condominios_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copie .env.example para .env antes de iniciar}
+      DEMO_SEED_ALLOWED: "true"
+      # Verifica também os valores usados na interpolação do projeto, sem
+      # mascarar APP_ENV e DATABASE_URL vindos do env_file dentro do serviço.
+      COMPOSE_DEMO_APP_ENV: ${APP_ENV:-development}
+      COMPOSE_DEMO_DATABASE_URL: ${DATABASE_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
 
   api:
     <<: *backend

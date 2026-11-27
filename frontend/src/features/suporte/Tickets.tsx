@@ -80,14 +80,11 @@ export function TicketsView({ scope, api }: { scope: SupportScope; api: SupportC
       <form className={styles.filters} onSubmit={apply} aria-label="Filtros dos chamados">
         <Select
           label="Status"
-          placeholder="Todos os status"
+          placeholder={platform ? 'Abertos e em atendimento' : 'Todos os status'}
           options={statusOptions}
           value={draft.status}
           onChange={(event) =>
             setDraft({ ...draft, status: event.target.value as Filters['status'] })
-          }
-          hint={
-            platform && !draft.status ? 'Sem filtro: só os chamados não encerrados.' : undefined
           }
         />
         {platform && (

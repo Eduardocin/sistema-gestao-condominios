@@ -23,6 +23,7 @@ import {
 } from './condominium-admin-api'
 import { canResendRegistration } from './condominium-admin-state'
 import styles from './CondominiumSettingsPage.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 const emptyAddress: CondominiumAddress = {
   cep: '',
@@ -268,26 +269,11 @@ export function CondominiumSettingsPage() {
       ...(blocks.find((block) => block.id === blockId)?.andares.map((floor) => floor.ordem) ?? []),
     ) + 1
   const workspaceName = identity.condominio?.nome ?? 'Condomínio'
-  const nav = [
-    { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-    {
-      key: 'settings',
-      label: 'Condomínio e estrutura',
-      to: '/app/administracao/condominio',
-      symbol: '▦',
-    },
-    {
-      key: 'shared',
-      label: 'Conta de funcionários',
-      to: '/app/administracao/conta-funcionarios',
-      symbol: '♙',
-    },
-  ]
 
   return (
     <OperationsLayout
       activeKey="settings"
-      navigation={nav}
+      navigation={adminNavigation}
       workspace={{
         name: workspaceName,
         profile: 'Administração',

@@ -80,6 +80,9 @@ class Settings(BaseSettings):
 
     # Ambiente de execução. Só "production" liga as travas extras de segurança.
     app_env: Literal["development", "test", "production"] = "development"
+    demo_seed_allowed: bool = False
+    compose_demo_app_env: str = "development"
+    compose_demo_database_url: SecretStr = SecretStr("")
 
     # Autenticação (JWT). O access token vive pouco; o refresh token permite renová-lo
     # sem pedir a senha de novo.

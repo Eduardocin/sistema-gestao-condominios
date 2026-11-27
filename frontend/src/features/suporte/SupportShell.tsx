@@ -7,7 +7,7 @@ import { AccessDenied } from '../auth/SessionPages'
 import styles from '../resident/ResidentWorkspace.module.css'
 import { createSupportClient } from './suporte-api.ts'
 import type { SupportClient, SupportScope } from './suporte-api.ts'
-import { supportNavigation } from './support-state.ts'
+import { adminNavigation, platformNavigation } from '../auth/area-navigation'
 
 interface Props {
   area: SupportScope
@@ -30,7 +30,7 @@ export function SupportShell({ area, activeKey, title, children }: Props) {
   return (
     <OperationsLayout
       activeKey={activeKey}
-      navigation={supportNavigation(area)}
+      navigation={area === 'plataforma' ? platformNavigation : adminNavigation}
       workspace={{
         name:
           area === 'plataforma'

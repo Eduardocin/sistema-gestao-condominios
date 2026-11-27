@@ -47,12 +47,13 @@ Quatro camadas com responsabilidade única: Router (HTTP/autorização), Service
 - Arquivos em bucket privado; download por URL assinada de 60 s.
 - Auditoria transacional das ações críticas; documento de LGPD descrevendo dado, finalidade e quem vê.
 
-### Slide 6 · Demonstração (roteiro de 4 minutos)
-1. Administração cadastra condomínio com estrutura → ADM da plataforma aprova.
-2. Morador se vincula à unidade pela **chave**.
-3. Portaria registra encomenda **com foto** → Morador vê e a retirada é confirmada.
-4. Mostrar o teste de isolamento: usuário do condomínio A tenta ler recurso do B e recebe 404.
-- Frontend integrado hoje: autenticação, funcionários e encomendas (portaria e morador). Demais fluxos demonstrar via Swagger (`/docs`) ou testes.
+### Slide 6 · Demonstração (roteiro de 10 minutos)
+Roteiro completo, com cliques e falas, em [docs/demo/README.md](demo/README.md). Rode o seed antes para ter datas frescas.
+1. **Plataforma:** aprovar o Residencial Vista Verde (pendente) e ver o evento na auditoria.
+2. **Administração:** estrutura, chaves, criar um aviso, responder e resolver uma ocorrência reaberta.
+3. **Portaria:** receber encomenda **com foto**, registrar saída de visitante, consultar placa repetida.
+4. **Morador:** ver o aviso novo, confirmar a retirada da encomenda, reservar área e abrir ocorrência.
+5. **Isolamento:** trocar para Pátio do Horizonte; no Swagger, recurso de outro condomínio responde 404.
 
 ### Slide 7 · Qualidade
 - CI em GitHub Actions: Ruff, Mypy, Pytest contra PostgreSQL real, ESLint, TypeScript, validação de migrations em banco limpo e teste de storage privado com MinIO.

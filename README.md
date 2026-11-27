@@ -24,11 +24,11 @@ Esta relação descreve o código integrado nesta branch. Contratos, modelos, ca
 | Funcionários (US-209) e responsáveis | Lista, cadastro, desligamento, consulta individual, edição e histórico restrito de funcionários; cadastro/lista, edição e desativação de responsáveis administrativos | Lista, cadastro e desligamento de funcionários; cadastro de responsáveis. Demais operações sem tela |
 | Conta compartilhada (US-210) | Criação, consulta e troca das credenciais de Funcionários, com identidade permanente e invalidação de sessões antigas | Sem tela de gestão da conta compartilhada |
 | Encomendas | Recebimento com foto, entrega, confirmação pelo recebedor, filtros por unidade/período e relatório administrativo por status/unidade | Fluxos autenticados em `/app/portaria/encomendas` e `/app/morador/encomendas`; sem tela do relatório administrativo |
-| Visitantes | Cadastro, edição e cancelamento pelo Morador; avulsos, contatos e entrada/saída pela Portaria; relatório administrativo de visitas efetivas (US-506) | Sem telas operacionais integradas; o protótipo público usa dados fictícios |
-| Veículos | Cadastro, edição, remoção lógica, consulta operacional e relatório administrativo de cadastros com placas duplicadas (US-506) | Sem telas integradas |
+| Visitantes | Cadastro, edição e cancelamento pelo Morador; avulsos, contatos e entrada/saída pela Portaria; relatório administrativo de visitas efetivas (US-506) | Cadastro pelo Morador e consulta, entrada e saída na Portaria; o protótipo público usa dados fictícios |
+| Veículos | Cadastro, edição, remoção lógica, consulta operacional e relatório administrativo de cadastros com placas duplicadas (US-506) | Cadastro e consulta pelo Morador e consulta pela Portaria em `/app/portaria/visitantes` |
 | Reservas e avisos | Áreas comuns, agenda/calendário, reservas, cancelamentos, bloqueio de datas com cancelamento das reservas afetadas e avisos transacionais | Administração: cadastro, edição com foto, desativação e reativação de áreas comuns em `/app/administracao/areas-comuns`; consulta filtrada e cancelamento com motivo e responsável em `/app/administracao/reservas`. Morador: reserva e acompanhamento em `/app/morador/areas-comuns` e `/app/morador/reservas`. Sem telas de bloqueio de datas e de relatório |
 | Ocorrências | Abertura, consulta, resposta/resolução administrativa e comentários/reabertura pelo Morador | Administração: lista filtrada por situação e período, detalhe com histórico e anexos, resposta e resolução com responsável em `/app/administracao/ocorrencias`. Morador: abertura, comentário e reabertura em `/app/morador/ocorrencias` |
-| Arquivos e auditoria | Upload autorizado, bucket MinIO privado, download por URL assinada curta e auditoria transacional | Integração de fotos no fluxo de encomendas; sem tela geral de auditoria |
+| Arquivos e auditoria | Upload autorizado, bucket MinIO privado, download por URL assinada curta e auditoria transacional | Fotos no fluxo de encomendas, áreas comuns e auditoria em `/app/plataforma/auditoria` |
 
 Em US-205/206, as edições e a gestão da estrutura aceitam condomínios `pendente`, `rejeitado` e `ativo`; `desativado` bloqueia escritas. O reenvio continua exclusivo de `rejeitado`. As operações exigem responsável ativo do próprio condomínio e preservam IDs, vínculos e históricos. Unidade com morador ativo não pode ser desativada; bloco/andar com unidades ativas também não. A reativação exige pais ativos e não reativa filhos automaticamente. Desativar uma unidade revoga sua chave; criar/reativar em condomínio ativo gera chave se não houver vigente, preservando as anteriores.
 
@@ -134,6 +134,42 @@ desenvolvimento em <http://127.0.0.1:8025>.
 Credenciais locais estão no seu `.env`. Banco e arquivos têm volumes persistentes.
 Portas, limites, testes e integração estão em [Armazenamento](docs/storage.md).
 As rotas de arquivos já usam a autorização central e a política do recurso vinculado. No Compose, a API acessa `db:5432` e `storage:9000` internamente; o navegador usa os endereços públicos do `.env`. O Compose deixa `DATABASE_URL` vazia e utiliza os campos `POSTGRES_*` para a conexão interna.
+
+## Demonstração com dados fictícios
+
+Use um projeto Compose dedicado, por exemplo `condominios-demo`. O reset **apaga e
+substitui os dados da aplicação** no banco local desse projeto. A API pode ser
+reiniciada normalmente sem apagar dados.
+
+Crie o arquivo local `.env.demo` copiando `.env.example` e inclua nele
+`APP_ENV_FILE=.env.demo`. Na raiz do repositório, rode:
+
+```sh
+docker compose -p condominios-demo --env-file .env.demo --profile demo run --build --rm demo-seed
+docker compose -p condominios-demo --env-file .env.demo up -d --build --wait
+```
+
+O primeiro comando espera PostgreSQL e MinIO, aplica as migrações e recria a
+massa. Para repetir o reset, rode só o primeiro comando. O serviço exige
+`APP_ENV=development`, banco interno `db:5432/condominios` e `DATABASE_URL` vazia.
+Se as portas padrão estão em uso, defina portas distintas em `.env.demo` conforme o
+[roteiro](docs/demo/README.md).
+
+Abra [Login](http://127.0.0.1:5173/login) ou [API e Swagger](http://127.0.0.1:8000/docs).
+A senha de todos os perfis abaixo é `Teste123`, exclusiva da demo local.
+
+| Perfil | E-mail fictício | Cenário |
+| --- | --- | --- |
+| ADM da plataforma | `plataforma@example.test` | Aprove o Residencial Vista Verde, pendente, e consulte a auditoria. |
+| Administração | `administracao@example.test` | Escolha Jardins da Aurora e depois compare com Pátio do Horizonte. |
+| Morador | `morador.aurora@example.test` | Ana Souza, Bloco A · 101 de Jardins da Aurora. |
+| Portaria | `portaria.aurora@example.test` | Jardins da Aurora. Selecione Porteiro Demo quando a tela pedir. |
+
+A massa tem dois condomínios ativos com blocos, vários moradores, encomendas,
+visitantes, veículos, reservas, ocorrências, avisos e chamados de suporte, além
+de um terceiro aguardando aprovação. Contas extras de moradores e da portaria do
+Pátio do Horizonte usam a mesma senha. O [roteiro da apresentação](docs/demo/README.md)
+lista todas as contas, o passo a passo em cinco atos, o backup e a restauração.
 
 ## Guia de primeira execução
 
@@ -467,7 +503,7 @@ npm run dev
 
 Se aparecer “API indisponível”, veja [frontend não acessa a API](#frontend-mostra-api-indisponível).
 
-Para começar a usar os fluxos reais, crie uma conta em `/cadastro/administracao` ou `/cadastro/morador`. O cadastro de condomínio, sua análise, correção e estrutura são feitos pela API em <http://127.0.0.1:8000/docs>, seguindo o [contrato do núcleo](docs/api-contracts/nucleo.md). Cadastre o condomínio, selecione-o na sessão e cadastre um responsável da Administração antes das operações que exigem `responsavel_id`. A aprovação requer conta ADM previamente provisionada: o cadastro público não concede esse papel. Crie o primeiro ADM da plataforma com `docker compose exec api python -m app.modules.usuarios.provisionar_adm --nome "Seu Nome" --email voce@exemplo.com`; a senha é pedida em um prompt sem eco (ou lida de `ADM_SENHA`), nunca por argumento. O comando só cria contas novas e recusa e-mail já cadastrado. Login não cria condomínio nem vínculo automaticamente. O vínculo por chave está disponível no backend; a gestão da conta compartilhada da Portaria permanece pendente.
+Para experimentar os fluxos com contas prontas, siga a [demonstração com dados fictícios](#demonstração-com-dados-fictícios).
 
 ### Etapa 7 — Rodar as verificações de qualidade
 

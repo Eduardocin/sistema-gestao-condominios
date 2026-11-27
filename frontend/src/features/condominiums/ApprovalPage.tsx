@@ -14,6 +14,7 @@ import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
 import { condominiumAdminError, createCondominiumAdminApi } from './condominium-admin-api'
 import styles from '../resident/ResidentWorkspace.module.css'
+import { platformNavigation } from '../auth/area-navigation'
 
 type Item = {
   id: string
@@ -150,13 +151,10 @@ export function ApprovalPage() {
   return (
     <OperationsLayout
       activeKey="approvals"
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/plataforma', symbol: '⌂' },
-        { key: 'approvals', label: 'Condomínios', to: '/app/plataforma/condominios', symbol: '▦' },
-      ]}
+      navigation={platformNavigation}
       workspace={{
-        name: 'Plataforma',
-        profile: 'Administrador',
+        name: 'Gestão da plataforma',
+        profile: 'Plataforma',
         tools: <Link to="/app/plataforma">Voltar</Link>,
       }}
     >

@@ -29,6 +29,7 @@ import type {
   EmployeeOption,
 } from './encomendas-api'
 import styles from './PackagesWorkspacePage.module.css'
+import { portariaNavigation } from '../auth/area-navigation'
 
 const statusLabels: Record<PackageStatus, string> = {
   aguardando_retirada: 'Aguardando retirada',
@@ -361,12 +362,6 @@ function PackagesWorkspace({ name }: { name: string }) {
       setPending(false)
     }
   }
-
-  const navigation = [
-    { key: 'overview', label: 'Visão geral', to: '/app/portaria', symbol: '⌂' },
-    { key: 'packages', label: 'Encomendas', to: '/app/portaria/encomendas', symbol: '▣' },
-    { key: 'visitors', label: 'Visitantes', to: '/app/portaria/visitantes', symbol: '↔' },
-  ]
   const selectedPhotoUrl =
     selected && photoRecord?.fileId === selected.foto_arquivo_id ? photoRecord.url : null
   const unitOptions = units.map((unit) => ({
@@ -420,7 +415,7 @@ function PackagesWorkspace({ name }: { name: string }) {
   return (
     <OperationsLayout
       activeKey="packages"
-      navigation={navigation}
+      navigation={portariaNavigation}
       workspace={{ name, profile: 'Portaria', tools }}
     >
       <section className={styles.content} aria-labelledby="packages-title">

@@ -12,6 +12,15 @@
   align-items: end;
 }
 
+/* Em linha, a margem inferior do campo deixaria o botão desalinhado do input. */
+.filters > div {
+  margin-bottom: 0;
+}
+
+.filters > button {
+  min-height: 2.5rem;
+}
+
 .tools,
 .actions,
 .pagination,

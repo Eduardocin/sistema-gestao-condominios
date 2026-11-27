@@ -4,6 +4,7 @@ import { Button, OperationsLayout } from '../../components'
 import { useAuth } from '../auth/context'
 import { AccessDenied } from '../auth/SessionPages'
 import styles from './AdminAreas.module.css'
+import { adminNavigation } from '../auth/area-navigation'
 
 /** Layout comum às telas de áreas e reservas, com a mesma checagem de acesso da NoticesPage. */
 export function AdminAreasShell({
@@ -32,11 +33,7 @@ export function AdminAreasShell({
   return (
     <OperationsLayout
       activeKey={activeKey}
-      navigation={[
-        { key: 'overview', label: 'Visão geral', to: '/app/administracao', symbol: '⌂' },
-        { key: 'areas', label: 'Áreas comuns', to: '/app/administracao/areas-comuns', symbol: '◫' },
-        { key: 'reservations', label: 'Reservas', to: '/app/administracao/reservas', symbol: '▦' },
-      ]}
+      navigation={adminNavigation}
       workspace={{ name: condominium.nome, profile: 'Administração', tools }}
     >
       {/* A chave remonta o conteúdo ao trocar de condomínio: nada da lista anterior vaza. */}

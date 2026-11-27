@@ -40,9 +40,10 @@ Nunes) e `portaria.horizonte`, todas `@example.test`.
 ## Antes de começar (5 minutos antes)
 
 1. Rode o seed para ter datas frescas e nenhum resto de ensaio.
-2. Abra **quatro janelas** lado a lado — uma normal e as outras em perfis
-   ou janelas anônimas, porque a sessão é por navegador:
-   ADM da plataforma, Administração (Jardins da Aurora), Portaria e Morador.
+2. Abra **quatro abas** no mesmo navegador, uma por perfil: ADM da
+   plataforma, Administração (Jardins da Aurora), Portaria e Morador. O login
+   fica guardado por aba, então cada uma mantém a sua conta. Abra cada aba
+   nova digitando o endereço: “Duplicar aba” copia o login da aba de origem.
 3. Deixe uma imagem qualquer na área de trabalho para a foto da encomenda.
 4. Zoom do navegador em 90% se a projeção for 1366 × 768.
 

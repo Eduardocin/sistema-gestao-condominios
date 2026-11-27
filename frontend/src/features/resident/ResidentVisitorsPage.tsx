@@ -74,7 +74,9 @@ export function ResidentVisitorsPage() {
 
 function ResidentVisitors() {
   const { snapshot } = useAuth()
-  const units = (snapshot.identity?.unidades ?? []).filter((unit) => unit.abas?.includes('visitantes'))
+  const units = (snapshot.identity?.unidades ?? []).filter((unit) =>
+    unit.abas?.includes('visitantes'),
+  )
   const [unitId, setUnitId] = useState('')
   const unit = units.find((item) => item.id === unitId) ?? units[0]
 
@@ -226,7 +228,8 @@ function VisitorList({ unit }: { unit: Unit }) {
             name="busca"
             type="search"
             maxLength={120}
-            error={searchError}
+            aria-invalid={searchError ? true : undefined}
+            aria-describedby={searchError ? 'busca-visitante-erro' : undefined}
             onChange={() => setSearchError(undefined)}
           />
           <Select label="Situação" name="situacao" defaultValue="todos" options={statusOptions} />
@@ -236,6 +239,12 @@ function VisitorList({ unit }: { unit: Unit }) {
             </Button>
           </div>
         </form>
+        {/* Fora da linha de filtros, para o erro não desalinhar o botão (como nas outras telas). */}
+        {searchError && (
+          <Notice tone="alert" role="alert" id="busca-visitante-erro">
+            {searchError}
+          </Notice>
+        )}
         {!currentResponse && <Text role="status">Carregando visitantes…</Text>}
         {currentResponse?.state === 'error' && (
           <Notice tone="alert" role="alert">

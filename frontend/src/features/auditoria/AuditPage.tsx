@@ -24,6 +24,15 @@ import {
 } from './auditoria-api.ts'
 import type { AuditFilters, AuditRecord, AuditReference } from './auditoria-api.ts'
 import { platformNavigation } from '../auth/area-navigation'
+import {
+  auditActionLabel,
+  auditActionOptions,
+  auditResourceLabel,
+  auditResourceOptions,
+} from './audit-labels.ts'
+
+const actionOptions = auditActionOptions()
+const resourceOptions = auditResourceOptions()
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
@@ -144,18 +153,18 @@ export function AuditPage() {
             value={draft.ate}
             onChange={(event) => setDraft({ ...draft, ate: event.target.value })}
           />
-          <Input
+          <Select
             label="Ação"
+            placeholder="Todas as ações"
+            options={actionOptions}
             value={draft.acao}
-            maxLength={60}
-            placeholder="Ex.: reserva. (todas)"
             onChange={(event) => setDraft({ ...draft, acao: event.target.value })}
           />
-          <Input
+          <Select
             label="Tipo de recurso"
+            placeholder="Todos os tipos"
+            options={resourceOptions}
             value={draft.recurso_tipo}
-            maxLength={60}
-            placeholder="Ex.: reserva"
             onChange={(event) => setDraft({ ...draft, recurso_tipo: event.target.value })}
           />
           <div className={styles.actions}>
@@ -210,7 +219,9 @@ function AuditEntry({ record }: { record: AuditRecord }) {
   return (
     <article className={styles.listItem}>
       <div className={styles.actions}>
-        <Badge variant="primary">{record.acao}</Badge>
+        <Badge variant="primary" title={record.acao}>
+          {auditActionLabel(record.acao)}
+        </Badge>
         <Text size="sm" tone="secondary">
           {dateTime.format(new Date(record.criado_em))}
         </Text>
@@ -223,7 +234,7 @@ function AuditEntry({ record }: { record: AuditRecord }) {
         {record.condominio?.nome ?? 'Sem condomínio'}
       </Text>
       <Text size="sm" tone="secondary">
-        {record.recurso_tipo ?? 'Sem recurso'}
+        {record.recurso_tipo ? auditResourceLabel(record.recurso_tipo) : 'Sem recurso'}
         {record.recurso_id ? ` ${record.recurso_id}` : ''}
         {record.ip ? ` · IP ${record.ip}` : ''}
       </Text>
